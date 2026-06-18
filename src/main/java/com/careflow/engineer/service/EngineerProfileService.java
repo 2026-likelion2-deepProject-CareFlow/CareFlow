@@ -1,11 +1,13 @@
 package com.careflow.engineer.service;
 
+import com.careflow.common.enums.Role;
 import com.careflow.engineer.domain.*;
 import com.careflow.engineer.dto.CreateProfileRequest;
 import com.careflow.engineer.dto.ProfileResponse;
 import com.careflow.engineer.repository.ApplianceCategoryRepository;
 import com.careflow.engineer.repository.EngineerProfileRepository;
-import com.careflow.engineer.repository.UserRepository;
+import com.careflow.user.entity.User;
+import com.careflow.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;

@@ -27,7 +27,7 @@ public class ProfileResponse {
     public static ProfileResponse from(EngineerProfile entity){
         return ProfileResponse.builder()
                 .profileId(entity.getProfileId())
-                .userId(entity.getUser().getUserId())
+                .userId(entity.getUser().getId())
                 .categoryId(entity.getCategory().getCategoryId())
                 .careerStartedYear(entity.getCareerStartedYear())
                 .skillLevel(entity.getSkillLevel().name())

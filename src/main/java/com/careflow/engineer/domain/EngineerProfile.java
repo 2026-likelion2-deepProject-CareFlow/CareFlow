@@ -1,5 +1,6 @@
 package com.careflow.engineer.domain;
 
+import com.careflow.user.entity.User;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Builder;
