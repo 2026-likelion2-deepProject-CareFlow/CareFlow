@@ -1,6 +1,6 @@
 package com.careflow.engineer.dto;
 
-import com.careflow.engineer.domain.EngineerProfile;
+import com.careflow.engineer.domain.entity.EngineerProfile;
 import lombok.Builder;
 import lombok.Getter;
 

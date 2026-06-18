@@ -1,7 +1,9 @@
 package com.careflow.engineer.service;
 
 import com.careflow.common.enums.Role;
-import com.careflow.engineer.domain.*;
+import com.careflow.engineer.domain.entity.ApplianceCategory;
+import com.careflow.engineer.domain.entity.EngineerProfile;
+import com.careflow.engineer.domain.enums.SkillLevel;
 import com.careflow.engineer.dto.CreateProfileRequest;
 import com.careflow.engineer.dto.ProfileResponse;
 import com.careflow.engineer.repository.ApplianceCategoryRepository;

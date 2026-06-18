@@ -1,6 +1,6 @@
 package com.careflow.engineer.repository;
 
-import com.careflow.engineer.domain.EngineerProfile;
+import com.careflow.engineer.domain.entity.EngineerProfile;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 

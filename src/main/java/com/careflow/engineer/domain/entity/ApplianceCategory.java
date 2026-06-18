@@ -1,4 +1,4 @@
-package com.careflow.engineer.domain;
+package com.careflow.engineer.domain.entity;
 
 import jakarta.persistence.*;
 import lombok.Getter;
