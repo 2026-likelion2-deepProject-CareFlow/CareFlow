@@ -1,0 +1,98 @@
+package com.careflow.account_requests.entity;
+
+import com.careflow.agency.entity.Agencies;
+import com.careflow.common.enums.AccountRequestsRole;
+import com.careflow.common.enums.AccountRequestsStatus;
+import com.careflow.region.entity.Regions;
+import com.careflow.user.entity.User;
+import jakarta.persistence.*;
+import lombok.AccessLevel;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+
+import java.time.LocalDateTime;
+
+@Entity
+@Table(name = "account_requests")
+@Getter
+@NoArgsConstructor(access = AccessLevel.PROTECTED)
+public class AccountRequests {
+
+    @Id
+    @Column(name = "account_request_id", nullable = false)
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @ManyToOne(fetch = FetchType.LAZY)
+    @Column(nullable = true, name = "agency_id")
+    private Agencies agencyId;
+
+    @Column(name = "email", nullable = false, unique = true)
+    private String email;
+
+    @Column(name = "password", nullable = false)
+    private String password;
+
+    @Column(name = "name", nullable = false)
+    private String name;
+
+    @Column(name = "phone", nullable = true)
+    private String phone;
+
+    @Column(name = "requests_role", nullable = false)
+    private AccountRequestsRole requestsRole;
+
+    @Column(name = "status", nullable = false, columnDefinition = "DEFAULT PENDING")
+    private AccountRequestsStatus status;
+
+    @Column(name = "reviewed_at", nullable = true)
+    private LocalDateTime reviewedAt;
+
+    @Column(name = "created_at", nullable = false, columnDefinition = "DATETIME DEFAULT CURRENT_TIMESTAMP")
+    private LocalDateTime createdAt;
+
+    @Column(name = "updated_at", nullable = false, columnDefinition = "DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP")
+    private LocalDateTime updatedAt;
+
+    @Column(name = "reject_reason", nullable = true)
+    private  String rejectReason;
+
+    @Column(name = "address_detail", nullable = true)
+    private String addressDetail;
+
+    @OneToOne(fetch = FetchType.LAZY)
+    @Column(name = "region_id", nullable = true, unique = true)
+    private Regions region;
+
+    @OneToOne(fetch = FetchType.LAZY)
+    @Column(name = "reviewed_by", nullable = true, unique = true)
+    private User reviewedBy;
+
+    @OneToOne(fetch = FetchType.LAZY)
+    @Column(name = "created_user_id", nullable = true, unique = true)
+    private User createdUserId;
+
+    @Builder
+    public AccountRequests(Agencies agencies, String email, String password, String name, String phone, AccountRequestsRole requestsRole, String addressDetail){
+        this.agencyId = agencies;
+        this.email = email;
+        this.password = password;
+        this.name = name;
+        this.phone = phone;
+        this.requestsRole = requestsRole;
+        this.addressDetail = addressDetail;
+    }
+
+    public static AccountRequests create(Agencies agencies, String email, String password, String name, String phone, AccountRequestsRole requestsRole, String addressDetail){
+        return AccountRequests.builder()
+                .agencies(agencies)
+                .email(email)
+                .password(password)
+                .name(name)
+                .phone(phone)
+                .requestsRole(requestsRole)
+                .addressDetail(addressDetail)
+                .build();
+    }
+}
