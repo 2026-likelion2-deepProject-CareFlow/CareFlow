@@ -98,6 +98,11 @@ public class AuthService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 사용자입니다."));
 
+        // 계정 상태 확인 (로그인 이후 정지된 경우 토큰 재발급 차단)
+        if (!"ACTIVE".equals(user.getStatus())) {
+            throw new IllegalStateException("정지되었거나 비활성화된 계정입니다.");
+        }
+
         String newAccessToken = jwtProvider.generateAccessToken(user.getId(), user.getEmail(), user.getRole().name());
 
         return TokenResponse.builder()
