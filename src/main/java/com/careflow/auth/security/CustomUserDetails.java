@@ -9,14 +9,14 @@ import java.util.Collection;
 import java.util.List;
 
 @Getter
-public class CustomerUserDetails implements UserDetails {
+public class CustomUserDetails implements UserDetails {
 
     private final Long userId;
     private final String username; // email 값이 들어감
     private final String password;
     private final String role;
 
-    public CustomerUserDetails(Long userId, String username, String password, String role) {
+    public CustomUserDetails(Long userId, String username, String password, String role) {
         this.userId = userId;
         this.username = username;
         this.password = password;
