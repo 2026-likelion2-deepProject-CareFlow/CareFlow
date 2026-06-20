@@ -32,10 +32,6 @@ public class AgenciesController {
             // 슈퍼계정 생성 요청 및 대행사 정보 저장
             Long accountRequestId = agenciesService.agencySuperAccountRequest(agencyCreateRequest);
             return ResponseEntity.status(HttpStatus.CREATED).body(accountRequestId);
-            // -> 이후 CareFlow 관리자 승인 시 해당 요청의 agency_id 값을 기준으로 대행사 정보 검색
-            // -> 대행사 정보 검색 결과 미승인 상태일 시 현재 요청이 슈퍼 계정 생성 요청인것으로 판단
-            // -> 회원 정보 users 테이블에 저장 및 생성된 user_id 값 가져와서 created_user_id 컬럼에 적재
-            // -> 이후 해당 값을 다시 대행사 테이블에서 agency_id 값을 통해 찾은 데이터에 대해 representative_user_id 컬럼값 갱신 및 대행사 데이터 승인 상태 변경(PENDING -> APPROVED)
         }
     }
 
