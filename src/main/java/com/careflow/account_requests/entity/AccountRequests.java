@@ -25,7 +25,7 @@ public class AccountRequests {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @Column(nullable = true, name = "agency_id")
+    @JoinColumn(nullable = true, name = "agency_id")
     private Agencies agencyId;
 
     @Column(name = "email", nullable = false, unique = true)
@@ -62,16 +62,16 @@ public class AccountRequests {
     private String addressDetail;
 
     @OneToOne(fetch = FetchType.LAZY)
-    @Column(name = "region_id", nullable = true, unique = true)
+    @JoinColumn(name = "region_id", nullable = true, unique = true)
     private Regions region;
 
     @OneToOne(fetch = FetchType.LAZY)
-    @Column(name = "reviewed_by", nullable = true, unique = true)
-    private User reviewedBy;
+    @JoinColumn(name = "reviewed_by", nullable = true, unique = true)
+    private User reviewedBy; // 승인한 관리자 id
 
     @OneToOne(fetch = FetchType.LAZY)
-    @Column(name = "created_user_id", nullable = true, unique = true)
-    private User createdUserId;
+    @JoinColumn(name = "created_user_id", nullable = true, unique = true)
+    private User createdUserId; // 해당 요청을 통해 생성된 회원 id
 
     @Builder
     public AccountRequests(Agencies agencies, String email, String password, String name, String phone, AccountRequestsRole requestsRole, String addressDetail){

@@ -5,6 +5,7 @@ import com.careflow.agency.entity.Agencies;
 import com.careflow.agency.service.AgenciesService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
@@ -25,12 +26,12 @@ public class AgenciesController {
         if (agencyCreateRequest.flag()){
             // 관리자 계정 승인 요청
             Long accountRequestId = agenciesService.agencyManagerAccountRequest(agencyCreateRequest);
-            return ResponseEntity.ok(accountRequestId);
+            return ResponseEntity.status(HttpStatus.CREATED).body(accountRequestId);
 
         } else{ // 대행사 정보가 존재하지 않을 경우
             // 슈퍼계정 생성 요청 및 대행사 정보 저장
             Long accountRequestId = agenciesService.agencySuperAccountRequest(agencyCreateRequest);
-            return ResponseEntity.ok(accountRequestId);
+            return ResponseEntity.status(HttpStatus.CREATED).body(accountRequestId);
             // -> 이후 CareFlow 관리자 승인 시 해당 요청의 agency_id 값을 기준으로 대행사 정보 검색
             // -> 대행사 정보 검색 결과 미승인 상태일 시 현재 요청이 슈퍼 계정 생성 요청인것으로 판단
             // -> 회원 정보 users 테이블에 저장 및 생성된 user_id 값 가져와서 created_user_id 컬럼에 적재
@@ -42,7 +43,7 @@ public class AgenciesController {
     대행사 회원가입 절차 시 대행사 이름, 사업자 등록번호를 통해 기존에 저장된 데이터가 있는지 검색
     기존에 데이터가 있는 경우 데이터 반환 및 대행사 회원가입 -> 관리자 계정요청으로 서비스 넘어감
      */
-    @GetMapping("/")
+    @GetMapping("/getAgency")
     public ResponseEntity<Agencies> getAgency(@Valid @RequestParam(name = "name") String agencyName,
                                               @Valid @RequestParam(name = "businessNumber") String businessNumber) {
 

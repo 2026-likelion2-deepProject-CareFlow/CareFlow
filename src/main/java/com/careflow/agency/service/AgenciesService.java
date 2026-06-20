@@ -30,7 +30,7 @@ public class AgenciesService {
     @Transactional
     public Long agencySuperAccountRequest(AgencyCreateRequest agencyCreateRequest) {
 
-        // 1. 대행사 정보 우선 저장
+        // 1. 대행사 정보 우선 저장(approval_status : PENDING)
         Long agencyId = agenciesRepository.save(
                 Agencies.create(agencyCreateRequest.agencyName(),
                         agencyCreateRequest.businessNumber(),
@@ -55,8 +55,10 @@ public class AgenciesService {
         return accountRequestId;
     }
 
+    @Transactional
     public Long agencyManagerAccountRequest(AgencyCreateRequest agencyCreateRequest) {
 
+        // approval_status : APPROVED
         Agencies agency = agenciesRepository.findAgenciesByAgencyNameAndBusinessNumber(agencyCreateRequest.agencyName(), agencyCreateRequest.businessNumber()).orElseThrow();
         // 이미 존재하는 대행사의 id 값이 필요함, 그러면 여기서 상호명, 사업자 등록번호로 다시 Agencies 객체 조회해오고 그걸 이용해서 요청객체 생성
         AccountRequests accountRequests = AccountRequests.create(agency,
@@ -68,5 +70,11 @@ public class AgenciesService {
                 agencyCreateRequest.agencyAddress());
 
         return accountRequestsRepository.save(accountRequests).getId();
+    }
+
+    @Transactional(readOnly = true)
+    public Long findRepresentativeIdById(Long agencyId) {
+
+        return agenciesRepository.findRepresentativeIdById(agencyId).orElseThrow();
     }
 }
