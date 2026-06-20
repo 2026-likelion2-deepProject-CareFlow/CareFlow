@@ -62,11 +62,11 @@ public class AuthService {
 
         user.updateLastLogin();
 
-        String accessToken = jwtProvider.generateAccessToken(user.getUserId(), user.getEmail(), user.getRole().name());
-        String refreshToken = jwtProvider.generateRefreshToken(user.getUserId());
+        String accessToken = jwtProvider.generateAccessToken(user.getId(), user.getEmail(), user.getRole().name());
+        String refreshToken = jwtProvider.generateRefreshToken(user.getId());
 
         redisTemplate.opsForValue().set(
-                REFRESH_KEY_PREFIX + user.getUserId(),
+                REFRESH_KEY_PREFIX + user.getId(),
                 refreshToken,
                 Duration.ofMillis(jwtProvider.getRefreshTokenExpiration())
         );
