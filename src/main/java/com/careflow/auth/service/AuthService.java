@@ -55,6 +55,11 @@ public class AuthService {
             throw new IllegalArgumentException("비밀번호가 일치하지 않습니다.");
         }
 
+        // 계정 상태 확인 (정지/비활성 계정 로그인 차단)
+        if (!"ACTIVE".equals(user.getStatus())) {
+            throw new IllegalStateException("정지되었거나 비활성화된 계정입니다.");
+        }
+
         // 호준님 파트: 대행사 승인 상태 검증 로직
         if (user.getRole() == Role.AGENCY) {
             // TODO(호준): agencies.approval_status 확인 후 PENDING/REJECTED면 예외 던지기
@@ -93,7 +98,7 @@ public class AuthService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 사용자입니다."));
 
-        String newAccessToken = jwtProvider.generateAccessToken(user.getUserId(), user.getEmail(), user.getRole().name());
+        String newAccessToken = jwtProvider.generateAccessToken(user.getId(), user.getEmail(), user.getRole().name());
 
         return TokenResponse.builder()
                 .accessToken(newAccessToken)
