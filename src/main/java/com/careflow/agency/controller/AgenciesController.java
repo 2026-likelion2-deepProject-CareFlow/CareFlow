@@ -39,7 +39,7 @@ public class AgenciesController {
 
         // 대행사 계정 회원가입 시도 중 대행사 조회 결과 200 ok 반환될 경우 프론트에서 flag = 1 설정
         // 대행사 조회 결과가 존재하지 않아 NoSuchElementException 발생 및 NotFound 반환 시 flag = 0 설정
-        Agencies agencies = agenciesService.findAgenciesByNameAndBusinessNumber(agencyName, businessNumber);
+        Agencies agencies = agenciesService.findByBusinessNumber(businessNumber);
         return ResponseEntity.ok(agencies);
     }
 

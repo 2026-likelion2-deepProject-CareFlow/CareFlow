@@ -24,8 +24,8 @@ public class AgenciesService {
     private final AccountRequestsRepository accountRequestsRepository;
 
     @Transactional(readOnly = true)
-    public Agencies findAgenciesByNameAndBusinessNumber(String agencyName, String businessNumber) {
-        return agenciesRepository.findAgenciesByNameAndBusinessNumber(agencyName, businessNumber)
+    public Agencies findByBusinessNumber(String businessNumber) {
+        return agenciesRepository.findByBusinessNumber(businessNumber)
                 .orElseThrow(() -> new NoSuchElementException("해당 대행사 정보를 찾을 수 없습니다.")); // 비즈니스 관점 에러처리
     }
 
@@ -34,7 +34,7 @@ public class AgenciesService {
 
         String agecyName = agencyCreateRequest.agencyName();
         String businessNumber = agencyCreateRequest.businessNumber();
-        Agencies agencies = agenciesRepository.findAgenciesByNameAndBusinessNumber(agecyName, businessNumber).orElse(null);
+        Agencies agencies = agenciesRepository.findByBusinessNumber(businessNumber).orElse(null);
 
         if (agencies != null) {
             // approval_status : APPROVED 인 대행사라면 일반 관리자 계청 요청 생성

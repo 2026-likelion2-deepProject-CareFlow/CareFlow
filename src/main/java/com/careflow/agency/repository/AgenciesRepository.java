@@ -13,9 +13,7 @@ import java.util.Optional;
 public interface AgenciesRepository extends JpaRepository<Agencies, Long> {
 
     @Fetch(FetchMode.JOIN)
-    Optional<Agencies> findAgenciesByNameAndBusinessNumber(String agencyName, String businessNumber);
-
-    Optional<Long> findRepresentativeId(Long userId);
+    Optional<Agencies> findByBusinessNumber(String businessNumber);
 
     @Query("SELECT a FROM Agencies a WHERE a.representativeId = :userId")
     Optional<Agencies> findByRepresentativeById(Long userId);
