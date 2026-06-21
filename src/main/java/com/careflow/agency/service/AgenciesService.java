@@ -32,7 +32,6 @@ public class AgenciesService {
     @Transactional
     public Long requestAgencyAccount(AgencyCreateRequest agencyCreateRequest) {
 
-        String agecyName = agencyCreateRequest.agencyName();
         String businessNumber = agencyCreateRequest.businessNumber();
         Agencies agencies = agenciesRepository.findByBusinessNumber(businessNumber).orElse(null);
 
@@ -50,8 +49,12 @@ public class AgenciesService {
                         agencyCreateRequest.regionId());
                  accountRequestId = accountRequestsRepository.save(accountRequests).getId();
 
-            } else if (agencies.getApprovalStatus() == AgencyStatus.PENDING || agencies.getApprovalStatus() == AgencyStatus.REJECTED){
-                throw new IllegalStateException("아직 등록 대기중이거나 등록이 거부된 대행사 입니다.");
+            } else if (agencies.getApprovalStatus() == AgencyStatus.PENDING){
+                throw new IllegalStateException("아직 등록 대기중인 대행사 입니다. 등록이 된 이후 다시 요청해주세요.");
+            } else if (agencies.getApprovalStatus() == AgencyStatus.REJECTED){
+                // AgencyStatus.REJECTED : 대행사에 대해 슈퍼 계정을 요청했으나 거부당한 경우
+                // businessNumber 가 unique 제약조건을 가지고 있기 때문에 같은 대행사에 대해 중복으로 슈퍼 계정 생성 요청은 불가능
+                throw new IllegalStateException("등록이 거부된 대행사 입니다. 관리자에게 문의해주세요.");
             }
             return accountRequestId;
 
