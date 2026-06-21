@@ -72,6 +72,11 @@ public class AccountRequestsService {
                         .updatedAt(LocalDateTime.now())
                         .rejectReason(accountRequestReject.rejectReson())
                         .build();
+
+                accountRequests.getAgencyId().builder()
+                        .approvalStatus(AgencyStatus.REJECTED)
+                        .updatedAt(LocalDateTime.now())
+                        .build();
             } else if (accountRequests.getStatus() == AccountRequestsStatus.APPROVED){
                 throw new IllegalAccessException("이미 등록 승인된 대행사 입니다.");
             } else {
