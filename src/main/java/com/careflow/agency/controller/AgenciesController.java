@@ -33,7 +33,7 @@ public class AgenciesController {
     대행사 회원가입 절차 시 대행사 이름, 사업자 등록번호를 통해 기존에 저장된 데이터가 있는지 검색
     기존에 데이터가 있는 경우 데이터 반환 및 대행사 회원가입 -> 관리자 계정요청으로 서비스 넘어감
      */
-    @GetMapping("/getAgency")
+    @GetMapping("/agencies")
     public ResponseEntity<Agencies> getAgency(@Valid @RequestParam(name = "name") String agencyName,
                                               @Valid @RequestParam(name = "businessNumber") String businessNumber) {
 
