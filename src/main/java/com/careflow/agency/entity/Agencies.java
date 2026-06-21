@@ -69,12 +69,16 @@ public class Agencies {
     수정일 : 데이터 수정 시 default value 적용
      */
     @Builder
-    public Agencies(User representativeId, String agencyName, String businessNumber, String agencyAddress, Double agencyFeeRate) {
+    public Agencies(User representativeId, String agencyName, String businessNumber, String agencyAddress, Double agencyFeeRate, AgencyStatus approvalStatus, LocalDateTime approvedAt, User approvedBy,LocalDateTime updatedAt) {
         this.representativeId = representativeId;
         this.agencyName = agencyName;
         this.businessNumber = businessNumber;
         this.agencyAddress = agencyAddress;
         this.agencyFeeRate = agencyFeeRate;
+        this.approvalStatus = approvalStatus;
+        this.approvedAt = approvedAt;
+        this.approvedBy = approvedBy;
+        this.updatedAt = updatedAt;
     }
 
     // 생성 메서드

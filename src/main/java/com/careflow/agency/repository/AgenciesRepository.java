@@ -4,16 +4,19 @@ import com.careflow.agency.entity.Agencies;
 import org.hibernate.annotations.Fetch;
 import org.hibernate.annotations.FetchMode;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Query;
 import org.springframework.stereotype.Repository;
 
-import java.lang.ScopedValue;
 import java.util.Optional;
 
 @Repository
 public interface AgenciesRepository extends JpaRepository<Agencies, Long> {
 
     @Fetch(FetchMode.JOIN)
-    Optional<Agencies> findAgenciesByAgencyNameAndBusinessNumber(String agencyName, String businessNumber);
+    Optional<Agencies> findAgenciesByNameAndBusinessNumber(String agencyName, String businessNumber);
 
-    Optional<Long> findRepresentativeIdById(Long id);
+    Optional<Long> findRepresentativeId(Long userId);
+
+    @Query("SELECT a FROM Agencies a WHERE a.representativeId = :userId")
+    Optional<Agencies> findByRepresentativeById(Long userId);
 }

@@ -1,16 +1,17 @@
 package com.careflow.account_requests.controller;
 
+import com.careflow.account_requests.dto.AccountRequestReject;
 import com.careflow.account_requests.entity.AccountRequests;
 import com.careflow.account_requests.service.AccountRequestsService;
+import com.careflow.agency.entity.Agencies;
 import com.careflow.agency.service.AgenciesService;
+import com.careflow.auth.security.CustomUserDetails;
+import com.careflow.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PatchMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 
@@ -20,12 +21,13 @@ import java.util.List;
 public class AccountRequestsController {
 
     private final AgenciesService agenciesService;
+    private final UserService userService;
     private final AccountRequestsService accountRequestsService;
 
     // 요청 목록 조회
     @GetMapping("/list")
     public ResponseEntity<List<AccountRequests>> requestlist(
-//            @AuthenticationPrincipal CustomUserDetails userDetails
+            @AuthenticationPrincipal CustomUserDetails userDetails
             ) {
 
         // CareFlow 관리자 계정으로 로그인 시
@@ -35,16 +37,16 @@ public class AccountRequestsController {
             return ResponseEntity.ok(superAccountRequest);
 
         } else {
-            // 대행사 슈퍼 계정인지 확인
-            Long agencyId = userDetails.getAgencyId();
-            Long representativeIdById = agenciesService.findRepresentativeIdById(agencyId);
+
+            Long userId = userDetails.getUserId();
+            Agencies agencies = agenciesService.findRepresentativeIdById(userId);
 
             // 슈퍼 계정인 경우
-            if(representativeIdById != null && representativeIdById == userDetails.getUserId() && userDetails.getRole().equals("AGENCY")) {
-                List<AccountRequests> mangerAccountRequest = accountRequestsService.findRequestByAgencyIdAndApproved(agencyId);
+            if(agencies != null) {
+                List<AccountRequests> mangerAccountRequest = accountRequestsService.findRequestByAgencyIdAndApproved(agencies.getId());
                 return ResponseEntity.ok(mangerAccountRequest);
             } else {
-                // UnAuthorized 에러 반환(요청 권한없음)
+                // 일반 관리자 계정인 경우 UnAuthorized 에러 반환(요청 권한없음)
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
             }
 
@@ -52,23 +54,31 @@ public class AccountRequestsController {
     }
 
     // 요청 승인
-    @PatchMapping("/approve")
-    public ResponseEntity<Void> approveAccountRequest(@AuthenticationPrincipal CustomUserDetails userDetails, Long accountId) {
-        // 요청 승인 시 플로우
-        /*
-            // -> CareFlow 관리자 승인 시 해당 요청의 agency_id 값을 기준으로 대행사 정보 검색
-            // -> 대행사 정보 검색 결과 미승인 상태일 시 현재 요청이 슈퍼 계정 생성 요청인것으로 판단
-            // -> 회원 정보 users 테이블에 저장 및 생성된 user_id 값 가져와서 created_user_id 컬럼에 적재
-            // -> 이후 해당 값을 다시 대행사 테이블에서 agency_id 값을 통해 찾은 데이터에 대해 representative_user_id 컬럼값 갱신 및 대행사 데이터 승인 상태 변경(PENDING -> APPROVED)
-         */
+    @PostMapping("/approve")
+    public ResponseEntity<Void> approveAccountRequest(@AuthenticationPrincipal CustomUserDetails userDetails, Long accountId) throws IllegalAccessException {
 
-        AccountRequests accountRequests =
-        return null;
+        // CareFlow 관리자, 또는 대행사 슈퍼 계정의 요청인 경우
+        if (userDetails.getRole().equals("ADMIN") || userDetails.getRole().equals("AGENCY")){
+            // 슈퍼 계정 생성 및 대행사 등록 허가
+            accountRequestsService.approveAgencyAccount(userDetails, accountId);
+        }
+         else {
+            throw new IllegalAccessException("기능에 대한 접근 권한이 없습니다.");
+        }
+
+        return ResponseEntity.noContent().build();
     }
 
     // 요청 거절
-    @PatchMapping("/reject")
-    public ResponseEntity<Void> rejectAccountRequest(@AuthenticationPrincipal CustomUserDetails userDetails, Long accountId) {
-        return null;
+    @PostMapping("/reject")
+    public ResponseEntity<Void> rejectAccountRequest(@AuthenticationPrincipal CustomUserDetails userDetails, Long accountId, @RequestBody AccountRequestReject accountRequestReject)
+            throws IllegalAccessException {
+
+        if (userDetails.getRole().equals("ADMIN") || userDetails.getRole().equals("AGENCY")){
+            accountRequestsService.rejectAgencyAccount(userDetails, accountId, accountRequestReject);
+        } else {
+            throw new IllegalAccessException("기능에 대한 접근 권한이 없습니다.");
+        }
+        return ResponseEntity.noContent().build();
     }
 }

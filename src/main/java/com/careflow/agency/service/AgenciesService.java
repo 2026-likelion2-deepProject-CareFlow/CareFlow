@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.NoSuchElementException;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
@@ -22,8 +23,8 @@ public class AgenciesService {
     private final AccountRequestsRepository accountRequestsRepository;
 
     @Transactional(readOnly = true)
-    public Agencies findAgencyByNameAndNumber(String agencyName, String businessNumber) {
-        return agenciesRepository.findAgenciesByAgencyNameAndBusinessNumber(agencyName, businessNumber)
+    public Agencies findAgenciesByNameAndBusinessNumber(String agencyName, String businessNumber) {
+        return agenciesRepository.findAgenciesByNameAndBusinessNumber(agencyName, businessNumber)
                 .orElseThrow(() -> new NoSuchElementException("해당 대행사 정보를 찾을 수 없습니다.")); // 비즈니스 관점 에러처리
     }
 
@@ -47,7 +48,8 @@ public class AgenciesService {
                 agencyCreateRequest.name(),
                 agencyCreateRequest.phoneNumber(),
                 AccountRequestsRole.AGENCY,
-                agencyCreateRequest.agencyAddress());
+                agencyCreateRequest.addressDetail(),
+                agencyCreateRequest.regionId());
 
         // 그 이후 요청 객체 저장()
         Long accountRequestId = accountRequestsRepository.save(accountRequests).getId();
@@ -59,7 +61,7 @@ public class AgenciesService {
     public Long agencyManagerAccountRequest(AgencyCreateRequest agencyCreateRequest) {
 
         // approval_status : APPROVED
-        Agencies agency = agenciesRepository.findAgenciesByAgencyNameAndBusinessNumber(agencyCreateRequest.agencyName(), agencyCreateRequest.businessNumber()).orElseThrow();
+        Agencies agency = agenciesRepository.findAgenciesByNameAndBusinessNumber(agencyCreateRequest.agencyName(), agencyCreateRequest.businessNumber()).orElseThrow();
         // 이미 존재하는 대행사의 id 값이 필요함, 그러면 여기서 상호명, 사업자 등록번호로 다시 Agencies 객체 조회해오고 그걸 이용해서 요청객체 생성
         AccountRequests accountRequests = AccountRequests.create(agency,
                 agencyCreateRequest.email(),
@@ -67,14 +69,15 @@ public class AgenciesService {
                 agencyCreateRequest.name(),
                 agencyCreateRequest.phoneNumber(),
                 AccountRequestsRole.AGENCY,
-                agencyCreateRequest.agencyAddress());
+                agencyCreateRequest.agencyAddress(),
+                agencyCreateRequest.regionId());
 
         return accountRequestsRepository.save(accountRequests).getId();
     }
 
     @Transactional(readOnly = true)
-    public Long findRepresentativeIdById(Long agencyId) {
+    public Agencies findRepresentativeIdById(Long userId) {
 
-        return agenciesRepository.findRepresentativeIdById(agencyId).orElseThrow();
+        return agenciesRepository.findByRepresentativeById(userId).orElse(null);
     }
 }

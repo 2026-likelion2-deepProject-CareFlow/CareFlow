@@ -61,9 +61,8 @@ public class AccountRequests {
     @Column(name = "address_detail", nullable = true)
     private String addressDetail;
 
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "region_id", nullable = true, unique = true)
-    private Regions region;
+    @Column(name = "region_id", nullable = true, unique = true)
+    private Long regionId;
 
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "reviewed_by", nullable = true, unique = true)
@@ -74,7 +73,7 @@ public class AccountRequests {
     private User createdUserId; // 해당 요청을 통해 생성된 회원 id
 
     @Builder
-    public AccountRequests(Agencies agencies, String email, String password, String name, String phone, AccountRequestsRole requestsRole, String addressDetail){
+    public AccountRequests(Agencies agencies, String email, String password, String name, String phone, AccountRequestsRole requestsRole, String addressDetail, Long regionId, AccountRequestsStatus status, LocalDateTime updatedAt, LocalDateTime reviewedAt, String rejectReason, User reviewedBy, User createdUserId){
         this.agencyId = agencies;
         this.email = email;
         this.password = password;
@@ -82,9 +81,17 @@ public class AccountRequests {
         this.phone = phone;
         this.requestsRole = requestsRole;
         this.addressDetail = addressDetail;
+        this.regionId = regionId;
+
+        this.status = status;
+        this.updatedAt = updatedAt;
+        this.reviewedAt = reviewedAt;
+        this.rejectReason = rejectReason;
+        this.reviewedBy = reviewedBy;
+        this.createdUserId = createdUserId;
     }
 
-    public static AccountRequests create(Agencies agencies, String email, String password, String name, String phone, AccountRequestsRole requestsRole, String addressDetail){
+    public static AccountRequests create(Agencies agencies, String email, String password, String name, String phone, AccountRequestsRole requestsRole, String addressDetail, Long regionId){
         return AccountRequests.builder()
                 .agencies(agencies)
                 .email(email)
@@ -93,6 +100,7 @@ public class AccountRequests {
                 .phone(phone)
                 .requestsRole(requestsRole)
                 .addressDetail(addressDetail)
+                .regionId(regionId)
                 .build();
     }
 }
