@@ -6,6 +6,7 @@ import com.careflow.agency.dto.request.AgencyCreateRequest;
 import com.careflow.agency.entity.Agencies;
 import com.careflow.agency.repository.AgenciesRepository;
 import com.careflow.common.enums.AccountRequestsRole;
+import com.careflow.common.enums.AgencyStatus;
 import com.careflow.region.entity.Regions;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -29,50 +30,57 @@ public class AgenciesService {
     }
 
     @Transactional
-    public Long agencySuperAccountRequest(AgencyCreateRequest agencyCreateRequest) {
+    public Long requestAgencyAccount(AgencyCreateRequest agencyCreateRequest) {
 
-        // 1. 대행사 정보 우선 저장(approval_status : PENDING)
-        Long agencyId = agenciesRepository.save(
-                Agencies.create(agencyCreateRequest.agencyName(),
-                        agencyCreateRequest.businessNumber(),
+        String agecyName = agencyCreateRequest.agencyName();
+        String businessNumber = agencyCreateRequest.businessNumber();
+        Agencies agencies = agenciesRepository.findAgenciesByNameAndBusinessNumber(agecyName, businessNumber).orElse(null);
+
+        if (agencies != null) {
+            // approval_status : APPROVED 인 대행사라면 일반 관리자 계청 요청 생성
+            Long accountRequestId = null;
+            if (agencies.getApprovalStatus() == AgencyStatus.APPROVED){
+                AccountRequests accountRequests = AccountRequests.create(agencies,
+                        agencyCreateRequest.email(),
+                        agencyCreateRequest.password(),
+                        agencyCreateRequest.name(),
+                        agencyCreateRequest.phoneNumber(),
+                        AccountRequestsRole.AGENCY,
                         agencyCreateRequest.agencyAddress(),
-                        agencyCreateRequest.agencyFeeRate())).getId();
+                        agencyCreateRequest.regionId());
+                 accountRequestId = accountRequestsRepository.save(accountRequests).getId();
 
-        Agencies agencies = agenciesRepository.findById(agencyId).orElseThrow();
+            } else if (agencies.getApprovalStatus() == AgencyStatus.PENDING || agencies.getApprovalStatus() == AgencyStatus.REJECTED){
+                throw new IllegalStateException("아직 등록 대기중이거나 등록이 거부된 대행사 입니다.");
+            }
+            return accountRequestId;
 
-        // Regions 객체 -> 다음주 월요일 병욱님 오시면 요청 테이블에서 regions_id 컬럼 값 어떻게 적재할지 논의
-        // 2. 계정 요청 테이블에 저장한 대행사 agency_id 값(Agencies 객체)과 함께 적재
-        AccountRequests accountRequests = AccountRequests.create(agencies,
-                agencyCreateRequest.email(),
-                agencyCreateRequest.password(),
-                agencyCreateRequest.name(),
-                agencyCreateRequest.phoneNumber(),
-                AccountRequestsRole.AGENCY,
-                agencyCreateRequest.addressDetail(),
-                agencyCreateRequest.regionId());
+        } else {
+            // 1. 대행사 정보 우선 저장(approval_status : PENDING)
+            Long agencyId = agenciesRepository.save(
+                    Agencies.create(agencyCreateRequest.agencyName(),
+                            agencyCreateRequest.businessNumber(),
+                            agencyCreateRequest.agencyAddress(),
+                            agencyCreateRequest.agencyFeeRate())).getId();
 
-        // 그 이후 요청 객체 저장()
-        Long accountRequestId = accountRequestsRepository.save(accountRequests).getId();
+            agencies = agenciesRepository.findById(agencyId).orElseThrow(() -> new NoSuchElementException("대행사 정보가 저장되지 않았습니다."));
 
-        return accountRequestId;
-    }
+            // Regions 객체 -> 다음주 월요일 병욱님 오시면 요청 테이블에서 regions_id 컬럼 값 어떻게 적재할지 논의
+            // 2. 계정 요청 테이블에 저장한 대행사 agency_id 값(Agencies 객체)과 함께 적재
+            AccountRequests accountRequests = AccountRequests.create(agencies,
+                    agencyCreateRequest.email(),
+                    agencyCreateRequest.password(),
+                    agencyCreateRequest.name(),
+                    agencyCreateRequest.phoneNumber(),
+                    AccountRequestsRole.AGENCY,
+                    agencyCreateRequest.addressDetail(),
+                    agencyCreateRequest.regionId());
 
-    @Transactional
-    public Long agencyManagerAccountRequest(AgencyCreateRequest agencyCreateRequest) {
+            // 그 이후 요청 객체 저장()
+            Long accountRequestId = accountRequestsRepository.save(accountRequests).getId();
 
-        // approval_status : APPROVED
-        Agencies agency = agenciesRepository.findAgenciesByNameAndBusinessNumber(agencyCreateRequest.agencyName(), agencyCreateRequest.businessNumber()).orElseThrow();
-        // 이미 존재하는 대행사의 id 값이 필요함, 그러면 여기서 상호명, 사업자 등록번호로 다시 Agencies 객체 조회해오고 그걸 이용해서 요청객체 생성
-        AccountRequests accountRequests = AccountRequests.create(agency,
-                agencyCreateRequest.email(),
-                agencyCreateRequest.password(),
-                agencyCreateRequest.name(),
-                agencyCreateRequest.phoneNumber(),
-                AccountRequestsRole.AGENCY,
-                agencyCreateRequest.agencyAddress(),
-                agencyCreateRequest.regionId());
-
-        return accountRequestsRepository.save(accountRequests).getId();
+            return accountRequestId;
+        }
     }
 
     @Transactional(readOnly = true)

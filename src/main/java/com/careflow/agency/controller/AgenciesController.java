@@ -23,16 +23,10 @@ public class AgenciesController {
     public ResponseEntity<Long> signupAgency(@Valid @RequestBody AgencyCreateRequest agencyCreateRequest) {
 
         // 대행사 정보가 존재할 경우 - 사용자가 대행사 정보 직접 입력 x, 대행사 정보 조회 응답 데이터 그대로 활용
-        if (agencyCreateRequest.flag()){
-            // 관리자 계정 승인 요청
-            Long accountRequestId = agenciesService.agencyManagerAccountRequest(agencyCreateRequest);
-            return ResponseEntity.status(HttpStatus.CREATED).body(accountRequestId);
+        // 슈퍼계정 생성 요청 및 대행사 정보 저장
+        Long accountRequestId = agenciesService.requestAgencyAccount(agencyCreateRequest);
+        return ResponseEntity.status(HttpStatus.CREATED).body(accountRequestId);
 
-        } else{ // 대행사 정보가 존재하지 않을 경우
-            // 슈퍼계정 생성 요청 및 대행사 정보 저장
-            Long accountRequestId = agenciesService.agencySuperAccountRequest(agencyCreateRequest);
-            return ResponseEntity.status(HttpStatus.CREATED).body(accountRequestId);
-        }
     }
 
     /*
