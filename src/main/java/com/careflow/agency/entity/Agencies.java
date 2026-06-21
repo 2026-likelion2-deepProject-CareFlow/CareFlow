@@ -1,6 +1,7 @@
 package com.careflow.agency.entity;
 
 import com.careflow.common.enums.AgencyStatus;
+import com.careflow.user.entity.User;
 import jakarta.persistence.*;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.Max;
@@ -23,8 +24,9 @@ public class Agencies {
     @Column(nullable = false, name = "agency_id")
     private Long id; // 대행사 id
 
-    @Column(nullable = false, name = "representative_user_id")
-    private Long representativeId; // 대표 담당자 id
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(nullable = false, name = "representative_user_id", unique = true)
+    private User representativeId; // 대표 담당자 id
     /*
     대행사 회원가입 시 사용자(대표 담당자 회원가입) 회원가입 + 대행사 회원가입 동시에 진행됨
     1. 우선 대표 담당자 회원가입 부터 진행
@@ -43,14 +45,15 @@ public class Agencies {
             columnDefinition = "DECIMAL(5,2) DEFAULT 0.00", precision = 5, scale = 2)
     private Double agencyFeeRate; // 대행사 기사 수수료율
 
-    @Column(nullable = false, name = "agency_status", columnDefinition = "DEFAULT PENDING")
-    private AgencyStatus agencyStatus; // 관리자 승인 상태
+    @Column(nullable = false, name = "approval_status", columnDefinition = "DEFAULT PENDING")
+    private AgencyStatus approvalStatus; // 관리자 승인 상태
 
     @Column(nullable = true, name = "approved_at")
     private LocalDateTime approvedAt; // 승인 날짜
 
-    @Column(nullable = true, name = "approved_by")
-    private Long approvedBy; // 승인한 관리자 id
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(nullable = true, name = "approved_by")
+    private User approvedBy; // 승인한 관리자 id
 
     @Column(nullable = false, name = "created_at", updatable = false, columnDefinition = "DATETIME DEFAULT CURRENT_TIMESTAMP")
     private LocalDateTime createdAt; // 등록일, 최초 등록이후 데이터 수정 불가
@@ -66,12 +69,16 @@ public class Agencies {
     수정일 : 데이터 수정 시 default value 적용
      */
     @Builder
-    public Agencies(Long representativeId, String agencyName, String businessNumber, String agencyAddress, Double agencyFeeRate) {
+    public Agencies(User representativeId, String agencyName, String businessNumber, String agencyAddress, Double agencyFeeRate, AgencyStatus approvalStatus, LocalDateTime approvedAt, User approvedBy,LocalDateTime updatedAt) {
         this.representativeId = representativeId;
         this.agencyName = agencyName;
         this.businessNumber = businessNumber;
         this.agencyAddress = agencyAddress;
         this.agencyFeeRate = agencyFeeRate;
+        this.approvalStatus = approvalStatus;
+        this.approvedAt = approvedAt;
+        this.approvedBy = approvedBy;
+        this.updatedAt = updatedAt;
     }
 
     // 생성 메서드

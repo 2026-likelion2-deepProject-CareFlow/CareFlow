@@ -30,4 +30,15 @@ public class GlobalExceptionHandler {
     public ResponseEntity<String> handleIllegalStateException(IllegalStateException e) {
         return ResponseEntity.status(HttpStatus.FORBIDDEN).body(e.getMessage());
     }
+
+    @ExceptionHandler(value = {IllegalAccessException.class})
+    public ResponseEntity<String> handleIllegalAccessException(IllegalAccessException e) {
+        return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(e.getMessage());
+    }
+
+    // 예상치 못한 에러 발생 시
+    @ExceptionHandler(value = {Exception.class})
+    public ResponseEntity<String> handleNotExpectedException(Exception e) {
+        return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(e.getMessage());
+    }
 }

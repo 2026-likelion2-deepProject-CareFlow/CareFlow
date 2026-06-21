@@ -1,5 +1,6 @@
 package com.careflow.user.entity;
 
+import com.careflow.agency.entity.Agencies;
 import com.careflow.common.enums.Role;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -20,7 +21,7 @@ public class User {
     @Column(name = "user_id")
     private Long id;
 
-    @Column(name = "agency_id")
+    @Column(name = "agency_id", nullable = true, unique = true)
     private Long agencyId;
 
     @Column(nullable = false, unique = true, length = 100)
@@ -62,7 +63,7 @@ public class User {
 
     @Builder
     public User(String email, String passwordHash, String name, String phone,
-                Role role, Integer regionId, String addressDetail) {
+                Role role, Integer regionId, String addressDetail, Long agencyId) {
         this.email = email;
         this.passwordHash = passwordHash;
         this.name = name;
@@ -73,6 +74,7 @@ public class User {
         this.status = "ACTIVE";
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
+        this.agencyId = agencyId;
     }
 
     public void updateLastLogin() {
