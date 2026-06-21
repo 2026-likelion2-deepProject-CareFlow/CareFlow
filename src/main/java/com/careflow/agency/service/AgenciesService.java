@@ -8,8 +8,10 @@ import com.careflow.agency.repository.AgenciesRepository;
 import com.careflow.common.enums.AccountRequestsRole;
 import com.careflow.common.enums.AgencyStatus;
 import com.careflow.region.entity.Regions;
+import com.careflow.user.repository.UserRepository;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -22,6 +24,9 @@ public class AgenciesService {
 
     private final AgenciesRepository agenciesRepository;
     private final AccountRequestsRepository accountRequestsRepository;
+    private final UserRepository userRepository;
+
+    private final PasswordEncoder passwordEncoder;
 
     @Transactional(readOnly = true)
     public Agencies findByBusinessNumber(String businessNumber) {
@@ -36,12 +41,17 @@ public class AgenciesService {
         Agencies agencies = agenciesRepository.findByBusinessNumber(businessNumber).orElse(null);
 
         if (agencies != null) {
+
+            if (userRepository.existsByEmail(agencyCreateRequest.email())) {
+                throw new IllegalArgumentException("이미 가입된 이메일입니다.");
+            }
+
             // approval_status : APPROVED 인 대행사라면 일반 관리자 계청 요청 생성
             Long accountRequestId = null;
             if (agencies.getApprovalStatus() == AgencyStatus.APPROVED){
                 AccountRequests accountRequests = AccountRequests.create(agencies,
                         agencyCreateRequest.email(),
-                        agencyCreateRequest.password(),
+                        passwordEncoder.encode(agencyCreateRequest.password()),
                         agencyCreateRequest.name(),
                         agencyCreateRequest.phoneNumber(),
                         AccountRequestsRole.AGENCY,
@@ -59,6 +69,9 @@ public class AgenciesService {
             return accountRequestId;
 
         } else {
+            if (userRepository.existsByEmail(agencyCreateRequest.email())) {
+                throw new IllegalArgumentException("이미 가입된 이메일입니다.");
+            }
             // 1. 대행사 정보 우선 저장(approval_status : PENDING)
             Long agencyId = agenciesRepository.save(
                     Agencies.create(agencyCreateRequest.agencyName(),
@@ -72,7 +85,7 @@ public class AgenciesService {
             // 2. 계정 요청 테이블에 저장한 대행사 agency_id 값(Agencies 객체)과 함께 적재
             AccountRequests accountRequests = AccountRequests.create(agencies,
                     agencyCreateRequest.email(),
-                    agencyCreateRequest.password(),
+                    passwordEncoder.encode(agencyCreateRequest.password()),
                     agencyCreateRequest.name(),
                     agencyCreateRequest.phoneNumber(),
                     AccountRequestsRole.AGENCY,
