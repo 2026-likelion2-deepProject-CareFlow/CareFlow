@@ -10,6 +10,7 @@ import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.ColumnDefault;
 
 import java.time.LocalDateTime;
 
@@ -43,7 +44,9 @@ public class AccountRequests {
     @Column(name = "requests_role", nullable = false)
     private AccountRequestsRole requestsRole;
 
-    @Column(name = "status", nullable = false, columnDefinition = "DEFAULT PENDING")
+    @Enumerated(EnumType.STRING)
+    @Column(name = "status", nullable = false)
+    @ColumnDefault(value = "PENDING")
     private AccountRequestsStatus status;
 
     @Column(name = "reviewed_at", nullable = true)
@@ -61,8 +64,9 @@ public class AccountRequests {
     @Column(name = "address_detail", nullable = true)
     private String addressDetail;
 
-    @Column(name = "region_id", nullable = true, unique = true)
-    private Long regionId;
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "region_id", nullable = true, unique = true)
+    private Regions regionId;
 
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "reviewed_by", nullable = true, unique = true)
@@ -73,7 +77,7 @@ public class AccountRequests {
     private User createdUserId; // 해당 요청을 통해 생성된 회원 id
 
     @Builder
-    public AccountRequests(Agencies agencies, String email, String password, String name, String phone, AccountRequestsRole requestsRole, String addressDetail, Long regionId, AccountRequestsStatus status, LocalDateTime updatedAt, LocalDateTime reviewedAt, String rejectReason, User reviewedBy, User createdUserId){
+    public AccountRequests(Agencies agencies, String email, String password, String name, String phone, AccountRequestsRole requestsRole, String addressDetail, Regions regionId, AccountRequestsStatus status, LocalDateTime updatedAt, LocalDateTime reviewedAt, String rejectReason, User reviewedBy, User createdUserId){
         this.agencyId = agencies;
         this.email = email;
         this.password = password;
@@ -91,7 +95,7 @@ public class AccountRequests {
         this.createdUserId = createdUserId;
     }
 
-    public static AccountRequests create(Agencies agencies, String email, String password, String name, String phone, AccountRequestsRole requestsRole, String addressDetail, Long regionId){
+    public static AccountRequests create(Agencies agencies, String email, String password, String name, String phone, AccountRequestsRole requestsRole, String addressDetail, Regions regionId){
         return AccountRequests.builder()
                 .agencies(agencies)
                 .email(email)

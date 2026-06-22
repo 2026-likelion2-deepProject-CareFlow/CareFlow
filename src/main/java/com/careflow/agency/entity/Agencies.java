@@ -10,6 +10,7 @@ import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.ColumnDefault;
 
 import java.time.LocalDateTime;
 
@@ -42,10 +43,12 @@ public class Agencies {
     private String agencyAddress; // 소재지 주소
 
     @Column(nullable = false, name = "agency_fee_rate",
-            columnDefinition = "DECIMAL(5,2) DEFAULT 0.00", precision = 5, scale = 2)
+            columnDefinition = "DECIMAL(5,2) DEFAULT 0.00")
     private Double agencyFeeRate; // 대행사 기사 수수료율
 
-    @Column(nullable = false, name = "approval_status", columnDefinition = "DEFAULT PENDING")
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, name = "approval_status")
+    @ColumnDefault(value = "PENDING")
     private AgencyStatus approvalStatus; // 관리자 승인 상태
 
     @Column(nullable = true, name = "approved_at")

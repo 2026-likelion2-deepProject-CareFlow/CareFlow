@@ -2,6 +2,7 @@ package com.careflow.user.entity;
 
 import com.careflow.agency.entity.Agencies;
 import com.careflow.common.enums.Role;
+import com.careflow.region.entity.Regions;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -43,8 +44,9 @@ public class User {
     @Column(length = 20, nullable = false)
     private String status; // ACTIVE / INACTIVE / SUSPENDED
 
-    @Column(name = "region_id")
-    private Integer regionId;
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "region_id", nullable = true, unique = true)
+    private Regions regionId;
 
     @Column(name = "address_detail", length = 100)
     private String addressDetail;
@@ -63,7 +65,7 @@ public class User {
 
     @Builder
     public User(String email, String passwordHash, String name, String phone,
-                Role role, Integer regionId, String addressDetail, Long agencyId) {
+                Role role, Regions regionId, String addressDetail, Long agencyId) {
         this.email = email;
         this.passwordHash = passwordHash;
         this.name = name;
