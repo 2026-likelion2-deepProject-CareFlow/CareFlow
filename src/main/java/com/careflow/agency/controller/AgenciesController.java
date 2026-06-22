@@ -3,6 +3,7 @@ package com.careflow.agency.controller;
 import com.careflow.agency.dto.request.AgencyCreateRequest;
 import com.careflow.agency.entity.Agencies;
 import com.careflow.agency.service.AgenciesService;
+import com.careflow.engineer.domain.entity.EngineerProfile;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -40,6 +41,11 @@ public class AgenciesController {
         // 대행사 조회 결과가 존재하지 않아 NoSuchElementException 발생 및 NotFound 반환 시 flag = 0 설정
         Agencies agencies = agenciesService.findByBusinessNumber(businessNumber);
         return ResponseEntity.ok(agencies);
+    }
+
+    @PostMapping("/engineer")
+    public ResponseEntity<Long> signupEngineer() {
+        return ResponseEntity.status(HttpStatus.CREATED).body(null);
     }
 
 }
