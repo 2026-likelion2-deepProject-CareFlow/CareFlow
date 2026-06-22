@@ -3,14 +3,13 @@ package com.careflow.account_requests.entity;
 import com.careflow.agency.entity.Agencies;
 import com.careflow.common.enums.AccountRequestsRole;
 import com.careflow.common.enums.AccountRequestsStatus;
-import com.careflow.region.entity.Regions;
+import com.careflow.region.entity.Regions; // 호준이의 수정 사항: Regions 임포트
 import com.careflow.user.entity.User;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
-import org.hibernate.annotations.ColumnDefault;
 
 import java.time.LocalDateTime;
 
@@ -26,8 +25,8 @@ public class AccountRequests {
     private Long id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(nullable = true, name = "agency_id")
-    private Agencies agencyId;
+    @JoinColumn(name = "agency_id", nullable = true)
+    private Agencies agency;
 
     @Column(name = "email", nullable = false, unique = true)
     private String email;
@@ -41,70 +40,70 @@ public class AccountRequests {
     @Column(name = "phone", nullable = true)
     private String phone;
 
+    @Enumerated(EnumType.STRING)
     @Column(name = "requests_role", nullable = false)
     private AccountRequestsRole requestsRole;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false)
-    @ColumnDefault(value = "PENDING")
-    private AccountRequestsStatus status;
+    private AccountRequestsStatus status = AccountRequestsStatus.PENDING;
 
     @Column(name = "reviewed_at", nullable = true)
     private LocalDateTime reviewedAt;
 
-    @Column(name = "created_at", nullable = false, columnDefinition = "DATETIME DEFAULT CURRENT_TIMESTAMP")
-    private LocalDateTime createdAt;
+    @Column(name = "created_at", nullable = false, updatable = false)
+    private LocalDateTime createdAt = LocalDateTime.now();
 
-    @Column(name = "updated_at", nullable = false, columnDefinition = "DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP")
-    private LocalDateTime updatedAt;
+    @Column(name = "updated_at", nullable = false)
+    private LocalDateTime updatedAt = LocalDateTime.now();
 
     @Column(name = "reject_reason", nullable = true)
-    private  String rejectReason;
+    private String rejectReason;
 
     @Column(name = "address_detail", nullable = true)
     private String addressDetail;
 
+    // 호준이의 수정 사항: Long 대신 Regions 객체로 매핑
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "region_id", nullable = true, unique = true)
-    private Regions regionId;
+    private Regions region;
 
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "reviewed_by", nullable = true, unique = true)
-    private User reviewedBy; // 승인한 관리자 id
+    private User reviewedBy;
 
     @OneToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "created_user_id", nullable = true, unique = true)
-    private User createdUserId; // 해당 요청을 통해 생성된 회원 id
+    private User createdUserId;
 
     @Builder
-    public AccountRequests(Agencies agencies, String email, String password, String name, String phone, AccountRequestsRole requestsRole, String addressDetail, Regions regionId, AccountRequestsStatus status, LocalDateTime updatedAt, LocalDateTime reviewedAt, String rejectReason, User reviewedBy, User createdUserId){
-        this.agencyId = agencies;
+    public AccountRequests(Agencies agency, String email, String password, String name, String phone, AccountRequestsRole requestsRole, String addressDetail, Regions region, AccountRequestsStatus status, LocalDateTime updatedAt, LocalDateTime reviewedAt, String rejectReason, User reviewedBy, User createdUserId){
+        this.agency = agency;
         this.email = email;
         this.password = password;
         this.name = name;
         this.phone = phone;
         this.requestsRole = requestsRole;
         this.addressDetail = addressDetail;
-        this.regionId = regionId;
-
-        this.status = status;
-        this.updatedAt = updatedAt;
+        this.region = region; // 여기도 객체 이름 통일
+        if (status != null) this.status = status;
+        if (updatedAt != null) this.updatedAt = updatedAt;
         this.reviewedAt = reviewedAt;
         this.rejectReason = rejectReason;
         this.reviewedBy = reviewedBy;
         this.createdUserId = createdUserId;
     }
 
-    public static AccountRequests create(Agencies agencies, String email, String password, String name, String phone, AccountRequestsRole requestsRole, String addressDetail, Regions regionId){
+    public static AccountRequests create(Agencies agency, String email, String password, String name, String phone, AccountRequestsRole requestsRole, String addressDetail, Regions region){
         return AccountRequests.builder()
-                .agencies(agencies)
+                .agency(agency)
                 .email(email)
                 .password(password)
                 .name(name)
                 .phone(phone)
                 .requestsRole(requestsRole)
                 .addressDetail(addressDetail)
-                .regionId(regionId)
+                .region(region) // 객체 형태로 전달
                 .build();
     }
 }
