@@ -13,12 +13,12 @@ import lombok.NoArgsConstructor;
 public class Regions {
 
     @Id
-    @Column(name = "region_id", nullable = false)
+    @Column(name = "region_id", nullable = false, columnDefinition = "INT UNSIGNED")
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id;
+    private Integer id;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @Column(name = "parent_id", nullable = true)
+    @JoinColumn(name = "parent_id", nullable = true)
     private Regions parentId; // 자기 참조
 
     @Column(name = "name", nullable = false)

@@ -15,7 +15,13 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "engineerprofiles")
+@Table(
+        name = "engineer_profiles",
+        indexes = {
+                @Index(name = "idx_profile_skill", columnList = "skill_level, is_lms_completed"),
+                @Index(name = "idx_profile_rating", columnList = "avg_rating")
+        }
+)
 @EntityListeners(AuditingEntityListener.class)
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -23,45 +29,45 @@ public class EngineerProfile {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    @Column(name = "profileid")
+    @Column(name = "profile_id")
     private Long profileId;
 
     @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "userid", unique = true, nullable = false)
+    @JoinColumn(name = "user_id", unique = true, nullable = false)
     private User user;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "categoryid", nullable = false)
+    @JoinColumn(name = "category_id", nullable = true)
     private ApplianceCategory category;
 
-    @Column(name = "careerstartedyear", nullable = false, columnDefinition = "YEAR")
+    @Column(name = "career_started_year", nullable = false, columnDefinition = "YEAR")
     private int careerStartedYear;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "skilllevel", nullable = false, length = 20)
+    @Column(name = "skill_level", nullable = false, length = 20)
     private SkillLevel skillLevel;
 
-    @Column(name = "islmscompleted", nullable = false, columnDefinition = "TINYINT(1) DEFAULT 0")
+    @Column(name = "is_lms_completed", nullable = false, columnDefinition = "TINYINT DEFAULT 0")
     private boolean isLmsCompleted;
 
     @Column(name = "introduction", columnDefinition = "TEXT")
     private String introduction;
 
-    @Column(name = "profileimageurl", length = 500)
+    @Column(name = "profile_image_url", length = 500)
     private String profileImageUrl;
 
-    @Column(name = "avgrating", precision = 3, scale = 2, columnDefinition = "DECIMAL(3,2) DEFAULT 0.00")
+    @Column(name = "avg_rating", precision = 3, scale = 2, columnDefinition = "DECIMAL(3,2) DEFAULT 0.00")
     private BigDecimal avgRating;
 
-    @Column(name = "totalreviews", columnDefinition = "INT DEFAULT 0")
+    @Column(name = "total_reviews", columnDefinition = "INT DEFAULT 0")
     private int totalReviews;
 
     @CreatedDate
-    @Column(name = "createdat", updatable = false)
+    @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
     @LastModifiedDate
-    @Column(name = "updatedat")
+    @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
     @Builder

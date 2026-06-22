@@ -1,7 +1,6 @@
 package com.careflow.agency.dto.request;
 
 import jakarta.validation.constraints.*;
-import lombok.Builder;
 
 public record AgencyCreateRequest(
 
@@ -14,11 +13,15 @@ public record AgencyCreateRequest(
         @Pattern(regexp = "^010[- ]?\\d{3,4}[- ]?\\d{4}$")
         String phoneNumber,
         @NotBlank
-        String agencyName,
+        String regionName,
+        @NotBlank
+        String addressDetail, // 가입자 거주지
         @NotBlank
         String businessNumber,
+        @NotBlank
+        String agencyName,
         @Size(max = 255)
-        String agencyAddress,
+        String agencyAddress, // 대행사 소재지
         @NotNull
         @Digits(integer = 5, fraction = 2)
         Double agencyFeeRate,

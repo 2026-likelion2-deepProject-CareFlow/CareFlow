@@ -1,12 +1,18 @@
 package com.careflow.auth.service;
 
+import com.careflow.agency.entity.Agencies;
+import com.careflow.agency.repository.AgenciesRepository;
 import com.careflow.auth.dto.LoginRequest;
 import com.careflow.auth.dto.SignUpRequest;
 import com.careflow.auth.dto.TokenResponse;
 import com.careflow.auth.security.JwtProvider;
+import com.careflow.common.enums.AgencyStatus;
 import com.careflow.common.enums.Role;
+import com.careflow.region.entity.Regions;
+import com.careflow.region.repository.RegionRepository;
 import com.careflow.user.entity.User;
 import com.careflow.user.repository.UserRepository;
+import com.careflow.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -14,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
+import java.util.NoSuchElementException;
 
 @Service
 @RequiredArgsConstructor
@@ -26,19 +33,23 @@ public class AuthService {
     private final JwtProvider jwtProvider;
     private final StringRedisTemplate redisTemplate;
 
+    private final AgenciesRepository agenciesRepository;
+    private final RegionRepository regionRepository;
+
     @Transactional
     public void signUp(SignUpRequest request) {
         if (userRepository.existsByEmail(request.getEmail())) {
             throw new IllegalArgumentException("이미 가입된 이메일입니다.");
         }
 
+        Regions regions = regionRepository.findByName(request.getRegionName()).orElseThrow(() -> new NoSuchElementException("입력받은 지역 정보가 존재하지 않습니다."));
         User user = User.builder()
                 .email(request.getEmail())
                 .passwordHash(passwordEncoder.encode(request.getPassword()))
                 .name(request.getName())
                 .phone(request.getPhone())
                 .role(Role.CUSTOMER)
-                .regionId(request.getRegionId())
+                .regionId(regions)
                 .addressDetail(request.getAddressDetail())
                 .build();
 
@@ -59,9 +70,15 @@ public class AuthService {
             throw new IllegalStateException("정지되었거나 비활성화된 계정입니다.");
         }
 
-        // 호준님 파트: 대행사 승인 상태 검증 로직
         if (user.getRole() == Role.AGENCY) {
-            // TODO(호준): agencies.approval_status 확인 후 PENDING/REJECTED면 예외 던지기
+            // 슈퍼 계정인지 관리자 계정인지 확인 필요 X
+            Agencies agencies = agenciesRepository.findById(user.getAgencyId()).orElseThrow(() -> new NoSuchElementException("존재하지 않는 대행사 입니다."));
+
+            if (agencies.getApprovalStatus() == AgencyStatus.REJECTED) {
+                throw new IllegalStateException("대행사 정보가 등록 거부되었습니다. 자세한 사항은 관리자에게 문의하세요");
+            } else  if (agencies.getApprovalStatus() == AgencyStatus.PENDING){
+                throw new IllegalStateException("대행사 정보가 등록 대기중입니다. 자세한 사항은 관리자에게 문의하세요");
+            }
         }
 
         return issueTokenResponse(user);
