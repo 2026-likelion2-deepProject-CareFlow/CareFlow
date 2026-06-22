@@ -140,7 +140,7 @@ public class AccountRequestsService {
         User user = User.builder().agency(accountRequests.getAgency())
                 .name(accountRequests.getName())
                 .email(accountRequests.getEmail())
-                .passwordHash(passwordEncoder.encode(accountRequests.getPassword()))
+                .passwordHash(accountRequests.getPassword()) // 이미 요청이 들어올 때 부터 해싱 되어있음
                 .phone(accountRequests.getPhone())
                 .role(role)
                 .addressDetail(accountRequests.getAddressDetail())
