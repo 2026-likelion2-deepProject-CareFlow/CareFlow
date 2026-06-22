@@ -2,21 +2,21 @@ package com.careflow.agency.controller;
 
 import com.careflow.agency.dto.request.AgencyCreateRequest;
 import com.careflow.agency.service.AgenciesService;
+import com.careflow.auth.security.JwtProvider;
 import com.careflow.common.config.SecurityConfig;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import net.bytebuddy.utility.RandomString;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.MediaType;
-import org.springframework.lang.NonNull;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 
+import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import  static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -30,9 +30,12 @@ class AgenciesControllerValidTest {
 
     @MockitoBean
     private AgenciesService agenciesService;
+    @MockitoBean
+    private JwtProvider jwtProvider;
 
     @Autowired
     private ObjectMapper objectMapper;
+
 
     // 유효성 검증 실패 - 사용자 이름은 비어있는 값이 들어올 수 없음
     @Test
@@ -42,7 +45,7 @@ class AgenciesControllerValidTest {
         final String email = "ghwns6659@gmail.com";
         final String password = "123456";
         final String phoneNumber = "010-1234-5678";
-        final Long regionId = 1L; // 사용자 거주지역 기본키 값
+        final String regionsName = "서울 특별시 강남구"; // 사용자 거주지역 기본키 값
         final String addressDetail = "서울 특별시 강남구"; // 사용자 상세 거주지역
         final String agencyName = ""; // 상호명 비어있을 때 테스트
         final String businessNumber = "123-45-67890"; // 사업자 등록번호는 보통 10자리 숫자로 구성
@@ -50,7 +53,7 @@ class AgenciesControllerValidTest {
         final Double agencyFeeRate = 5.2;
 
         // 레코드 요청 객체 생성
-        final AgencyCreateRequest agencyCreateRequest = new AgencyCreateRequest(name, email, password, phoneNumber, regionId, addressDetail ,agencyName, businessNumber, agencyAddress, agencyFeeRate, false);
+        final AgencyCreateRequest agencyCreateRequest = new AgencyCreateRequest(name, email, password, phoneNumber, regionsName, addressDetail ,agencyName, businessNumber, agencyAddress, agencyFeeRate, false);
 
         // 객체를 JSON 문자열로 변환
         final String requestJson = objectMapper.writeValueAsString(agencyCreateRequest);
@@ -81,7 +84,7 @@ class AgenciesControllerValidTest {
         final String email = "ghwns6659@gmail.com";
         final String password = "123456";
         final String phoneNumber = "010-1234-5678";
-        final Long regionId = 1L; // 사용자 거주지역 기본키 값
+        final String regionsName = "서울 특별시 강남구"; // 사용자 거주지역 기본키 값
         final String addressDetail = "서울 특별시 강남구"; // 사용자 상세 거주지역
         final String agencyName = ""; // 상호명 비어있을 때 테스트
         final String businessNumber = "123-45-67890"; // 사업자 등록번호는 보통 10자리 숫자로 구성
@@ -89,7 +92,7 @@ class AgenciesControllerValidTest {
         final Double agencyFeeRate = 5.2;
 
         // 레코드 요청 객체 생성
-        final AgencyCreateRequest agencyCreateRequest = new AgencyCreateRequest(name, email, password, phoneNumber, regionId, addressDetail ,agencyName, businessNumber, agencyAddress, agencyFeeRate, false);
+        final AgencyCreateRequest agencyCreateRequest = new AgencyCreateRequest(name, email, password, phoneNumber, regionsName, addressDetail ,agencyName, businessNumber, agencyAddress, agencyFeeRate, false);
 
         // 객체를 JSON 문자열로 변환
         final String requestJson = objectMapper.writeValueAsString(agencyCreateRequest);
@@ -120,7 +123,7 @@ class AgenciesControllerValidTest {
         final String email = "ghwns6659@gmail.com";
         final String password = "123456";
         final String phoneNumber = "010-1234-5678";
-        final Long regionId = 1L; // 사용자 거주지역 기본키 값
+        final String regionsName = "서울 특별시 강남구"; // 사용자 거주지역 기본키 값
         final String addressDetail = "서울 특별시 강남구"; // 사용자 상세 거주지역
         final String agencyName = ""; // 상호명 비어있을 때 테스트
         final String businessNumber = "123-45-67890"; // 사업자 등록번호는 보통 10자리 숫자로 구성
@@ -128,7 +131,7 @@ class AgenciesControllerValidTest {
         final Double agencyFeeRate = 5.2;
 
         // 레코드 요청 객체 생성
-        final AgencyCreateRequest agencyCreateRequest = new AgencyCreateRequest(name, email, password, phoneNumber, regionId, addressDetail ,agencyName, businessNumber, agencyAddress, agencyFeeRate, false);
+        final AgencyCreateRequest agencyCreateRequest = new AgencyCreateRequest(name, email, password, phoneNumber, regionsName, addressDetail ,agencyName, businessNumber, agencyAddress, agencyFeeRate, false);
 
         // 객체를 JSON 문자열로 변환
         final String requestJson = objectMapper.writeValueAsString(agencyCreateRequest);
@@ -159,7 +162,7 @@ class AgenciesControllerValidTest {
         final String email = "ghwns6659@gmail.com";
         final String password = "123456";
         final String phoneNumber = "010-1234-5678";
-        final Long regionId = 1L; // 사용자 거주지역 기본키 값
+        final String regionsName = "서울 특별시 강남구"; // 사용자 거주지역 기본키 값
         final String addressDetail = "서울 특별시 강남구"; // 사용자 상세 거주지역
         final String agencyName = ""; // 상호명 비어있을 때 테스트
         final String businessNumber = "123-45-67890"; // 사업자 등록번호는 보통 10자리 숫자로 구성
@@ -167,7 +170,7 @@ class AgenciesControllerValidTest {
         final Double agencyFeeRate = 5.2;
 
         // 레코드 요청 객체 생성
-        final AgencyCreateRequest agencyCreateRequest = new AgencyCreateRequest(name, email, password, phoneNumber, regionId, addressDetail ,agencyName, businessNumber, agencyAddress, agencyFeeRate, false);
+        final AgencyCreateRequest agencyCreateRequest = new AgencyCreateRequest(name, email, password, phoneNumber, regionsName, addressDetail ,agencyName, businessNumber, agencyAddress, agencyFeeRate, false);
 
         // 객체를 JSON 문자열로 변환
         final String requestJson = objectMapper.writeValueAsString(agencyCreateRequest);
@@ -198,7 +201,7 @@ class AgenciesControllerValidTest {
         final String email = "ghwns6659@gmail.com";
         final String password = "123456";
         final String phoneNumber = "010-1234-5678";
-        final Long regionId = 1L; // 사용자 거주지역 기본키 값
+        final String regionsName = "서울 특별시 강남구"; // 사용자 거주지역 기본키 값
         final String addressDetail = "서울 특별시 강남구"; // 사용자 상세 거주지역
         final String agencyName = ""; // 상호명 비어있을 때 테스트
         final String businessNumber = "123-45-67890"; // 사업자 등록번호는 보통 10자리 숫자로 구성
@@ -206,7 +209,7 @@ class AgenciesControllerValidTest {
         final Double agencyFeeRate = 5.2;
 
         // 레코드 요청 객체 생성
-        final AgencyCreateRequest agencyCreateRequest = new AgencyCreateRequest(name, email, password, phoneNumber, regionId, addressDetail ,agencyName, businessNumber, agencyAddress, agencyFeeRate, false);
+        final AgencyCreateRequest agencyCreateRequest = new AgencyCreateRequest(name, email, password, phoneNumber, regionsName, addressDetail ,agencyName, businessNumber, agencyAddress, agencyFeeRate, false);
 
         // 객체를 JSON 문자열로 변환
         final String requestJson = objectMapper.writeValueAsString(agencyCreateRequest);
@@ -237,7 +240,7 @@ class AgenciesControllerValidTest {
         final String email = "ghwns6659@gmail.com";
         final String password = "123456";
         final String phoneNumber = "010-1234-5678";
-        final Long regionId = 1L; // 사용자 거주지역 기본키 값
+        final String regionsName = "서울 특별시 강남구"; // 사용자 거주지역 기본키 값
         final String addressDetail = "서울 특별시 강남구"; // 사용자 상세 거주지역
         final String agencyName = ""; // 상호명 비어있을 때 테스트
         final String businessNumber = "123-45-67890"; // 사업자 등록번호는 보통 10자리 숫자로 구성
@@ -245,7 +248,7 @@ class AgenciesControllerValidTest {
         final Double agencyFeeRate = 5.2;
 
         // 레코드 요청 객체 생성
-        final AgencyCreateRequest agencyCreateRequest = new AgencyCreateRequest(name, email, password, phoneNumber, regionId, addressDetail ,agencyName, businessNumber, agencyAddress, agencyFeeRate, false);
+        final AgencyCreateRequest agencyCreateRequest = new AgencyCreateRequest(name, email, password, phoneNumber, regionsName, addressDetail ,agencyName, businessNumber, agencyAddress, agencyFeeRate, false);
 
         // 객체를 JSON 문자열로 변환
         final String requestJson = objectMapper.writeValueAsString(agencyCreateRequest);
@@ -276,7 +279,7 @@ class AgenciesControllerValidTest {
         final String email = "ghwns6659@gmail.com";
         final String password = "123456";
         final String phoneNumber = "010-1234-5678";
-        final Long regionId = 1L; // 사용자 거주지역 기본키 값
+        final String regionsName = "서울 특별시 강남구"; // 사용자 거주지역 기본키 값
         final String addressDetail = "서울 특별시 강남구"; // 사용자 상세 거주지역
         final String agencyName = ""; // 상호명 비어있을 때 테스트
         final String businessNumber = "123-45-67890"; // 사업자 등록번호는 보통 10자리 숫자로 구성
@@ -284,7 +287,7 @@ class AgenciesControllerValidTest {
         final Double agencyFeeRate = 5.2;
 
         // 레코드 요청 객체 생성
-        final AgencyCreateRequest agencyCreateRequest = new AgencyCreateRequest(name, email, password, phoneNumber, regionId, addressDetail ,agencyName, businessNumber, agencyAddress, agencyFeeRate, false);
+        final AgencyCreateRequest agencyCreateRequest = new AgencyCreateRequest(name, email, password, phoneNumber, regionsName, addressDetail ,agencyName, businessNumber, agencyAddress, agencyFeeRate, false);
 
         // 객체를 JSON 문자열로 변환
         final String requestJson = objectMapper.writeValueAsString(agencyCreateRequest);
@@ -315,7 +318,7 @@ class AgenciesControllerValidTest {
         final String email = "ghwns6659@gmail.com";
         final String password = "123456";
         final String phoneNumber = "010-1234-5678";
-        final Long regionId = 1L; // 사용자 거주지역 기본키 값
+        final String regionsName = "서울 특별시 강남구"; // 사용자 거주지역 기본키 값
         final String addressDetail = "서울 특별시 강남구"; // 사용자 상세 거주지역
         final String agencyName = ""; // 상호명 비어있을 때 테스트
         final String businessNumber = "123-45-67890"; // 사업자 등록번호는 보통 10자리 숫자로 구성
@@ -323,7 +326,7 @@ class AgenciesControllerValidTest {
         final Double agencyFeeRate = 5.2;
 
         // 레코드 요청 객체 생성
-        final AgencyCreateRequest agencyCreateRequest = new AgencyCreateRequest(name, email, password, phoneNumber, regionId, addressDetail ,agencyName, businessNumber, agencyAddress, agencyFeeRate, false);
+        final AgencyCreateRequest agencyCreateRequest = new AgencyCreateRequest(name, email, password, phoneNumber, regionsName, addressDetail ,agencyName, businessNumber, agencyAddress, agencyFeeRate, false);
 
         // 객체를 JSON 문자열로 변환
         final String requestJson = objectMapper.writeValueAsString(agencyCreateRequest);

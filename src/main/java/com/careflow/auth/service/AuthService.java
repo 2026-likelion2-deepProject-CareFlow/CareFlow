@@ -8,8 +8,11 @@ import com.careflow.auth.dto.TokenResponse;
 import com.careflow.auth.security.JwtProvider;
 import com.careflow.common.enums.AgencyStatus;
 import com.careflow.common.enums.Role;
+import com.careflow.region.entity.Regions;
+import com.careflow.region.repository.RegionRepository;
 import com.careflow.user.entity.User;
 import com.careflow.user.repository.UserRepository;
+import com.careflow.user.service.UserService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -31,6 +34,7 @@ public class AuthService {
     private final StringRedisTemplate redisTemplate;
 
     private final AgenciesRepository agenciesRepository;
+    private final RegionRepository regionRepository;
 
     @Transactional
     public void signUp(SignUpRequest request) {
@@ -38,13 +42,14 @@ public class AuthService {
             throw new IllegalArgumentException("이미 가입된 이메일입니다.");
         }
 
+        Regions regions = regionRepository.findByName(request.getRegionName()).orElseThrow(() -> new NoSuchElementException("입력받은 지역 정보가 존재하지 않습니다."));
         User user = User.builder()
                 .email(request.getEmail())
                 .passwordHash(passwordEncoder.encode(request.getPassword()))
                 .name(request.getName())
                 .phone(request.getPhone())
                 .role(Role.CUSTOMER)
-                .regionId(request.getRegionId())
+                .regionId(regions)
                 .addressDetail(request.getAddressDetail())
                 .build();
 
