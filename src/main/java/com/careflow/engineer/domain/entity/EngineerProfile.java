@@ -40,8 +40,8 @@ public class EngineerProfile {
     @JoinColumn(name = "category_id", nullable = true)
     private ApplianceCategory category;
 
-    @Column(name = "career_started_year", nullable = false, columnDefinition = "YEAR")
-    private int careerStartedYear;
+    @Column(name = "career_started_year", columnDefinition = "YEAR")
+    private Integer careerStartedYear;
 
     @Enumerated(EnumType.STRING)
     @Column(name = "skill_level", nullable = false, length = 20)
@@ -81,5 +81,16 @@ public class EngineerProfile {
         this.profileImageUrl = profileImageUrl;
         this.avgRating = BigDecimal.ZERO;
         this.totalReviews = 0;
+    }
+
+    public void completeProfile(ApplianceCategory category, Integer careerStartedYear, SkillLevel skillLevel, String introduction) {    // 프로필 완성(업데이트)
+        if(category == null || careerStartedYear == null || skillLevel == null){
+            throw new IllegalArgumentException("카테고리와 경력 시작 연도는 필수 입력값입니다.");
+        }
+
+        this.category = category;
+        this.careerStartedYear = careerStartedYear;
+        this.skillLevel = skillLevel;
+        this.introduction = introduction;
     }
 }

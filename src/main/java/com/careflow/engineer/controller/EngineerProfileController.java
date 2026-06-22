@@ -18,7 +18,7 @@ public class EngineerProfileController {
 
     @PostMapping
     public ResponseEntity<ProfileResponse> createProfile(@AuthenticationPrincipal Long userId, @RequestBody @Valid CreateProfileRequest request){   // 기사 프로필 생성
-        ProfileResponse response = profileService.createProfile(userId, request);
+        ProfileResponse response = profileService.updateProfile(userId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
