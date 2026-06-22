@@ -21,8 +21,18 @@ spring:
     redis:
       host: localhost
       port: 6379
+      password: ${REDIS_PASSWORD}
 
 jwt:
   secret: careflow-secret-key-32charslongenough!!
   access-token-expiration: 1800000
   refresh-token-expiration: 604800000
+
+google:
+  client-id: ${GOOGLE_CLIENT_ID}
+  client-secret: ${GOOGLE_CLIENT_SECRET}
+  scope: email, profile
+
+app:
+  oauth2:
+    redirect-uri: http://localhost:5173/oauth2/redirect
