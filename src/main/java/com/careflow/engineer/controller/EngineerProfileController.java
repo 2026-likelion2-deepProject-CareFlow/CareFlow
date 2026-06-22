@@ -24,10 +24,4 @@ public class EngineerProfileController {
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
-    @PostMapping("/signup")
-    public ResponseEntity<Long> engineerSignUpRequest(@Valid @RequestBody EngineerAccountRequest request){
-        Long accountRequestId = profileService.requestEngineerAccount(request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(accountRequestId);
-    }
-
 }
