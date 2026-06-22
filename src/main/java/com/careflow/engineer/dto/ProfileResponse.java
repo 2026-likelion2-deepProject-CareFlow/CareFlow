@@ -12,7 +12,7 @@ import java.time.LocalDateTime;
 public class ProfileResponse {
     private Long profileId;
     private Long userId;
-    private Long categoryId;
+    private Integer categoryId;
     private Integer careerStartedYear;
     private String skillLevel;
     private Boolean isLmsCompleted;

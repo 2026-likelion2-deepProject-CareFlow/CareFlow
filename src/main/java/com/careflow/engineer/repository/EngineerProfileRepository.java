@@ -6,5 +6,5 @@ import org.springframework.stereotype.Repository;
 
 @Repository
 public interface EngineerProfileRepository extends JpaRepository<EngineerProfile, Long> {
-    boolean existsByUser_UserId(Long userId);   // 중복 가입 확인
+    boolean existsByUserId(Long userId);   // 중복 가입 확인
 }
