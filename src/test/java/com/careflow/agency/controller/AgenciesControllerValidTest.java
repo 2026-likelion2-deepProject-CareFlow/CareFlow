@@ -16,7 +16,6 @@ import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 
-import static org.springframework.test.web.servlet.result.MockMvcResultHandlers.print;
 import  static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 import static org.junit.jupiter.api.Assertions.*;
@@ -53,13 +52,13 @@ class AgenciesControllerValidTest {
         final Double agencyFeeRate = 5.2;
 
         // 레코드 요청 객체 생성
-        final AgencyCreateRequest agencyCreateRequest = new AgencyCreateRequest(name, email, password, phoneNumber, regionsName, addressDetail ,agencyName, businessNumber, agencyAddress, agencyFeeRate, false);
+        final AgencyCreateRequest agencyCreateRequest = new AgencyCreateRequest(name, email, password, phoneNumber, regionsName, addressDetail ,agencyName, businessNumber, agencyAddress, agencyFeeRate);
 
         // 객체를 JSON 문자열로 변환
         final String requestJson = objectMapper.writeValueAsString(agencyCreateRequest);
         // when
         final ResultActions resultActions = mockMvc.perform(
-                MockMvcRequestBuilders.post("/api/agency/signup")
+                MockMvcRequestBuilders.post("/api/agencies/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestJson)
         );
@@ -92,13 +91,13 @@ class AgenciesControllerValidTest {
         final Double agencyFeeRate = 5.2;
 
         // 레코드 요청 객체 생성
-        final AgencyCreateRequest agencyCreateRequest = new AgencyCreateRequest(name, email, password, phoneNumber, regionsName, addressDetail ,agencyName, businessNumber, agencyAddress, agencyFeeRate, false);
+        final AgencyCreateRequest agencyCreateRequest = new AgencyCreateRequest(name, email, password, phoneNumber, regionsName, addressDetail ,agencyName, businessNumber, agencyAddress, agencyFeeRate);
 
         // 객체를 JSON 문자열로 변환
         final String requestJson = objectMapper.writeValueAsString(agencyCreateRequest);
         // when
         final ResultActions resultActions = mockMvc.perform(
-                MockMvcRequestBuilders.post("/api/agency/signup")
+                MockMvcRequestBuilders.post("/api/agencies/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestJson)
         );
@@ -131,13 +130,13 @@ class AgenciesControllerValidTest {
         final Double agencyFeeRate = 5.2;
 
         // 레코드 요청 객체 생성
-        final AgencyCreateRequest agencyCreateRequest = new AgencyCreateRequest(name, email, password, phoneNumber, regionsName, addressDetail ,agencyName, businessNumber, agencyAddress, agencyFeeRate, false);
+        final AgencyCreateRequest agencyCreateRequest = new AgencyCreateRequest(name, email, password, phoneNumber, regionsName, addressDetail ,agencyName, businessNumber, agencyAddress, agencyFeeRate);
 
         // 객체를 JSON 문자열로 변환
         final String requestJson = objectMapper.writeValueAsString(agencyCreateRequest);
         // when
         final ResultActions resultActions = mockMvc.perform(
-                MockMvcRequestBuilders.post("/api/agency/signup")
+                MockMvcRequestBuilders.post("/api/agencies/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestJson)
         );
@@ -170,13 +169,13 @@ class AgenciesControllerValidTest {
         final Double agencyFeeRate = 5.2;
 
         // 레코드 요청 객체 생성
-        final AgencyCreateRequest agencyCreateRequest = new AgencyCreateRequest(name, email, password, phoneNumber, regionsName, addressDetail ,agencyName, businessNumber, agencyAddress, agencyFeeRate, false);
+        final AgencyCreateRequest agencyCreateRequest = new AgencyCreateRequest(name, email, password, phoneNumber, regionsName, addressDetail ,agencyName, businessNumber, agencyAddress, agencyFeeRate);
 
         // 객체를 JSON 문자열로 변환
         final String requestJson = objectMapper.writeValueAsString(agencyCreateRequest);
         // when
         final ResultActions resultActions = mockMvc.perform(
-                MockMvcRequestBuilders.post("/api/agency/signup")
+                MockMvcRequestBuilders.post("/api/agencies/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestJson)
         );
@@ -209,13 +208,13 @@ class AgenciesControllerValidTest {
         final Double agencyFeeRate = 5.2;
 
         // 레코드 요청 객체 생성
-        final AgencyCreateRequest agencyCreateRequest = new AgencyCreateRequest(name, email, password, phoneNumber, regionsName, addressDetail ,agencyName, businessNumber, agencyAddress, agencyFeeRate, false);
+        final AgencyCreateRequest agencyCreateRequest = new AgencyCreateRequest(name, email, password, phoneNumber, regionsName, addressDetail ,agencyName, businessNumber, agencyAddress, agencyFeeRate);
 
         // 객체를 JSON 문자열로 변환
         final String requestJson = objectMapper.writeValueAsString(agencyCreateRequest);
         // when
         final ResultActions resultActions = mockMvc.perform(
-                MockMvcRequestBuilders.post("/api/agency/signup")
+                MockMvcRequestBuilders.post("/api/agencies/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestJson)
         );
@@ -248,13 +247,13 @@ class AgenciesControllerValidTest {
         final Double agencyFeeRate = 5.2;
 
         // 레코드 요청 객체 생성
-        final AgencyCreateRequest agencyCreateRequest = new AgencyCreateRequest(name, email, password, phoneNumber, regionsName, addressDetail ,agencyName, businessNumber, agencyAddress, agencyFeeRate, false);
+        final AgencyCreateRequest agencyCreateRequest = new AgencyCreateRequest(name, email, password, phoneNumber, regionsName, addressDetail ,agencyName, businessNumber, agencyAddress, agencyFeeRate);
 
         // 객체를 JSON 문자열로 변환
         final String requestJson = objectMapper.writeValueAsString(agencyCreateRequest);
         // when
         final ResultActions resultActions = mockMvc.perform(
-                MockMvcRequestBuilders.post("/api/agency/signup")
+                MockMvcRequestBuilders.post("/api/agencies/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestJson)
         );
@@ -287,13 +286,13 @@ class AgenciesControllerValidTest {
         final Double agencyFeeRate = 5.2;
 
         // 레코드 요청 객체 생성
-        final AgencyCreateRequest agencyCreateRequest = new AgencyCreateRequest(name, email, password, phoneNumber, regionsName, addressDetail ,agencyName, businessNumber, agencyAddress, agencyFeeRate, false);
+        final AgencyCreateRequest agencyCreateRequest = new AgencyCreateRequest(name, email, password, phoneNumber, regionsName, addressDetail ,agencyName, businessNumber, agencyAddress, agencyFeeRate);
 
         // 객체를 JSON 문자열로 변환
         final String requestJson = objectMapper.writeValueAsString(agencyCreateRequest);
         // when
         final ResultActions resultActions = mockMvc.perform(
-                MockMvcRequestBuilders.post("/api/agency/signup")
+                MockMvcRequestBuilders.post("/api/agencies/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestJson)
         );
@@ -326,13 +325,13 @@ class AgenciesControllerValidTest {
         final Double agencyFeeRate = 5.2;
 
         // 레코드 요청 객체 생성
-        final AgencyCreateRequest agencyCreateRequest = new AgencyCreateRequest(name, email, password, phoneNumber, regionsName, addressDetail ,agencyName, businessNumber, agencyAddress, agencyFeeRate, false);
+        final AgencyCreateRequest agencyCreateRequest = new AgencyCreateRequest(name, email, password, phoneNumber, regionsName, addressDetail ,agencyName, businessNumber, agencyAddress, agencyFeeRate);
 
         // 객체를 JSON 문자열로 변환
         final String requestJson = objectMapper.writeValueAsString(agencyCreateRequest);
         // when
         final ResultActions resultActions = mockMvc.perform(
-                MockMvcRequestBuilders.post("/api/agency/signup")
+                MockMvcRequestBuilders.post("/api/agencies/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(requestJson)
         );

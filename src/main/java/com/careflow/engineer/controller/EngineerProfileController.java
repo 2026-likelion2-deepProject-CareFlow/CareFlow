@@ -1,6 +1,8 @@
 package com.careflow.engineer.controller;
 
+import com.careflow.account_requests.service.AccountRequestsService;
 import com.careflow.engineer.dto.CreateProfileRequest;
+import com.careflow.engineer.dto.EngineerAccountRequest;
 import com.careflow.engineer.dto.ProfileResponse;
 import com.careflow.engineer.service.EngineerProfileService;
 import jakarta.validation.Valid;
@@ -20,6 +22,12 @@ public class EngineerProfileController {
     public ResponseEntity<ProfileResponse> createProfile(@AuthenticationPrincipal Long userId, @RequestBody @Valid CreateProfileRequest request){   // 기사 프로필 생성
         ProfileResponse response = profileService.updateProfile(userId, request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    @PostMapping("/signup")
+    public ResponseEntity<Long> engineerSignUpRequest(@Valid @RequestBody EngineerAccountRequest request){
+        Long accountRequestId = profileService.requestEngineerAccount(request);
+        return ResponseEntity.status(HttpStatus.CREATED).body(accountRequestId);
     }
 
 }

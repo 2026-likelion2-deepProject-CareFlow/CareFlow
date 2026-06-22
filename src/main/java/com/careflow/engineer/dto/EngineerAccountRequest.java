@@ -1,9 +1,10 @@
-package com.careflow.agency.dto.request;
+package com.careflow.engineer.dto;
 
-import jakarta.validation.constraints.*;
+import jakarta.validation.constraints.Email;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.Pattern;
 
-public record AgencyCreateRequest(
-
+public record EngineerAccountRequest(
         @NotBlank
         String name, // 가입자 이름
         @NotBlank
@@ -17,13 +18,6 @@ public record AgencyCreateRequest(
         @NotBlank
         String addressDetail, // 가입자 거주지
         @NotBlank
-        String businessNumber,
-        @NotBlank
-        String agencyName,
-        @Size(max = 255)
-        String agencyAddress, // 대행사 소재지
-        @NotNull
-        @Digits(integer = 5, fraction = 2)
-        Double agencyFeeRate
+        String businessNumber
 ) {
 }

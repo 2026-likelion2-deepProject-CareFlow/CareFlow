@@ -24,8 +24,8 @@ public class AccountRequestsController {
     private final UserService userService;
     private final AccountRequestsService accountRequestsService;
 
-    // 요청 목록 조회
-    @GetMapping("/list")
+    // 대행사 계정 생성 요청 목록 조회
+    @GetMapping("/agencylist")
     public ResponseEntity<List<AccountRequests>> requestlist(
             @AuthenticationPrincipal CustomUserDetails userDetails
             ) {
@@ -53,9 +53,25 @@ public class AccountRequestsController {
         }
     }
 
-    // 요청 승인
-    @PostMapping("/approve")
-    public ResponseEntity<Void> approveAccountRequest(@AuthenticationPrincipal CustomUserDetails userDetails, Long accountId) throws IllegalAccessException {
+    //
+    @GetMapping("/engineerlist")
+    public ResponseEntity<List<AccountRequests>> engineerlist(
+            @AuthenticationPrincipal CustomUserDetails userDetails
+    ) {
+        // 슈퍼 계정으로 로그인 했을 경우
+        if(userDetails.getRole().equals("AGENCY")){
+            Agencies agencies = agenciesService.findRepresentativeIdById(userDetails.getUserId());
+            List<AccountRequests> engineerAccountRequest = accountRequestsService.findRequestByRoleAndStatus(agencies.getId());
+            return ResponseEntity.ok(engineerAccountRequest);
+        } else {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
+        }
+
+    }
+
+    // 대행사 슈퍼 계정, 또는 일반 관리자 계정 요청 승인
+    @PostMapping("/agency/approval")
+    public ResponseEntity<Void> approveAccountRequest(@AuthenticationPrincipal CustomUserDetails userDetails, @RequestParam Long accountId) throws IllegalAccessException {
 
         // CareFlow 관리자, 또는 대행사 슈퍼 계정의 요청인 경우
         if (userDetails.getRole().equals("ADMIN") || userDetails.getRole().equals("AGENCY")){
@@ -69,13 +85,42 @@ public class AccountRequestsController {
         return ResponseEntity.noContent().build();
     }
 
-    // 요청 거절
-    @PostMapping("/reject")
-    public ResponseEntity<Void> rejectAccountRequest(@AuthenticationPrincipal CustomUserDetails userDetails, Long accountId, @RequestBody AccountRequestReject accountRequestReject)
+    // 대행사 슈퍼 계정, 또는 일반 관리자 요청 거절
+    @PostMapping("/agency/rejection")
+    public ResponseEntity<Void> rejectAccountRequest(@AuthenticationPrincipal CustomUserDetails userDetails, @RequestParam Long accountId,
+                                                     @RequestBody AccountRequestReject accountRequestReject)
             throws IllegalAccessException {
 
         if (userDetails.getRole().equals("ADMIN") || userDetails.getRole().equals("AGENCY")){
             accountRequestsService.rejectAgencyAccount(userDetails, accountId, accountRequestReject);
+        } else {
+            throw new IllegalAccessException("기능에 대한 접근 권한이 없습니다.");
+        }
+        return ResponseEntity.noContent().build();
+    }
+
+    // 수리기사 계정 생성요청 승인
+    @PostMapping("/engineer/approval")
+    public ResponseEntity<Void> approveEngineerAccount(@AuthenticationPrincipal CustomUserDetails userDetails, @RequestParam Long accountId) throws IllegalAccessException {
+
+        // 슈퍼 계정만 접근
+        if (userDetails.getRole().equals("AGENCY")){
+            // 수리기사 계정 생성 및 프로필 생성
+            accountRequestsService.approveEngineerAccount(userDetails, accountId);
+        }
+        else {
+            throw new IllegalAccessException("기능에 대한 접근 권한이 없습니다.");
+        }
+        return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/engineer/rejection")
+    public ResponseEntity<Void> rejectEngineerAccount(@AuthenticationPrincipal CustomUserDetails userDetails, @RequestParam Long accountId,
+                                                     @RequestBody AccountRequestReject accountRequestReject)
+            throws IllegalAccessException {
+        if (userDetails.getRole().equals("AGENCY")){
+            // 슈퍼 계정만 접근
+            accountRequestsService.rejectEngineerAccount(userDetails, accountId, accountRequestReject);
         } else {
             throw new IllegalAccessException("기능에 대한 접근 권한이 없습니다.");
         }

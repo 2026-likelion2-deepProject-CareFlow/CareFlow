@@ -11,6 +11,7 @@ import com.careflow.common.enums.Role;
 import com.careflow.user.entity.User;
 import com.careflow.user.service.UserService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -24,6 +25,7 @@ public class AccountRequestsService {
 
     private final AccountRequestsRepository accountRequestsRepository;
     private final UserService userService;
+    private final PasswordEncoder passwordEncoder;
 
     @Transactional(readOnly = true)
     public List<AccountRequests> findRequestByPendingAgencies() {
@@ -40,6 +42,11 @@ public class AccountRequestsService {
         return accountRequestsRepository.findById(accountId).orElse(null);
     }
 
+    @Transactional(readOnly = true)
+    public List<AccountRequests> findRequestByRoleAndStatus(Long agencyId) {
+        return accountRequestsRepository.findRequestByRequestsRoleAndStatus_Pending(agencyId);
+    }
+
     @Transactional
     public void approveAgencyAccount(CustomUserDetails userDetails, Long accountId) {
         AccountRequests accountRequests = accountRequestsRepository.findById(accountId).orElse(null);
@@ -49,7 +56,7 @@ public class AccountRequestsService {
             // 요청 상태 확인
             if (accountRequests.getStatus() == AccountRequestsStatus.PENDING){
                 // 대행사 슈퍼 계정 회원정보 저장 (트랜잭션 커밋 정상 작동확인)
-                approveAndCreateUser(userDetails, accountRequests, accountId);
+                approveAndCreateUser(userDetails, accountRequests, accountId, Role.AGENCY);
             } else{
                 throw new IllegalArgumentException("이미 승인되었거나 거부된 요청입니다.");
             }
@@ -73,10 +80,13 @@ public class AccountRequestsService {
                         .rejectReason(accountRequestReject.rejectReson())
                         .build();
 
-                accountRequests.getAgencyId().builder()
-                        .approvalStatus(AgencyStatus.REJECTED)
-                        .updatedAt(LocalDateTime.now())
-                        .build();
+                // 슈퍼 계정 요청이었을 경우 대행사 승인 상태까지 REJECTED
+                if (accountRequests.getAgency().getApprovalStatus() == AgencyStatus.PENDING){
+                    accountRequests.getAgency().builder()
+                            .approvalStatus(AgencyStatus.REJECTED)
+                            .updatedAt(LocalDateTime.now())
+                            .build();
+                }
             } else if (accountRequests.getStatus() == AccountRequestsStatus.APPROVED){
                 throw new IllegalAccessException("이미 등록 승인된 대행사 입니다.");
             } else {
@@ -85,15 +95,56 @@ public class AccountRequestsService {
         }
     }
 
-    private void approveAndCreateUser(CustomUserDetails userDetails, AccountRequests accountRequests, Long accountId){
+    @Transactional
+    public void approveEngineerAccount(CustomUserDetails userDetails, Long accountId) {
+        AccountRequests accountRequests = accountRequestsRepository.findById(accountId).orElseThrow(null);
+        if (accountRequests == null) {
+            throw new NoSuchElementException("요청 정보를 찾을 수 없습니다.");
+        } else {
+            // 요청 상태 확인
+            if (accountRequests.getStatus() == AccountRequestsStatus.PENDING){
+                // 대행사 슈퍼 계정 회원정보 저장 (트랜잭션 커밋 정상 작동확인)
+                approveAndCreateUser(userDetails, accountRequests, accountId, Role.ENGINEER);
+            } else{
+                throw new IllegalArgumentException("이미 승인되었거나 거부된 요청입니다.");
+            }
+        }
+    }
 
-        User user = User.builder().agencyId(accountRequests.getAgencyId().getId())
+    @Transactional
+    public void rejectEngineerAccount(CustomUserDetails userDetails, Long accountId, AccountRequestReject accountRequestReject) throws IllegalAccessException {
+        AccountRequests accountRequests = accountRequestsRepository.findById(accountId).orElse(null);
+        if (accountRequests == null) {
+            throw new NoSuchElementException("요청 정보를 찾을 수 없습니다.");
+        } else {
+            // 요청 상태 확인
+            if (accountRequests.getStatus() == AccountRequestsStatus.PENDING){
+                // 정상 거부처리 (더티 체킹)
+                accountRequests.builder()
+                        .status(AccountRequestsStatus.REJECTED)
+                        .reviewedBy(userService.findById(userDetails.getUserId()))
+                        .reviewedAt(LocalDateTime.now())
+                        .updatedAt(LocalDateTime.now())
+                        .rejectReason(accountRequestReject.rejectReson())
+                        .build();
+            } else if (accountRequests.getStatus() == AccountRequestsStatus.APPROVED){
+                throw new IllegalAccessException("이미 등록 승인된 수리기사 계정입니다.");
+            } else {
+                throw new IllegalAccessException("이미 등록 거부된 수리기사 계정입니다.");
+            }
+        }
+    }
+
+    private void approveAndCreateUser(CustomUserDetails userDetails, AccountRequests accountRequests, Long accountId, Role role){
+
+        User user = User.builder().agency(accountRequests.getAgency())
                 .name(accountRequests.getName())
                 .email(accountRequests.getEmail())
-                .passwordHash(accountRequests.getPassword())
+                .passwordHash(passwordEncoder.encode(accountRequests.getPassword()))
                 .phone(accountRequests.getPhone())
-                .role(Role.AGENCY)
+                .role(role)
                 .addressDetail(accountRequests.getAddressDetail())
+                .regionId(accountRequests.getRegion())
                 .build();
 
         // 회원 정보 저장
@@ -113,8 +164,9 @@ public class AccountRequestsService {
         /*
             대행사 정보가 승인 대기중인 상태(PENDING) 이면 슈퍼 계정 생성 요청
             대행사 정보가 승인 되어있는 상태라면(APPROVED) 일반 관리자 계정 요청(대행사 정보 갱신과정 생략)
+            수리 기사는 애초에 PENDING 상태인 대행사에 대해 계정 생성요청 불가
          */
-        Agencies agencies = accountRequests.getAgencyId();
+        Agencies agencies = accountRequests.getAgency();
         if (agencies.getApprovalStatus().equals(AgencyStatus.PENDING)){
             // 대행사 정보 업데이트 (더티 체킹)
             agencies.builder()
