@@ -15,7 +15,13 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "engineer_profiles")
+@Table(
+        name = "engineer_profiles",
+        indexes = {
+                @Index(name = "idx_profile_skill", columnList = "skill_level, is_lms_completed"),
+                @Index(name = "idx_profile_rating", columnList = "avg_rating")
+        }
+)
 @EntityListeners(AuditingEntityListener.class)
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
@@ -31,7 +37,7 @@ public class EngineerProfile {
     private User user;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "category_id", nullable = false)
+    @JoinColumn(name = "category_id", nullable = true)
     private ApplianceCategory category;
 
     @Column(name = "career_started_year", nullable = false, columnDefinition = "YEAR")

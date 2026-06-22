@@ -33,7 +33,7 @@ public class EngineerProfileService {
             throw new IllegalArgumentException("수리기사 권한 가진 계정만 프로필을 생성할 수 있습니다.");
         }
 
-        if(profileRepository.existsByUserId(userId)) { // 중복 가입 방지
+        if(profileRepository.existsByUser_UserId(userId)) { // 중복 가입 방지
             throw new IllegalArgumentException("유저 프로필 정보가 이미 존재합니다.");
         }
 
