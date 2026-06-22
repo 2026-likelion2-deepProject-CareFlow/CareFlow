@@ -17,4 +17,7 @@ public interface AgenciesRepository extends JpaRepository<Agencies, Long> {
 
     @Query("SELECT a FROM Agencies a WHERE a.representativeId = :userId")
     Optional<Agencies> findByRepresentativeById(Long userId);
+
+    @Fetch(FetchMode.JOIN)
+    Optional<Agencies> findByAgencyName(String agencyName);
 }

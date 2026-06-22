@@ -1,20 +1,32 @@
 package com.careflow.engineer.service;
 
+import com.careflow.account_requests.entity.AccountRequests;
+import com.careflow.account_requests.repository.AccountRequestsRepository;
+import com.careflow.agency.entity.Agencies;
+import com.careflow.agency.repository.AgenciesRepository;
+import com.careflow.common.enums.AccountRequestsRole;
+import com.careflow.common.enums.AgencyStatus;
 import com.careflow.common.enums.Role;
 import com.careflow.engineer.domain.entity.ApplianceCategory;
 import com.careflow.engineer.domain.entity.EngineerProfile;
 import com.careflow.engineer.domain.enums.SkillLevel;
 import com.careflow.engineer.dto.CreateProfileRequest;
+import com.careflow.engineer.dto.EngineerAccountRequest;
 import com.careflow.engineer.dto.ProfileResponse;
 import com.careflow.engineer.repository.ApplianceCategoryRepository;
 import com.careflow.engineer.repository.EngineerProfileRepository;
+import com.careflow.region.entity.Regions;
+import com.careflow.region.repository.RegionRepository;
 import com.careflow.user.entity.User;
 import com.careflow.user.repository.UserRepository;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.NoSuchElementException;
 
 @Service
 @RequiredArgsConstructor
@@ -23,6 +35,10 @@ public class EngineerProfileService {
     private final EngineerProfileRepository profileRepository;
     private final UserRepository userRepository;
     private final ApplianceCategoryRepository categoryRepository;
+    private final AgenciesRepository agenciesRepository;
+    private final RegionRepository regionRepository;
+    private final AccountRequestsRepository accountRequestsRepository;
+    private final PasswordEncoder passwordEncoder;
 
     @Transactional
     public ProfileResponse updateProfile(Long userId, CreateProfileRequest request){    // 프로필 작성
@@ -63,7 +79,6 @@ public class EngineerProfileService {
         if(careerStartedYear == null) {
             throw new IllegalArgumentException("경력 시작 연도가 필요합니다.");
         }
-
         int workYear = LocalDate.now().getYear() - careerStartedYear + 1;
 
         if (workYear <= 5) {

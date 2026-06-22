@@ -29,8 +29,8 @@ public class AgenciesService {
     private final PasswordEncoder passwordEncoder;
 
     @Transactional(readOnly = true)
-    public Agencies findByBusinessNumber(String businessNumber) {
-        return agenciesRepository.findByBusinessNumber(businessNumber)
+    public Agencies findByAgencyName(String agencyame) {
+        return agenciesRepository.findByAgencyName(agencyame)
                 .orElseThrow(() -> new NoSuchElementException("해당 대행사 정보를 찾을 수 없습니다.")); // 비즈니스 관점 에러처리
     }
 
@@ -57,7 +57,7 @@ public class AgenciesService {
                         agencyCreateRequest.name(),
                         agencyCreateRequest.phoneNumber(),
                         AccountRequestsRole.AGENCY,
-                        agencyCreateRequest.agencyAddress(),
+                        agencyCreateRequest.addressDetail(),
                         regions);
                  accountRequestId = accountRequestsRepository.save(accountRequests).getId();
 
