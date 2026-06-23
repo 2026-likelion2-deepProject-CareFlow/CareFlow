@@ -3,8 +3,12 @@ package com.careflow.agency.controller;
 import com.careflow.agency.dto.request.AgencyCreateRequest;
 import com.careflow.agency.entity.Agencies;
 import com.careflow.agency.service.AgenciesService;
+import com.careflow.auth.security.CustomOAuth2UserService;
 import com.careflow.auth.security.JwtProvider;
+import com.careflow.auth.security.OAuth2LoginSuccessHandler;
+import com.careflow.common.config.PasswordEncoderConfig;
 import com.careflow.common.config.SecurityConfig;
+import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -29,7 +33,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(AgenciesController.class)
-@Import(SecurityConfig.class)
+@Import({SecurityConfig.class, PasswordEncoderConfig.class})
 @DisplayName("AgenciesController 테스트")
 class AgenciesControllerTest {
 
@@ -45,6 +49,13 @@ class AgenciesControllerTest {
     private JwtProvider jwtProvider;
     @MockitoBean
     private JpaMetamodelMappingContext jpaMetamodelMappingContext;
+    // develop 병합으로 추가된 OAuth2 의존성 — SecurityConfig 생성 및 oauth2Login() 설정에 필요
+    @MockitoBean
+    private CustomOAuth2UserService customOAuth2UserService;
+    @MockitoBean
+    private OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;
+    @MockitoBean
+    private ClientRegistrationRepository clientRegistrationRepository;
 
     // 유효한 요청 픽스처 — 각 테스트에서 필드만 교체해서 사용
     private AgencyCreateRequest validRequest;

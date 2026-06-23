@@ -31,6 +31,21 @@ spring:
       host: localhost
       port: 6379
 
+  security:
+    oauth2:
+      client:
+        registration:
+          google:
+            # 로컬 개발 환경: 실제 OAuth2 인증이 필요하면 Google Cloud Console에서 발급한 값으로 교체
+            client-id: ${GOOGLE_CLIENT_ID:local-dummy-client-id}
+            client-secret: ${GOOGLE_CLIENT_SECRET:local-dummy-client-secret}
+            scope: email, profile
+
+app:
+  oauth2:
+    # 로컬 개발 환경용 OAuth2 로그인 성공 후 리다이렉트 URI
+    redirect-uri: http://localhost:3000/oauth2/callback
+
 jwt:
   secret: careflow-secret-key-32charslongenough!!
   access-token-expiration: 1800000

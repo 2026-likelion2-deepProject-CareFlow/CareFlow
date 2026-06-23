@@ -33,8 +33,7 @@ import java.util.List;
 public class EngineerSchedule { // 기사 근무표
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    // DDL(CareFlow_v4.sql) 기준 BIGINT UNSIGNED — H2 MySQL mode 및 MySQL 8 모두 호환
-    @Column(name = "schedule_id", columnDefinition = "BIGINT UNSIGNED NOT NULL AUTO_INCREMENT")
+    @Column(name = "schedule_id")
     private Long scheduleId;
 
     @ManyToOne(fetch = FetchType.LAZY)

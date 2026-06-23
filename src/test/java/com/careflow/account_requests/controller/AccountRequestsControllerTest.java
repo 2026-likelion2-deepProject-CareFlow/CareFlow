@@ -3,9 +3,13 @@ package com.careflow.account_requests.controller;
 import com.careflow.account_requests.dto.AccountRequestReject;
 import com.careflow.account_requests.service.AccountRequestsService;
 import com.careflow.agency.service.AgenciesService;
+import com.careflow.auth.security.CustomOAuth2UserService;
 import com.careflow.auth.security.CustomUserDetails;
 import com.careflow.auth.security.JwtProvider;
+import com.careflow.auth.security.OAuth2LoginSuccessHandler;
+import com.careflow.common.config.PasswordEncoderConfig;
 import com.careflow.common.config.SecurityConfig;
+import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import com.careflow.user.service.UserService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
@@ -35,7 +39,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 @WebMvcTest(AccountRequestsController.class)
-@Import(SecurityConfig.class)
+@Import({SecurityConfig.class, PasswordEncoderConfig.class})
 @DisplayName("AccountRequestsController 테스트")
 class AccountRequestsControllerTest {
 
@@ -55,6 +59,13 @@ class AccountRequestsControllerTest {
     private JwtProvider jwtProvider;
     @MockitoBean
     private JpaMetamodelMappingContext jpaMetamodelMappingContext;
+    // develop 병합으로 추가된 OAuth2 의존성 — SecurityConfig 생성 및 oauth2Login() 설정에 필요
+    @MockitoBean
+    private CustomOAuth2UserService customOAuth2UserService;
+    @MockitoBean
+    private OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;
+    @MockitoBean
+    private ClientRegistrationRepository clientRegistrationRepository;
 
     // 역할별 인증 Principal 헬퍼
     private RequestPostProcessor adminAuth;
@@ -171,11 +182,11 @@ class AccountRequestsControllerTest {
         }
 
         @Test
-        @DisplayName("실패: 인증 없이 요청 — 403 Forbidden 반환 (Stateless 세션에서 Spring Security 기본 동작)")
+        @DisplayName("실패: 인증 없이 요청 — 401 Unauthorized 반환")
         void approve_noAuth_403() throws Exception {
             mockMvc.perform(post("/api/account-requests/agency/approval")
                             .param("accountId", "1"))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
     }
 
@@ -280,13 +291,13 @@ class AccountRequestsControllerTest {
         }
 
         @Test
-        @DisplayName("실패: 인증 없이 요청 — 403 Forbidden 반환 (Stateless 세션에서 Spring Security 기본 동작)")
+        @DisplayName("실패: 인증 없이 요청 — 401 Unauthorized 반환")
         void reject_noAuth_403() throws Exception {
             mockMvc.perform(post("/api/account-requests/agency/rejection")
                             .param("accountId", "1")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(validRejectJson))
-                    .andExpect(status().isForbidden());
+                    .andExpect(status().isUnauthorized());
         }
 
         @Test
