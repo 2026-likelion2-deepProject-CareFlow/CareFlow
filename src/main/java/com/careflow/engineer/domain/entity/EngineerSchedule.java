@@ -13,6 +13,8 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.ArrayList;
+import java.util.List;
 
 @Entity
 @Table(
@@ -24,7 +26,8 @@ import java.time.LocalDateTime;
                 @Index(name = "idx_schedule_date_status", columnList = "work_date, status"),
                 @Index(name = "idx_schedule_user_date", columnList = "user_id, work_date, status")
         }
-)@Getter
+)
+@Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @EntityListeners(AuditingEntityListener.class)
 public class EngineerSchedule { // 기사 근무표
@@ -40,8 +43,9 @@ public class EngineerSchedule { // 기사 근무표
     @Column(name = "work_date", nullable = false)
     private LocalDate workDate;
 
-    @Column(name = "time_slots", nullable = false, columnDefinition = "JSON")
-    private String timeSlots;
+    @OneToMany(mappedBy = "schedule", cascade = CascadeType.ALL, orphanRemoval = true)
+    @OrderBy("startTime ASC")
+    private List<EngineerScheduleSlot> timeSlots = new ArrayList<>();
 
     @Column(name = "status", nullable = false, length = 20)
     @Enumerated(EnumType.STRING)
@@ -56,10 +60,9 @@ public class EngineerSchedule { // 기사 근무표
     private LocalDateTime updatedAt;
 
     @Builder
-    public EngineerSchedule(User user, LocalDate workDate, String timeSlots, ScheduleStatus status) {
+    public EngineerSchedule(User user, LocalDate workDate, ScheduleStatus status) {
         this.user = user;
         this.workDate = workDate;
-        this.timeSlots = timeSlots;
         this.status = status != null ? status : ScheduleStatus.AVAILABLE;
     }
 
@@ -69,5 +72,10 @@ public class EngineerSchedule { // 기사 근무표
         }
 
         this.status = newStatus;
+    }
+
+    public void addTimeSlot(EngineerScheduleSlot slot){
+        this.timeSlots.add(slot);
+        slot.assignSchedule(this);
     }
 }
