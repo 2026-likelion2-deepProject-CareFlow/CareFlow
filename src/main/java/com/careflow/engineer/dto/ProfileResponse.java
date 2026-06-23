@@ -6,6 +6,7 @@ import lombok.Getter;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
+import java.util.List;
 
 @Getter
 @Builder
@@ -21,14 +22,19 @@ public class ProfileResponse {
     private BigDecimal avgRating;
     private Integer totalReviews;
 
+    private List<String> expertBrands;
+    private List<Integer> serviceRegionIds;
+
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
-    public static ProfileResponse from(EngineerProfile entity){
+    public static ProfileResponse from(EngineerProfile entity,
+                                       List<String> expertBrands,
+                                       List<Integer> serviceRegionIds) {
         return ProfileResponse.builder()
                 .profileId(entity.getProfileId())
                 .userId(entity.getUser().getId())
-                .categoryId(entity.getCategory().getCategoryId())
+                .categoryId(entity.getCategory() != null ? entity.getCategory().getCategoryId() : null)
                 .careerStartedYear(entity.getCareerStartedYear())
                 .skillLevel(entity.getSkillLevel().name())
                 .isLmsCompleted(entity.isLmsCompleted())
@@ -36,6 +42,8 @@ public class ProfileResponse {
                 .profileImageUrl(entity.getProfileImageUrl())
                 .avgRating(entity.getAvgRating())
                 .totalReviews(entity.getTotalReviews())
+                .expertBrands(expertBrands)
+                .serviceRegionIds(serviceRegionIds)
                 .createdAt(entity.getCreatedAt())
                 .updatedAt(entity.getUpdatedAt())
                 .build();

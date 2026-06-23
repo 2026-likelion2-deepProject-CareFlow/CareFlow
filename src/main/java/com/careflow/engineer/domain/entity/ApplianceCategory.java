@@ -9,7 +9,7 @@ import lombok.Getter;
 public class ApplianceCategory {    // 임시 ApplianceCategory 클래스 (삭제 예정)
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     @Column(name = "category_id")
-    private Long categoryId;
+    private Integer categoryId;
 
     private int depth;
 }

@@ -17,9 +17,13 @@ import java.time.LocalDateTime;
 @Entity
 @Table(
         name = "engineer_profiles",
+        uniqueConstraints = {
+                @UniqueConstraint(name = "uk_engineer_profiles_user", columnNames = "user_id")
+        },
         indexes = {
-                @Index(name = "idx_profile_skill", columnList = "skill_level, is_lms_completed"),
-                @Index(name = "idx_profile_rating", columnList = "avg_rating")
+                @Index(name = "idx_engineer_category", columnList = "category_id"),
+                @Index(name = "idx_engineer_skill_lms", columnList = "skill_level, is_lms_completed"),
+                @Index(name = "idx_engineer_avg_rating", columnList = "avg_rating")
         }
 )
 @EntityListeners(AuditingEntityListener.class)
@@ -70,17 +74,18 @@ public class EngineerProfile {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-    @Builder
-    public EngineerProfile(User user, ApplianceCategory category, int careerStartedYear, SkillLevel skillLevel, String introduction, String profileImageUrl) {
-        this.user = user;
-        this.category = category;
-        this.careerStartedYear = careerStartedYear;
-        this.skillLevel = skillLevel;
-        this.isLmsCompleted = false;
-        this.introduction = introduction;
-        this.profileImageUrl = profileImageUrl;
-        this.avgRating = BigDecimal.ZERO;
-        this.totalReviews = 0;
+
+    public static EngineerProfile createInitial(User user) {    // 비어있는 초기 프로필 생성
+        if(user == null) {
+            throw new IllegalArgumentException("프로필을 생성할 사용자 정보가 필요합니다.");
+        }
+        EngineerProfile profile = new EngineerProfile();
+        profile.user = user;
+        profile.skillLevel = SkillLevel.BEGINNER;
+        profile.isLmsCompleted = false;
+        profile.avgRating = BigDecimal.ZERO;
+        profile.totalReviews = 0;
+        return profile;
     }
 
     public void completeProfile(ApplianceCategory category, Integer careerStartedYear, SkillLevel skillLevel, String introduction) {    // 프로필 완성(업데이트)
@@ -92,5 +97,9 @@ public class EngineerProfile {
         this.careerStartedYear = careerStartedYear;
         this.skillLevel = skillLevel;
         this.introduction = introduction;
+    }
+
+    public boolean isCompleted() {
+        return this.category != null && this.careerStartedYear != null;
     }
 }

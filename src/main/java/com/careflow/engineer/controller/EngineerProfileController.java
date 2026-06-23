@@ -1,6 +1,7 @@
 package com.careflow.engineer.controller;
 
 import com.careflow.account_requests.service.AccountRequestsService;
+import com.careflow.auth.security.CustomUserDetails;
 import com.careflow.engineer.dto.CreateProfileRequest;
 import com.careflow.engineer.dto.EngineerAccountRequest;
 import com.careflow.engineer.dto.ProfileResponse;
@@ -18,10 +19,10 @@ import org.springframework.web.bind.annotation.*;
 public class EngineerProfileController {
     private final EngineerProfileService profileService;
 
-    @PostMapping
-    public ResponseEntity<ProfileResponse> createProfile(@AuthenticationPrincipal Long userId, @RequestBody @Valid CreateProfileRequest request){   // 기사 프로필 생성
-        ProfileResponse response = profileService.updateProfile(userId, request);
-        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    @PutMapping
+    public ResponseEntity<ProfileResponse> completeProfile(@AuthenticationPrincipal CustomUserDetails userDetails, @RequestBody @Valid CreateProfileRequest request){   // 기사 프로필 생성
+        ProfileResponse response = profileService.completeProfile(userDetails.getUserId(), request);
+        return ResponseEntity.ok(response);
     }
 
 }
