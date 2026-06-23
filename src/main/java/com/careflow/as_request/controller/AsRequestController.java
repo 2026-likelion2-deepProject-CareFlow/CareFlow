@@ -7,6 +7,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
+
 import java.util.List;
 
 @RestController
@@ -43,9 +44,10 @@ public class AsRequestController {
     @PatchMapping("/{asRequestId}/cancel")
     public ResponseEntity<String> cancelAsRequest(
             @RequestParam Long customerId,
-            @PathVariable Long asRequestId) {
+            @PathVariable Long asRequestId,
+            @RequestParam(required = false) String cancelReason) {
 
-        asRequestService.cancelAsRequest(customerId, asRequestId);
+        asRequestService.cancelAsRequest(customerId, asRequestId, cancelReason);
         return ResponseEntity.ok("성공적으로 A/S 요청이 취소되었습니다.");
     }
 }
