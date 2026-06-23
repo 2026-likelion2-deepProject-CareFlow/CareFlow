@@ -72,7 +72,7 @@ public class AuthService {
 
         if (user.getRole() == Role.AGENCY) {
             // 슈퍼 계정인지 관리자 계정인지 확인 필요 X
-            Agencies agencies = agenciesRepository.findById(user.getAgencyId()).orElseThrow(() -> new NoSuchElementException("존재하지 않는 대행사 입니다."));
+            Agencies agencies = agenciesRepository.findById(user.getAgency().getId()).orElseThrow(() -> new NoSuchElementException("존재하지 않는 대행사 입니다."));
 
             if (agencies.getApprovalStatus() == AgencyStatus.REJECTED) {
                 throw new IllegalStateException("대행사 정보가 등록 거부되었습니다. 자세한 사항은 관리자에게 문의하세요");
