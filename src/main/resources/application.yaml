@@ -1,5 +1,5 @@
 spring:
   profiles:
-    # 👈 평소에 그냥 켜면 H2(local)가 작동하도록 설정
-    # 실제 시연 및 운영으로 작동시켜야할 경우 local -> prod 로 변경
-    active: local
+    # 실제 서버 동작 시 prod 설정(MySQL, Redis)
+    # H2 DB 를 이용한 통합 테스트 시 local 설정
+    active: prod
