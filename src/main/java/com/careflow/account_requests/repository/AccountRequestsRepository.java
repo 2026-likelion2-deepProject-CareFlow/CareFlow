@@ -9,6 +9,8 @@ import java.util.List;
 
 public interface AccountRequestsRepository extends JpaRepository<AccountRequests, Long> {
 
+    boolean existsByEmail(String email);
+
     // n+1 문제 방지를 위한 fetch join
     @Query("SELECT aq FROM AccountRequests aq join fetch aq.agency ag WHERE ag.approvalStatus = AgencyStatus.PENDING AND aq.status = AccountRequestsStatus.PENDING")
     List<AccountRequests> findRequestByPendingAgencies();

@@ -1,38 +1,5 @@
 spring:
-  application:
-    name: careflow
-
-  datasource:
-    url: jdbc:mysql://localhost:3306/careflow?useSSL=false&serverTimezone=UTC&allowPublicKeyRetrieval=true
-    username: ${DB_USERNAME}
-    password: ${DB_PASSWORD}
-    driver-class-name: com.mysql.cj.jdbc.Driver
-
-  jpa:
-    hibernate:
-      ddl-auto: update
-    show-sql: true
-    properties:
-      hibernate:
-        dialect: org.hibernate.dialect.MySQL8Dialect
-        format_sql: true
-
-  data:
-    redis:
-      host: localhost
-      port: 6379
-      password: ${REDIS_PASSWORD}
-
-jwt:
-  secret: careflow-secret-key-32charslongenough!!
-  access-token-expiration: 1800000
-  refresh-token-expiration: 604800000
-
-google:
-  client-id: ${GOOGLE_CLIENT_ID}
-  client-secret: ${GOOGLE_CLIENT_SECRET}
-  scope: email, profile
-
-app:
-  oauth2:
-    redirect-uri: http://localhost:5173/oauth2/redirect
+  profiles:
+    # 실제 서버 동작 시 prod 설정(MySQL, Redis)
+    # H2 DB 를 이용한 통합 테스트 시 local 설정
+    active: prod

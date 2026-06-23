@@ -7,6 +7,7 @@ import com.careflow.agency.entity.Agencies;
 import com.careflow.agency.service.AgenciesService;
 import com.careflow.auth.security.CustomUserDetails;
 import com.careflow.user.service.UserService;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
@@ -53,7 +54,7 @@ public class AccountRequestsController {
         }
     }
 
-    //
+    // 수리기사 계정 요청 목록 조회
     @GetMapping("/engineerlist")
     public ResponseEntity<List<AccountRequests>> engineerlist(
             @AuthenticationPrincipal CustomUserDetails userDetails
@@ -70,15 +71,13 @@ public class AccountRequestsController {
     }
 
     // 대행사 슈퍼 계정, 또는 일반 관리자 계정 요청 승인
+    // 세부 권한 검증(슈퍼 계정 요청은 ADMIN만, 일반 관리자 요청은 해당 대행사 슈퍼 계정만)은 서비스 레이어에서 처리
     @PostMapping("/agency/approval")
     public ResponseEntity<Void> approveAccountRequest(@AuthenticationPrincipal CustomUserDetails userDetails, @RequestParam Long accountId) throws IllegalAccessException {
 
-        // CareFlow 관리자, 또는 대행사 슈퍼 계정의 요청인 경우
-        if (userDetails.getRole().equals("ADMIN") || userDetails.getRole().equals("AGENCY")){
-            // 슈퍼 계정 생성 및 대행사 등록 허가
+        if (userDetails.getRole().equals("ADMIN") || userDetails.getRole().equals("AGENCY")) {
             accountRequestsService.approveAgencyAccount(userDetails, accountId);
-        }
-         else {
+        } else {
             throw new IllegalAccessException("기능에 대한 접근 권한이 없습니다.");
         }
 
@@ -88,7 +87,7 @@ public class AccountRequestsController {
     // 대행사 슈퍼 계정, 또는 일반 관리자 요청 거절
     @PostMapping("/agency/rejection")
     public ResponseEntity<Void> rejectAccountRequest(@AuthenticationPrincipal CustomUserDetails userDetails, @RequestParam Long accountId,
-                                                     @RequestBody AccountRequestReject accountRequestReject)
+                                                     @Valid @RequestBody AccountRequestReject accountRequestReject)
             throws IllegalAccessException {
 
         if (userDetails.getRole().equals("ADMIN") || userDetails.getRole().equals("AGENCY")){
@@ -116,7 +115,7 @@ public class AccountRequestsController {
 
     @PostMapping("/engineer/rejection")
     public ResponseEntity<Void> rejectEngineerAccount(@AuthenticationPrincipal CustomUserDetails userDetails, @RequestParam Long accountId,
-                                                     @RequestBody AccountRequestReject accountRequestReject)
+                                                     @Valid @RequestBody AccountRequestReject accountRequestReject)
             throws IllegalAccessException {
         if (userDetails.getRole().equals("AGENCY")){
             // 슈퍼 계정만 접근

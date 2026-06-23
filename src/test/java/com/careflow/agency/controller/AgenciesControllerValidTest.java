@@ -2,13 +2,18 @@ package com.careflow.agency.controller;
 
 import com.careflow.agency.dto.request.AgencyCreateRequest;
 import com.careflow.agency.service.AgenciesService;
+import com.careflow.auth.security.CustomOAuth2UserService;
 import com.careflow.auth.security.JwtProvider;
+import com.careflow.auth.security.OAuth2LoginSuccessHandler;
+import com.careflow.common.config.PasswordEncoderConfig;
 import com.careflow.common.config.SecurityConfig;
+import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
+import org.springframework.data.jpa.mapping.JpaMetamodelMappingContext;
 import org.springframework.http.MediaType;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
@@ -21,7 +26,7 @@ import  static org.springframework.test.web.servlet.result.MockMvcResultMatchers
 import static org.junit.jupiter.api.Assertions.*;
 
 @WebMvcTest(AgenciesController.class)
-@Import(SecurityConfig.class)
+@Import({SecurityConfig.class, PasswordEncoderConfig.class})
 class AgenciesControllerValidTest {
 
     @Autowired
@@ -31,6 +36,15 @@ class AgenciesControllerValidTest {
     private AgenciesService agenciesService;
     @MockitoBean
     private JwtProvider jwtProvider;
+    @MockitoBean
+    private JpaMetamodelMappingContext jpaMetamodelMappingContext;
+    // develop 병합으로 추가된 OAuth2 의존성 — SecurityConfig 생성 및 oauth2Login() 설정에 필요
+    @MockitoBean
+    private CustomOAuth2UserService customOAuth2UserService;
+    @MockitoBean
+    private OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;
+    @MockitoBean
+    private ClientRegistrationRepository clientRegistrationRepository;
 
     @Autowired
     private ObjectMapper objectMapper;

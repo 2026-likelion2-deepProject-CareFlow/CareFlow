@@ -10,6 +10,7 @@ import lombok.AccessLevel;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.ColumnDefault;
 
 import java.time.LocalDateTime;
 
@@ -64,12 +65,14 @@ public class AccountRequests {
     private String addressDetail;
 
     // 호준이의 수정 사항: Long 대신 Regions 객체로 매핑
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "region_id", nullable = true, unique = true)
+    // unique 제거: 같은 지역에서 복수 요청이 가능해야 함
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "region_id", nullable = true)
     private Regions region;
 
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "reviewed_by", nullable = true, unique = true)
+    // unique 제거: 한 관리자가 여러 요청을 검토할 수 있음
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "reviewed_by", nullable = true)
     private User reviewedBy;
 
     @OneToOne(fetch = FetchType.LAZY)
@@ -105,5 +108,23 @@ public class AccountRequests {
                 .addressDetail(addressDetail)
                 .region(region) // 객체 형태로 전달
                 .build();
+    }
+
+    // 요청 승인 처리 — 더티 체킹으로 UPDATE
+    public void approve(User approvedBy, User createdUser) {
+        this.status = AccountRequestsStatus.APPROVED;
+        this.reviewedBy = approvedBy;
+        this.reviewedAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
+        this.createdUserId = createdUser;
+    }
+
+    // 요청 거부 처리 — 더티 체킹으로 UPDATE
+    public void reject(User rejectedBy, String reason) {
+        this.status = AccountRequestsStatus.REJECTED;
+        this.reviewedBy = rejectedBy;
+        this.reviewedAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
+        this.rejectReason = reason;
     }
 }

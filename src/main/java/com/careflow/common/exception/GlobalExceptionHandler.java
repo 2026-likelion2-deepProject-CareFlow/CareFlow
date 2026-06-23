@@ -4,6 +4,7 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 
@@ -14,6 +15,12 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(value = {MethodArgumentNotValidException.class})
     public ResponseEntity<String> handleException(Exception e) {
+        return ResponseEntity.badRequest().body(e.getMessage());
+    }
+
+    // 필수 요청 파라미터 누락 시 400 반환 (catch-all Exception 핸들러보다 먼저 처리하기 위해 명시)
+    @ExceptionHandler(value = {MissingServletRequestParameterException.class})
+    public ResponseEntity<String> handleMissingParam(MissingServletRequestParameterException e) {
         return ResponseEntity.badRequest().body(e.getMessage());
     }
 
