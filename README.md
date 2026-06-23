@@ -18,6 +18,8 @@
 | Docs | 문서 수정(README 등) |
 | Style | 코드 포맷팅, 세미콜론 누락 등(코드 변경 없는 경우) |
 | Refactor | 코드 리팩토링 |
+| Test | 테스트 코드 작성 및 수정 |
+| chore | 빌드 설정, 패키지 관리 등 기타 변경 |
 
 ## 풀 리퀘스트 규칙(Pull Request Rules)
 1. feature 브랜치 작업 완료 후 develop 브랜치로 PR 을 보냅니다.
