@@ -1,5 +1,6 @@
 package com.careflow.common.exception;
 
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.MethodArgumentNotValidException;
@@ -40,5 +41,18 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(value = {Exception.class})
     public ResponseEntity<String> handleNotExpectedException(Exception e) {
         return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).body(e.getMessage());
+    }
+
+    @ExceptionHandler(DataIntegrityViolationException.class)
+    public ResponseEntity<String> handleDataIntegrityException(DataIntegrityViolationException e) {
+        String msg = e.getMostSpecificCause().getMessage();
+
+        if (msg != null && msg.contains("uk_eng_schedule")) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body("해당 날짜에 이미 등록된 근무표가 존재합니다. (동시 요청 방어)");
+        }
+
+        return ResponseEntity.status(HttpStatus.CONFLICT)
+                .body("데이터 처리 중 충돌이 발생했습니다. 잠시 후 다시 시도해주세요.");
     }
 }

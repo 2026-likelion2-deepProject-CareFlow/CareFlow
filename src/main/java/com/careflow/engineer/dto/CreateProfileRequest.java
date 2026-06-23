@@ -11,7 +11,7 @@ import lombok.NoArgsConstructor;
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class CreateProfileRequest {
     @NotNull(message = "전문 가전 카테고리를 선택해주세요.")
-    private Long categoryId;
+    private Integer categoryId;
 
     @NotNull(message = "경력 시작 연도를 입력해주세요.")
     @Min(value = 1950, message = "유효하지 않은 연도입니다.")
