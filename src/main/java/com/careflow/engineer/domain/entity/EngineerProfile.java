@@ -93,4 +93,8 @@ public class EngineerProfile {
         this.skillLevel = skillLevel;
         this.introduction = introduction;
     }
+
+    public boolean isCompleted() {
+        return this.category != null && this.careerStartedYear != null;
+    }
 }

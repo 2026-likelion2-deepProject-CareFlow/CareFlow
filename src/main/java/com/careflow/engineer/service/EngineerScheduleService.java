@@ -3,6 +3,7 @@ package com.careflow.engineer.service;
 import com.careflow.common.enums.Role;
 import com.careflow.engineer.domain.entity.EngineerProfile;
 import com.careflow.engineer.domain.entity.EngineerSchedule;
+import com.careflow.engineer.domain.entity.EngineerScheduleSlot;
 import com.careflow.engineer.domain.enums.ScheduleStatus;
 import com.careflow.engineer.dto.ScheduleRequest;
 import com.careflow.engineer.dto.ScheduleResponse;
@@ -10,8 +11,6 @@ import com.careflow.engineer.repository.EngineerProfileRepository;
 import com.careflow.engineer.repository.EngineerScheduleRepository;
 import com.careflow.user.entity.User;
 import com.careflow.user.repository.UserRepository;
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -19,17 +18,21 @@ import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalTime;
 import java.util.Comparator;
 import java.util.List;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
 public class EngineerScheduleService {
+
     private final EngineerScheduleRepository engineerScheduleRepository;
     private final UserRepository userRepository;
     private final EngineerProfileRepository engineerProfileRepository;
-    private final ObjectMapper objectMapper;
+
+    private record ParsedSlot(LocalTime start, LocalTime end) {}
 
     @Transactional
-    public ScheduleResponse createSchedule(Long userId, ScheduleRequest request) {  // 근무표 등록
+    public ScheduleResponse createSchedule(Long userId, ScheduleRequest request) {
+
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("유저 정보가 존재하지 않습니다."));
 
@@ -40,7 +43,7 @@ public class EngineerScheduleService {
         EngineerProfile profile = engineerProfileRepository.findByUser_Id(userId)
                 .orElseThrow(() -> new IllegalArgumentException("프로필 정보가 존재하지 않습니다."));
 
-        if (profile.getCategory() == null) {
+        if (!profile.isCompleted()) {
             throw new IllegalArgumentException("전문 분야 카테고리 등 프로필 필수 정보를 먼저 완성해주세요.");
         }
 
@@ -48,51 +51,51 @@ public class EngineerScheduleService {
             throw new IllegalArgumentException("해당 날짜에 이미 근무표가 존재합니다.");
         }
 
-        validTimeSlots(request.getTimeSlots());
-
-        String timeSlotsString;
-        try {
-            timeSlotsString = objectMapper.writeValueAsString(request.getTimeSlots());
-        } catch (JsonProcessingException e) {
-            throw new IllegalArgumentException("시간표 데이터 변환 중 오류가 발생했습니다.");
-        }
+        List<ParsedSlot> parsedSlots = validAndParseTimeSlots(request.getTimeSlots());
 
         EngineerSchedule newSchedule = EngineerSchedule.builder()
                 .user(user)
                 .workDate(request.getWorkDate())
-                .timeSlots(timeSlotsString)
                 .status(ScheduleStatus.AVAILABLE)
                 .build();
+
+        for (ParsedSlot slot : parsedSlots) {
+            newSchedule.addTimeSlot(EngineerScheduleSlot.builder()
+                    .startTime(slot.start())
+                    .endTime(slot.end())
+                    .build());
+        }
 
         EngineerSchedule savedSchedule = engineerScheduleRepository.save(newSchedule);
 
         return ScheduleResponse.from(savedSchedule);
     }
 
-
-    private void validTimeSlots(List<ScheduleRequest.TimeSlotDto> timeSlots){    // 시간표 논리 검증
-        if(timeSlots == null || timeSlots.isEmpty()){
+    private List<ParsedSlot> validAndParseTimeSlots(List<ScheduleRequest.TimeSlotDto> timeSlots) {
+        if (timeSlots == null || timeSlots.isEmpty()) {
             throw new IllegalArgumentException("최소 1개 이상의 근무 가능 시간을 입력해주세요.");
         }
 
-        timeSlots.sort(Comparator.comparing(slot -> LocalTime.parse(slot.getStart())));
+        List<ParsedSlot> parsedSlots = timeSlots.stream()
+                .map(dto -> new ParsedSlot(LocalTime.parse(dto.getStart()), LocalTime.parse(dto.getEnd())))
+                .sorted(Comparator.comparing(ParsedSlot::start))
+                .collect(Collectors.toList());
 
-        for(int i = 0; i < timeSlots.size(); i++){
-            LocalTime start = LocalTime.parse(timeSlots.get(i).getStart());
-            LocalTime end = LocalTime.parse(timeSlots.get(i).getEnd());
+        for (int i = 0; i < parsedSlots.size(); i++) {
+            ParsedSlot current = parsedSlots.get(i);
 
-            if (!start.isBefore(end)) {
-                throw new IllegalArgumentException("시작 시간은 종료 시간보다 빨라야 합니다. (" + start + " ~ " + end + ")");
+            if (!current.start().isBefore(current.end())) {
+                throw new IllegalArgumentException("시작 시간은 종료 시간보다 빨라야 합니다. (" + current.start() + " ~ " + current.end() + ")");
             }
 
-            // 구간 겹치는지 검사
             if (i > 0) {
-                LocalTime prevEnd = LocalTime.parse(timeSlots.get(i - 1).getEnd());
-
-                if (prevEnd.isAfter(start)) {
-                    throw new IllegalArgumentException("근무 가능 시간이 서로 겹칠 수 없습니다. (겹치는 시간: " + start + ")");
+                ParsedSlot prev = parsedSlots.get(i - 1);
+                if (prev.end().isAfter(current.start())) {
+                    throw new IllegalArgumentException("근무 가능 시간이 서로 겹칠 수 없습니다. (겹치는 시간: " + current.start() + ")");
                 }
             }
         }
+
+        return parsedSlots;
     }
 }
