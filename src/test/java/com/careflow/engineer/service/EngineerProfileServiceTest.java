@@ -7,7 +7,11 @@ import com.careflow.engineer.domain.enums.SkillLevel;
 import com.careflow.engineer.dto.CreateProfileRequest;
 import com.careflow.engineer.dto.ProfileResponse;
 import com.careflow.engineer.repository.ApplianceCategoryRepository;
+import com.careflow.engineer.repository.EngineerExpertBrandRepository;
 import com.careflow.engineer.repository.EngineerProfileRepository;
+import com.careflow.engineer.repository.EngineerServiceRegionRepository;
+import com.careflow.region.entity.Regions;
+import com.careflow.region.repository.RegionRepository;
 import com.careflow.user.entity.User;
 import com.careflow.user.repository.UserRepository;
 import org.junit.jupiter.api.DisplayName;
@@ -20,10 +24,12 @@ import org.springframework.test.util.ReflectionTestUtils;
 
 import java.lang.reflect.Constructor;
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
 
 @ExtendWith(MockitoExtension.class)
@@ -32,82 +38,177 @@ class EngineerProfileServiceTest {
     @InjectMocks
     private EngineerProfileService engineerProfileService;
 
-    @Mock
-    private EngineerProfileRepository profileRepository;
-    @Mock
-    private UserRepository userRepository;
-    @Mock
-    private ApplianceCategoryRepository categoryRepository;
+    @Mock private EngineerProfileRepository profileRepository;
+    @Mock private UserRepository userRepository;
+    @Mock private ApplianceCategoryRepository categoryRepository;
+    @Mock private RegionRepository regionRepository;
+    @Mock private EngineerServiceRegionRepository serviceRegionRepository;
+    @Mock private EngineerExpertBrandRepository expertBrandRepository;
+
+    private static final Long USER_ID = 1L;
 
     @Test
-    @DisplayName("기사 프로필 완성 성공 (10년차 -> INTERMEDIATE 등급 반영)")
-    void updateProfile_Success() throws Exception {
-        // Given (준비)
-        Long userId = 1L;
-        User user = User.builder().role(Role.ENGINEER).build();
-        ReflectionTestUtils.setField(user, "id", userId); // User 엔티티의 PK 필드명 id로 매핑
+    @DisplayName("성공: 프로필 완성 — 10년차→INTERMEDIATE, 브랜드·서비스 지역까지 함께 저장")
+    void completeProfile_Success() throws Exception {
+        // Given
+        User user = engineer(USER_ID);
+        EngineerProfile emptyProfile = EngineerProfile.createInitial(user);
+        ApplianceCategory category = category(10, 2);
+        Regions district = region(2); // depth=2 구 단위
 
-        ApplianceCategory category = new ApplianceCategory();
-        ReflectionTestUtils.setField(category, "categoryId", 10); // Integer 타입
-        ReflectionTestUtils.setField(category, "depth", 2);
+        int tenYearsAgo = LocalDate.now().getYear() - 10 + 1; // workYear=10 → INTERMEDIATE
+        CreateProfileRequest request = newRequest(
+                10, tenYearsAgo, "안녕하세요",
+                List.of("삼성", "LG"), List.of(10));
 
-        EngineerProfile emptyProfile = EngineerProfile.builder().user(user).build();
-
-        // [핵심] protected 생성자 리플렉션으로 뚫기!
-        Constructor<CreateProfileRequest> reqConstructor = CreateProfileRequest.class.getDeclaredConstructor();
-        reqConstructor.setAccessible(true);
-        CreateProfileRequest request = reqConstructor.newInstance();
-
-        ReflectionTestUtils.setField(request, "categoryId", 10);
-
-        int tenYearsAgo = LocalDate.now().getYear() - 10 + 1;
-        ReflectionTestUtils.setField(request, "careerStartedYear", tenYearsAgo);
-        ReflectionTestUtils.setField(request, "introduction", "안녕하세요");
-
-        // Mock 세팅 (팀원분이 수정한 findByUser_Id 적용)
-        given(userRepository.findById(1L)).willReturn(Optional.of(user));
-        given(profileRepository.findByUser_Id(1L)).willReturn(Optional.of(emptyProfile));
+        given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
+        given(profileRepository.findByUser_Id(USER_ID)).willReturn(Optional.of(emptyProfile));
         given(categoryRepository.findById(10)).willReturn(Optional.of(category));
+        given(regionRepository.findById(10)).willReturn(Optional.of(district));
+        given(profileRepository.save(any(EngineerProfile.class)))
+                .willAnswer(invocation -> invocation.getArgument(0));
 
-        // When (실행)
-        ProfileResponse response = engineerProfileService.updateProfile(1L, request);
+        // When
+        ProfileResponse response = engineerProfileService.completeProfile(USER_ID, request);
 
-        // Then (검증)
+        // Then
         assertThat(response.getSkillLevel()).isEqualTo(SkillLevel.INTERMEDIATE.name());
         assertThat(response.getIntroduction()).isEqualTo("안녕하세요");
+        assertThat(response.getExpertBrands()).containsExactly("삼성", "LG");
+        assertThat(response.getServiceRegionIds()).containsExactly(10);
         assertThat(emptyProfile.isCompleted()).isTrue();
     }
 
     @Test
-    @DisplayName("실패: 이미 프로필을 완성한 기사인 경우 예외 발생")
-    void updateProfile_Fail_AlreadyCompleted() throws Exception {
+    @DisplayName("실패: 이미 프로필을 완성한 기사")
+    void completeProfile_Fail_AlreadyCompleted() throws Exception {
         // Given
-        Long userId = 1L;
-        User user = User.builder().role(Role.ENGINEER).build();
-        ReflectionTestUtils.setField(user, "id", userId);
+        User user = engineer(USER_ID);
+        EngineerProfile completed = EngineerProfile.createInitial(user);
+        completed.completeProfile(category(10, 2), 2020, SkillLevel.BEGINNER, null);
 
-        ApplianceCategory category = new ApplianceCategory();
-        ReflectionTestUtils.setField(category, "categoryId", 10);
-        ReflectionTestUtils.setField(category, "depth", 2);
+        CreateProfileRequest request = newRequest(10, 2020, null, List.of("삼성"), List.of(10));
 
-        EngineerProfile completedProfile = EngineerProfile.builder()
-                .user(user)
-                .category(category)
-                .careerStartedYear(2020)
-                .skillLevel(SkillLevel.BEGINNER)
-                .build();
-
-        // protected 생성자 우회
-        Constructor<CreateProfileRequest> reqConstructor = CreateProfileRequest.class.getDeclaredConstructor();
-        reqConstructor.setAccessible(true);
-        CreateProfileRequest request = reqConstructor.newInstance();
-
-        given(userRepository.findById(1L)).willReturn(Optional.of(user));
-        given(profileRepository.findByUser_Id(1L)).willReturn(Optional.of(completedProfile));
+        given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
+        given(profileRepository.findByUser_Id(USER_ID)).willReturn(Optional.of(completed));
 
         // When & Then
-        assertThatThrownBy(() -> engineerProfileService.updateProfile(1L, request))
+        assertThatThrownBy(() -> engineerProfileService.completeProfile(USER_ID, request))
                 .isInstanceOf(IllegalArgumentException.class)
-                .hasMessage("이미 프로필 등록을 완료한 기사입니다.");
+                .hasMessage("이미 프로필 작성을 완료한 기사입니다.");
+    }
+
+    @Test
+    @DisplayName("실패: ENGINEER 권한이 아닌 계정")
+    void completeProfile_Fail_NotEngineer() throws Exception {
+        // Given
+        User customer = User.builder().role(Role.CUSTOMER).build();
+        ReflectionTestUtils.setField(customer, "id", USER_ID);
+
+        CreateProfileRequest request = newRequest(10, 2020, null, List.of("삼성"), List.of(10));
+
+        given(userRepository.findById(USER_ID)).willReturn(Optional.of(customer));
+
+        // When & Then
+        assertThatThrownBy(() -> engineerProfileService.completeProfile(USER_ID, request))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("수리기사 권한을 가진 계정만 프로필을 작성할 수 있습니다.");
+    }
+
+    @Test
+    @DisplayName("실패: 전문 분야가 소분류(depth=2)가 아님")
+    void completeProfile_Fail_CategoryNotLeaf() throws Exception {
+        // Given
+        User user = engineer(USER_ID);
+        EngineerProfile emptyProfile = EngineerProfile.createInitial(user);
+        ApplianceCategory bigCategory = category(1, 1); // depth=1 대분류
+
+        CreateProfileRequest request = newRequest(1, 2020, null, List.of("삼성"), List.of(10));
+
+        given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
+        given(profileRepository.findByUser_Id(USER_ID)).willReturn(Optional.of(emptyProfile));
+        given(categoryRepository.findById(1)).willReturn(Optional.of(bigCategory));
+
+        // When & Then
+        assertThatThrownBy(() -> engineerProfileService.completeProfile(USER_ID, request))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("전문 분야는 소분류(depth=2) 카테고리만 선택 가능합니다.");
+    }
+
+    @Test
+    @DisplayName("실패: 경력 시작 연도가 미래")
+    void completeProfile_Fail_FutureCareerYear() throws Exception {
+        // Given
+        User user = engineer(USER_ID);
+        EngineerProfile emptyProfile = EngineerProfile.createInitial(user);
+        ApplianceCategory category = category(10, 2);
+
+        int futureYear = LocalDate.now().getYear() + 1;
+        CreateProfileRequest request = newRequest(10, futureYear, null, List.of("삼성"), List.of(10));
+
+        given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
+        given(profileRepository.findByUser_Id(USER_ID)).willReturn(Optional.of(emptyProfile));
+        given(categoryRepository.findById(10)).willReturn(Optional.of(category));
+
+        // When & Then
+        assertThatThrownBy(() -> engineerProfileService.completeProfile(USER_ID, request))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("경력 시작 연도는 미래일 수 없습니다.");
+    }
+
+    @Test
+    @DisplayName("실패: 서비스 지역이 구 단위(depth=2)가 아님")
+    void completeProfile_Fail_ServiceRegionNotDistrict() throws Exception {
+        // Given
+        User user = engineer(USER_ID);
+        EngineerProfile emptyProfile = EngineerProfile.createInitial(user);
+        ApplianceCategory category = category(10, 2);
+        Regions city = region(1); // depth=1 시·도
+
+        CreateProfileRequest request = newRequest(10, 2020, null, List.of("삼성"), List.of(99));
+
+        given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
+        given(profileRepository.findByUser_Id(USER_ID)).willReturn(Optional.of(emptyProfile));
+        given(categoryRepository.findById(10)).willReturn(Optional.of(category));
+        given(profileRepository.save(any(EngineerProfile.class)))
+                .willAnswer(invocation -> invocation.getArgument(0));
+        given(regionRepository.findById(99)).willReturn(Optional.of(city));
+
+        // When & Then
+        assertThatThrownBy(() -> engineerProfileService.completeProfile(USER_ID, request))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessage("서비스 가능 지역은 구 단위(depth=2)만 선택 가능합니다.");
+    }
+
+    // ---------- 픽스처 헬퍼 ----------
+
+    private User engineer(Long id) {
+        User user = User.builder().role(Role.ENGINEER).build();
+        ReflectionTestUtils.setField(user, "id", id);
+        return user;
+    }
+
+    private ApplianceCategory category(int categoryId, int depth) {
+        ApplianceCategory category = new ApplianceCategory();
+        ReflectionTestUtils.setField(category, "categoryId", categoryId);
+        ReflectionTestUtils.setField(category, "depth", depth);
+        return category;
+    }
+
+    private Regions region(int depth) {
+        return Regions.builder().name("테스트지역").parentId(null).depth(depth).sortOrder(0).build();
+    }
+
+    private CreateProfileRequest newRequest(Integer categoryId, Integer careerStartedYear, String introduction,
+                                            List<String> expertBrands, List<Integer> serviceRegionIds) throws Exception {
+        Constructor<CreateProfileRequest> constructor = CreateProfileRequest.class.getDeclaredConstructor();
+        constructor.setAccessible(true);
+        CreateProfileRequest request = constructor.newInstance();
+        ReflectionTestUtils.setField(request, "categoryId", categoryId);
+        ReflectionTestUtils.setField(request, "careerStartedYear", careerStartedYear);
+        ReflectionTestUtils.setField(request, "introduction", introduction);
+        ReflectionTestUtils.setField(request, "expertBrands", expertBrands);
+        ReflectionTestUtils.setField(request, "serviceRegionIds", serviceRegionIds);
+        return request;
     }
 }

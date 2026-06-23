@@ -66,7 +66,6 @@ public class AuthService {
             throw new IllegalArgumentException("비밀번호가 일치하지 않습니다.");
         }
 
-        // 계정 상태 확인 (정지/비활성 계정 로그인 차단)
         if (!"ACTIVE".equals(user.getStatus())) {
             throw new IllegalStateException("정지되었거나 비활성화된 계정입니다.");
         }
@@ -82,23 +81,7 @@ public class AuthService {
             }
         }
 
-        user.updateLastLogin();
-
-        String accessToken = jwtProvider.generateAccessToken(user.getId(), user.getEmail(), user.getRole().name());
-        String refreshToken = jwtProvider.generateRefreshToken(user.getId());
-
-        redisTemplate.opsForValue().set(
-                REFRESH_KEY_PREFIX + user.getId(),
-                refreshToken,
-                Duration.ofMillis(jwtProvider.getRefreshTokenExpiration())
-        );
-
-        return TokenResponse.builder()
-                .accessToken(accessToken)
-                .refreshToken(refreshToken)
-                .tokenType("Bearer")
-                .expiresIn(jwtProvider.getAccessTokenExpiration())
-                .build();
+        return issueTokenResponse(user);
     }
 
     public TokenResponse reissue(String refreshToken) {
@@ -115,7 +98,6 @@ public class AuthService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 사용자입니다."));
 
-        // 계정 상태 확인 (로그인 이후 정지된 경우 토큰 재발급 차단)
         if (!"ACTIVE".equals(user.getStatus())) {
             throw new IllegalStateException("정지되었거나 비활성화된 계정입니다.");
         }
@@ -124,6 +106,47 @@ public class AuthService {
 
         return TokenResponse.builder()
                 .accessToken(newAccessToken)
+                .refreshToken(refreshToken)
+                .tokenType("Bearer")
+                .expiresIn(jwtProvider.getAccessTokenExpiration())
+                .build();
+    }
+
+    /**
+     * 구글 로그인용: 이메일로 기존 회원 조회, 없으면 새로 생성(CUSTOMER, 비밀번호 없음)
+     */
+    @Transactional
+    public User findOrCreateGoogleUser(String email, String name) {
+        return userRepository.findByEmail(email)
+                .orElseGet(() -> {
+                    User newUser = User.builder()
+                            .email(email)
+                            .passwordHash(null)
+                            .name(name != null ? name : "구글 사용자")
+                            .role(Role.CUSTOMER)
+                            .build();
+                    return userRepository.save(newUser);
+                });
+    }
+
+    /**
+     * 로그인/구글로그인 공통: JWT 발급 + Redis에 refreshToken 저장
+     */
+    @Transactional
+    public TokenResponse issueTokenResponse(User user) {
+        user.updateLastLogin();
+
+        String accessToken = jwtProvider.generateAccessToken(user.getId(), user.getEmail(), user.getRole().name());
+        String refreshToken = jwtProvider.generateRefreshToken(user.getId());
+
+        redisTemplate.opsForValue().set(
+                REFRESH_KEY_PREFIX + user.getId(),
+                refreshToken,
+                Duration.ofMillis(jwtProvider.getRefreshTokenExpiration())
+        );
+
+        return TokenResponse.builder()
+                .accessToken(accessToken)
                 .refreshToken(refreshToken)
                 .tokenType("Bearer")
                 .expiresIn(jwtProvider.getAccessTokenExpiration())
