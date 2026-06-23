@@ -1,11 +1,9 @@
 package com.careflow.account_requests.service;
 
-import com.careflow.account_requests.dto.AccountRequestReject;
 import com.careflow.account_requests.entity.AccountRequests;
 import com.careflow.account_requests.repository.AccountRequestsRepository;
 import com.careflow.agency.entity.Agencies;
 import com.careflow.auth.security.CustomUserDetails;
-import com.careflow.common.enums.AccountRequestsStatus;
 import com.careflow.common.enums.AgencyStatus;
 import com.careflow.common.enums.Role;
 import com.careflow.user.entity.User;
@@ -15,8 +13,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
-import java.util.NoSuchElementException;
 
+/**
+ * 계정 생성 요청 공통 헬퍼 서비스.
+ * 조회 메서드와 승인 시 User 생성·연결 공통 로직을 제공한다.
+ * 대행사/수리기사별 승인·거부 비즈니스 로직은 각 전용 서비스에 위임한다.
+ */
 @Service
 @RequiredArgsConstructor
 public class AccountRequestsService {
@@ -44,90 +46,15 @@ public class AccountRequestsService {
         return accountRequestsRepository.findRequestByRequestsRoleAndStatus_Pending(agencyId);
     }
 
+    /**
+     * 요청 승인 공통 처리 — User 생성 후 요청·대행사 상태를 갱신한다.
+     * AgencyAccountRequestService, EngineerAccountRequestService 양쪽에서 호출한다.
+     */
     @Transactional
-    public void approveAgencyAccount(CustomUserDetails userDetails, Long accountId) throws IllegalAccessException {
-        AccountRequests accountRequests = accountRequestsRepository.findById(accountId)
-                .orElseThrow(() -> new NoSuchElementException("요청 정보를 찾을 수 없습니다."));
+    public void createUserFromRequest(CustomUserDetails userDetails, AccountRequests accountRequests, Role role) {
 
-        if (accountRequests.getStatus() != AccountRequestsStatus.PENDING) {
-            throw new IllegalArgumentException("이미 승인되었거나 거부된 요청입니다.");
-        }
-
-        Agencies targetAgency = accountRequests.getAgency();
-
-        // 슈퍼 계정 생성 요청 — ADMIN만 승인 가능
-        if (targetAgency.getApprovalStatus() == AgencyStatus.PENDING) {
-            if (!userDetails.getRole().equals("ADMIN")) {
-                throw new IllegalAccessException("슈퍼 계정 요청은 CareFlow 관리자만 승인할 수 있습니다.");
-            }
-        }
-        // 일반 관리자 계정 생성 요청 — 해당 대행사의 슈퍼 계정만 승인 가능
-        else if (targetAgency.getApprovalStatus() == AgencyStatus.APPROVED) {
-            if (!userDetails.getRole().equals("AGENCY")) {
-                throw new IllegalAccessException("일반 관리자 계정 요청은 대행사 슈퍼 계정만 승인할 수 있습니다.");
-            }
-            // 다른 대행사의 슈퍼 계정이 승인하지 못하도록 대행사 소속 검증
-            if (!targetAgency.getRepresentativeId().getId().equals(userDetails.getUserId())) {
-                throw new IllegalAccessException("자신이 소속된 대행사의 요청만 승인할 수 있습니다.");
-            }
-        }
-
-        approveAndCreateUser(userDetails, accountRequests, Role.AGENCY);
-    }
-
-    @Transactional
-    public void rejectAgencyAccount(CustomUserDetails userDetails, Long accountId, AccountRequestReject accountRequestReject) throws IllegalAccessException {
-        AccountRequests accountRequests = accountRequestsRepository.findById(accountId)
-                .orElseThrow(() -> new NoSuchElementException("요청 정보를 찾을 수 없습니다."));
-
-        if (accountRequests.getStatus() == AccountRequestsStatus.APPROVED) {
-            throw new IllegalAccessException("이미 등록 승인된 대행사 입니다.");
-        } else if (accountRequests.getStatus() == AccountRequestsStatus.REJECTED) {
-            throw new IllegalAccessException("이미 등록 거부된 대행사 입니다.");
-        }
-
-        User reviewer = userService.findById(userDetails.getUserId());
-
-        // 요청 거부 처리 — 도메인 메서드로 더티 체킹
-        accountRequests.reject(reviewer, accountRequestReject.rejectReson());
-
-        // 슈퍼 계정 요청 거부의 경우 대행사 상태도 REJECTED 로 전환
-        if (accountRequests.getAgency().getApprovalStatus() == AgencyStatus.PENDING) {
-            accountRequests.getAgency().reject();
-        }
-    }
-
-    @Transactional
-    public void approveEngineerAccount(CustomUserDetails userDetails, Long accountId) {
-        AccountRequests accountRequests = accountRequestsRepository.findById(accountId)
-                .orElseThrow(() -> new NoSuchElementException("요청 정보를 찾을 수 없습니다."));
-
-        if (accountRequests.getStatus() != AccountRequestsStatus.PENDING) {
-            throw new IllegalArgumentException("이미 승인되었거나 거부된 요청입니다.");
-        }
-
-        approveAndCreateUser(userDetails, accountRequests, Role.ENGINEER);
-    }
-
-    @Transactional
-    public void rejectEngineerAccount(CustomUserDetails userDetails, Long accountId, AccountRequestReject accountRequestReject) throws IllegalAccessException {
-        AccountRequests accountRequests = accountRequestsRepository.findById(accountId)
-                .orElseThrow(() -> new NoSuchElementException("요청 정보를 찾을 수 없습니다."));
-
-        if (accountRequests.getStatus() == AccountRequestsStatus.APPROVED) {
-            throw new IllegalAccessException("이미 등록 승인된 수리기사 계정입니다.");
-        } else if (accountRequests.getStatus() == AccountRequestsStatus.REJECTED) {
-            throw new IllegalAccessException("이미 등록 거부된 수리기사 계정입니다.");
-        }
-
-        User reviewer = userService.findById(userDetails.getUserId());
-        // 거부 처리 — 도메인 메서드로 더티 체킹
-        accountRequests.reject(reviewer, accountRequestReject.rejectReson());
-    }
-
-    private void approveAndCreateUser(CustomUserDetails userDetails, AccountRequests accountRequests, Role role) {
-
-        User user = User.builder().agency(accountRequests.getAgency())
+        User user = User.builder()
+                .agency(accountRequests.getAgency())
                 .name(accountRequests.getName())
                 .email(accountRequests.getEmail())
                 .passwordHash(accountRequests.getPassword()) // 요청 저장 시점에 이미 해싱됨

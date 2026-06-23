@@ -29,9 +29,10 @@ public class AgenciesService {
     private final PasswordEncoder passwordEncoder;
 
     @Transactional(readOnly = true)
-    public Agencies findByAgencyName(String agencyame) {
-        return agenciesRepository.findByAgencyName(agencyame)
-                .orElseThrow(() -> new NoSuchElementException("해당 대행사 정보를 찾을 수 없습니다.")); // 비즈니스 관점 에러처리
+    public Agencies findByAgencyName(String agencyName) {
+        // PENDING·REJECTED 상태의 대행사는 조회 대상에서 제외 — 수리기사 및 대행사 계정 요청 흐름에서 잘못된 대행사 선택 방지
+        return agenciesRepository.findByAgencyNameAndApprovalStatus(agencyName, AgencyStatus.APPROVED)
+                .orElseThrow(() -> new NoSuchElementException("해당 대행사 정보를 찾을 수 없습니다."));
     }
 
     @Transactional

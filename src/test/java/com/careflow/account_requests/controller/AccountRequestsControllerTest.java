@@ -1,7 +1,9 @@
 package com.careflow.account_requests.controller;
 
+import com.careflow.account_requests.controller.AgencyAccountRequestController;
 import com.careflow.account_requests.dto.AccountRequestReject;
 import com.careflow.account_requests.service.AccountRequestsService;
+import com.careflow.account_requests.service.AgencyAccountRequestService;
 import com.careflow.agency.service.AgenciesService;
 import com.careflow.auth.security.CustomOAuth2UserService;
 import com.careflow.auth.security.CustomUserDetails;
@@ -38,9 +40,9 @@ import static org.mockito.BDDMockito.willThrow;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(AccountRequestsController.class)
+@WebMvcTest(AgencyAccountRequestController.class)
 @Import({SecurityConfig.class, PasswordEncoderConfig.class})
-@DisplayName("AccountRequestsController 테스트")
+@DisplayName("AgencyAccountRequestController 테스트")
 class AccountRequestsControllerTest {
 
     @Autowired
@@ -49,6 +51,8 @@ class AccountRequestsControllerTest {
     @Autowired
     private ObjectMapper objectMapper;
 
+    @MockitoBean
+    private AgencyAccountRequestService agencyAccountRequestService;
     @MockitoBean
     private AccountRequestsService accountRequestsService;
     @MockitoBean
@@ -99,7 +103,7 @@ class AccountRequestsControllerTest {
         @Test
         @DisplayName("성공: ADMIN이 슈퍼 계정 요청 승인 — 204 No Content 반환")
         void approve_byAdmin_success() throws Exception {
-            willDoNothing().given(accountRequestsService)
+            willDoNothing().given(agencyAccountRequestService)
                     .approveAgencyAccount(any(CustomUserDetails.class), eq(1L));
 
             mockMvc.perform(post("/api/account-requests/agency/approval")
@@ -111,7 +115,7 @@ class AccountRequestsControllerTest {
         @Test
         @DisplayName("성공: AGENCY 슈퍼 계정이 자기 대행사 일반 관리자 요청 승인 — 204 No Content 반환")
         void approve_byAgencySuper_success() throws Exception {
-            willDoNothing().given(accountRequestsService)
+            willDoNothing().given(agencyAccountRequestService)
                     .approveAgencyAccount(any(CustomUserDetails.class), eq(2L));
 
             mockMvc.perform(post("/api/account-requests/agency/approval")
@@ -133,7 +137,7 @@ class AccountRequestsControllerTest {
         @DisplayName("실패: AGENCY가 다른 대행사 요청 승인 시도 — 401 Unauthorized 반환")
         void approve_byOtherAgency_401() throws Exception {
             willThrow(new IllegalAccessException("자신이 소속된 대행사의 요청만 승인할 수 있습니다."))
-                    .given(accountRequestsService)
+                    .given(agencyAccountRequestService)
                     .approveAgencyAccount(any(CustomUserDetails.class), eq(99L));
 
             mockMvc.perform(post("/api/account-requests/agency/approval")
@@ -146,7 +150,7 @@ class AccountRequestsControllerTest {
         @DisplayName("실패: AGENCY가 슈퍼 계정 요청(PENDING 대행사) 승인 시도 — 401 Unauthorized 반환")
         void approve_agencyTriesSuperRequest_401() throws Exception {
             willThrow(new IllegalAccessException("슈퍼 계정 요청은 CareFlow 관리자만 승인할 수 있습니다."))
-                    .given(accountRequestsService)
+                    .given(agencyAccountRequestService)
                     .approveAgencyAccount(any(CustomUserDetails.class), eq(5L));
 
             mockMvc.perform(post("/api/account-requests/agency/approval")
@@ -159,7 +163,7 @@ class AccountRequestsControllerTest {
         @DisplayName("실패: 존재하지 않는 요청 ID — 404 Not Found 반환")
         void approve_notFound_404() throws Exception {
             willThrow(new NoSuchElementException("요청 정보를 찾을 수 없습니다."))
-                    .given(accountRequestsService)
+                    .given(agencyAccountRequestService)
                     .approveAgencyAccount(any(CustomUserDetails.class), eq(999L));
 
             mockMvc.perform(post("/api/account-requests/agency/approval")
@@ -172,7 +176,7 @@ class AccountRequestsControllerTest {
         @DisplayName("실패: 이미 처리된 요청 승인 시도 — 400 Bad Request 반환")
         void approve_alreadyProcessed_400() throws Exception {
             willThrow(new IllegalArgumentException("이미 승인되었거나 거부된 요청입니다."))
-                    .given(accountRequestsService)
+                    .given(agencyAccountRequestService)
                     .approveAgencyAccount(any(CustomUserDetails.class), eq(1L));
 
             mockMvc.perform(post("/api/account-requests/agency/approval")
@@ -209,7 +213,7 @@ class AccountRequestsControllerTest {
         @Test
         @DisplayName("성공: ADMIN이 슈퍼 계정 요청 거부 — 204 No Content 반환")
         void reject_byAdmin_success() throws Exception {
-            willDoNothing().given(accountRequestsService)
+            willDoNothing().given(agencyAccountRequestService)
                     .rejectAgencyAccount(any(CustomUserDetails.class), eq(1L), any(AccountRequestReject.class));
 
             mockMvc.perform(post("/api/account-requests/agency/rejection")
@@ -223,7 +227,7 @@ class AccountRequestsControllerTest {
         @Test
         @DisplayName("성공: AGENCY 슈퍼 계정이 자기 대행사 일반 관리자 요청 거부 — 204 No Content 반환")
         void reject_byAgencySuper_success() throws Exception {
-            willDoNothing().given(accountRequestsService)
+            willDoNothing().given(agencyAccountRequestService)
                     .rejectAgencyAccount(any(CustomUserDetails.class), eq(2L), any(AccountRequestReject.class));
 
             mockMvc.perform(post("/api/account-requests/agency/rejection")
@@ -249,7 +253,7 @@ class AccountRequestsControllerTest {
         @DisplayName("실패: 존재하지 않는 요청 ID 거부 — 404 Not Found 반환")
         void reject_notFound_404() throws Exception {
             willThrow(new NoSuchElementException("요청 정보를 찾을 수 없습니다."))
-                    .given(accountRequestsService)
+                    .given(agencyAccountRequestService)
                     .rejectAgencyAccount(any(CustomUserDetails.class), eq(999L), any(AccountRequestReject.class));
 
             mockMvc.perform(post("/api/account-requests/agency/rejection")
@@ -264,7 +268,7 @@ class AccountRequestsControllerTest {
         @DisplayName("실패: 이미 승인된 요청 거부 시도 — 401 Unauthorized 반환")
         void reject_alreadyApproved_401() throws Exception {
             willThrow(new IllegalAccessException("이미 등록 승인된 대행사 입니다."))
-                    .given(accountRequestsService)
+                    .given(agencyAccountRequestService)
                     .rejectAgencyAccount(any(CustomUserDetails.class), eq(1L), any(AccountRequestReject.class));
 
             mockMvc.perform(post("/api/account-requests/agency/rejection")
@@ -279,7 +283,7 @@ class AccountRequestsControllerTest {
         @DisplayName("실패: 이미 거부된 요청 재거부 시도 — 401 Unauthorized 반환")
         void reject_alreadyRejected_401() throws Exception {
             willThrow(new IllegalAccessException("이미 등록 거부된 대행사 입니다."))
-                    .given(accountRequestsService)
+                    .given(agencyAccountRequestService)
                     .rejectAgencyAccount(any(CustomUserDetails.class), eq(1L), any(AccountRequestReject.class));
 
             mockMvc.perform(post("/api/account-requests/agency/rejection")
