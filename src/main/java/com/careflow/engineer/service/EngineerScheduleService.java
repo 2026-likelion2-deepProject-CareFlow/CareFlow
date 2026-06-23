@@ -37,14 +37,14 @@ public class EngineerScheduleService {
             throw new IllegalArgumentException("기사 권한만 등록 가능합니다.");
         }
 
-        EngineerProfile profile = engineerProfileRepository.findByUser_UserId(userId)
+        EngineerProfile profile = engineerProfileRepository.findByUser_Id(userId)
                 .orElseThrow(() -> new IllegalArgumentException("프로필 정보가 존재하지 않습니다."));
 
         if (profile.getCategory() == null) {
             throw new IllegalArgumentException("전문 분야 카테고리 등 프로필 필수 정보를 먼저 완성해주세요.");
         }
 
-        if (engineerScheduleRepository.existsByUser_UserIdAndWorkDate(userId, request.getWorkDate())) {
+        if (engineerScheduleRepository.existsByUser_IdAndWorkDate(userId, request.getWorkDate())) {
             throw new IllegalArgumentException("해당 날짜에 이미 근무표가 존재합니다.");
         }
 

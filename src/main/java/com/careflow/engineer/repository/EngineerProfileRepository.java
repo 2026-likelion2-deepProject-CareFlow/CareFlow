@@ -8,6 +8,6 @@ import java.util.Optional;
 
 @Repository
 public interface EngineerProfileRepository extends JpaRepository<EngineerProfile, Long> {
-    boolean existsByUser_UserId(Long userId);   // 중복 가입 로직
-    Optional<EngineerProfile> findByUser_UserId(Long userId);
+    boolean existsByUser_Id(Long userId);   // 중복 가입 로직
+    Optional<EngineerProfile> findByUser_Id(Long userId);
 }

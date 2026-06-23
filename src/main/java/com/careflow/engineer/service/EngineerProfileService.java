@@ -49,7 +49,7 @@ public class EngineerProfileService {
             throw new IllegalArgumentException("수리기사 권한 가진 계정만 프로필을 생성할 수 있습니다.");
         }
 
-        EngineerProfile profile = profileRepository.findByUser_UserId(userId)
+        EngineerProfile profile = profileRepository.findByUser_Id(userId)
                 .orElseThrow(() -> new IllegalArgumentException("대행사 승인이 완료되지 않은 기사입니다."));
 
         if(profile.getCategory() != null && profile.getCareerStartedYear() != null){

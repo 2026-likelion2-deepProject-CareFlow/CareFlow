@@ -1,0 +1,25 @@
+spring:
+  datasource:
+    # H2 인메모리 DB 연결 주소 (테스트 데이터 격리를 위해 매번 새로 생성)
+    url: jdbc:h2:mem:testdb;MODE=MySQL;DB_CLOSE_DELAY=-1
+    driver-class-name: org.h2.Driver
+    username: sa
+    password:
+
+  jpa:
+    hibernate:
+      # 테스트 실행 시마다 테이블을 새로 생성하고 종료 시 드롭
+      ddl-auto: create-drop
+    properties:
+      hibernate:
+        # 실행되는 SQL 쿼리를 콘솔에 예쁘게 출력
+        show_sql: true
+        format_sql: true
+        # 쿼리 내의 바인딩 파라미터 값(? 표시)을 확인하기 위한 설정
+        use_sql_comments: true
+
+# SQL 로그 레벨 상세 설정 (파라미터 값 로깅)
+logging:
+  level:
+    org.hibernate.SQL: debug
+    org.hibernate.orm.jdbc.bind: trace
