@@ -1,5 +1,6 @@
 package com.careflow.engineer.controller;
 
+import com.careflow.auth.security.CustomUserDetails;
 import com.careflow.engineer.dto.ScheduleRequest;
 import com.careflow.engineer.dto.ScheduleResponse;
 import com.careflow.engineer.service.EngineerScheduleService;
@@ -21,10 +22,10 @@ public class EngineerScheduleController {
 
     @PostMapping
     public ResponseEntity<ScheduleResponse> createSchedule( // 근무표 등록
-            @AuthenticationPrincipal Long userId,
+            @AuthenticationPrincipal CustomUserDetails userDetails,
             @RequestBody @Valid ScheduleRequest request) {
 
-        ScheduleResponse response = scheduleService.createSchedule(userId, request);
+        ScheduleResponse response = scheduleService.createSchedule(userDetails.getUserId(), request);
 
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
