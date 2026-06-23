@@ -1,20 +1,32 @@
 package com.careflow.engineer.service;
 
+import com.careflow.account_requests.entity.AccountRequests;
+import com.careflow.account_requests.repository.AccountRequestsRepository;
+import com.careflow.agency.entity.Agencies;
+import com.careflow.agency.repository.AgenciesRepository;
+import com.careflow.common.enums.AccountRequestsRole;
+import com.careflow.common.enums.AgencyStatus;
 import com.careflow.common.enums.Role;
 import com.careflow.engineer.domain.entity.ApplianceCategory;
 import com.careflow.engineer.domain.entity.EngineerProfile;
 import com.careflow.engineer.domain.enums.SkillLevel;
 import com.careflow.engineer.dto.CreateProfileRequest;
+import com.careflow.engineer.dto.EngineerAccountRequest;
 import com.careflow.engineer.dto.ProfileResponse;
 import com.careflow.engineer.repository.ApplianceCategoryRepository;
 import com.careflow.engineer.repository.EngineerProfileRepository;
+import com.careflow.region.entity.Regions;
+import com.careflow.region.repository.RegionRepository;
 import com.careflow.user.entity.User;
 import com.careflow.user.repository.UserRepository;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.NoSuchElementException;
 
 @Service
 @RequiredArgsConstructor
@@ -23,9 +35,13 @@ public class EngineerProfileService {
     private final EngineerProfileRepository profileRepository;
     private final UserRepository userRepository;
     private final ApplianceCategoryRepository categoryRepository;
+    private final AgenciesRepository agenciesRepository;
+    private final RegionRepository regionRepository;
+    private final AccountRequestsRepository accountRequestsRepository;
+    private final PasswordEncoder passwordEncoder;
 
     @Transactional
-    public ProfileResponse createProfile(Long userId, CreateProfileRequest request){    // 프로필 생성
+    public ProfileResponse updateProfile(Long userId, CreateProfileRequest request){    // 프로필 작성
         User user = userRepository.findById(userId) // 유저 조회
                 .orElseThrow(() -> new IllegalArgumentException("유저 정보가 존재하지 않습니다."));
 
@@ -33,8 +49,11 @@ public class EngineerProfileService {
             throw new IllegalArgumentException("수리기사 권한 가진 계정만 프로필을 생성할 수 있습니다.");
         }
 
-        if(profileRepository.existsByUser_UserId(userId)) { // 중복 가입 방지
-            throw new IllegalArgumentException("유저 프로필 정보가 이미 존재합니다.");
+        EngineerProfile profile = profileRepository.findByUser_UserId(userId)
+                .orElseThrow(() -> new IllegalArgumentException("대행사 승인이 완료되지 않은 기사입니다."));
+
+        if(profile.getCategory() != null && profile.getCareerStartedYear() != null){
+            throw new IllegalArgumentException("이미 프로필 등록을 완료한 기사입니다.");
         }
 
         // 카테고리 조회
@@ -49,20 +68,17 @@ public class EngineerProfileService {
         // 연차 및 등급 산정
         SkillLevel calculatedSkillLevel = calculateSkillLevel(request.getCareerStartedYear());
 
-        EngineerProfile newProfile = EngineerProfile.builder()
-                .user(user)
-                .category(category)
-                .careerStartedYear(request.getCareerStartedYear())
-                .skillLevel(calculatedSkillLevel)
-                .introduction(request.getIntroduction())
-                .build();
+        profile.completeProfile(category, request.getCareerStartedYear(), calculatedSkillLevel, request.getIntroduction());
 
-        EngineerProfile savedProfile = profileRepository.save(newProfile);
+        EngineerProfile savedProfile = profileRepository.save(profile);
 
         return ProfileResponse.from(savedProfile);
     }
 
-    private SkillLevel calculateSkillLevel(int careerStartedYear) { // 연차별 등급 산정
+    private SkillLevel calculateSkillLevel(Integer careerStartedYear) { // 연차별 등급 산정
+        if(careerStartedYear == null) {
+            throw new IllegalArgumentException("경력 시작 연도가 필요합니다.");
+        }
         int workYear = LocalDate.now().getYear() - careerStartedYear + 1;
 
         if (workYear <= 5) {

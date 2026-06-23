@@ -22,8 +22,9 @@ public class User {
     @Column(name = "user_id")
     private Long id;
 
-    @Column(name = "agency_id", nullable = true, unique = true)
-    private Long agencyId;
+    @OneToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "agency_id", nullable = true, unique = true)
+    private Agencies agency;
 
     @Column(nullable = false, unique = true, length = 100)
     private String email;
@@ -65,7 +66,7 @@ public class User {
 
     @Builder
     public User(String email, String passwordHash, String name, String phone,
-                Role role, Regions regionId, String addressDetail, Long agencyId) {
+                Role role, Regions regionId, String addressDetail, Agencies agency) {
         this.email = email;
         this.passwordHash = passwordHash;
         this.name = name;
@@ -76,7 +77,7 @@ public class User {
         this.status = "ACTIVE";
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
-        this.agencyId = agencyId;
+        this.agency = agency;
     }
 
     public void updateLastLogin() {
