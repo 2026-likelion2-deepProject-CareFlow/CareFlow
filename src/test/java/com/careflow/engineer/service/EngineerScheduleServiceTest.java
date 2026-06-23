@@ -35,104 +35,111 @@ class EngineerScheduleServiceTest {
     @InjectMocks
     private EngineerScheduleService engineerScheduleService;
 
-    @Mock
-    private EngineerScheduleRepository engineerScheduleRepository;
-    @Mock
-    private UserRepository userRepository;
-    @Mock
-    private EngineerProfileRepository engineerProfileRepository;
+    @Mock private EngineerScheduleRepository engineerScheduleRepository;
+    @Mock private UserRepository userRepository;
+    @Mock private EngineerProfileRepository engineerProfileRepository;
+
+    private static final Long USER_ID = 1L;
 
     @Test
-    @DisplayName("스케줄 등록 성공 (순서가 뒤섞여 와도 정상 정렬 및 저장)")
+    @DisplayName("성공: 슬롯 순서가 뒤섞여 와도 정상 정렬 후 저장")
     void createSchedule_Success() throws Exception {
         // Given
-        Long userId = 1L;
-        User user = User.builder().role(Role.ENGINEER).build();
-        ReflectionTestUtils.setField(user, "id", userId);
+        User user = engineer(USER_ID);
+        EngineerProfile completedProfile = completedProfile(user);
 
-        ApplianceCategory category = new ApplianceCategory();
-        ReflectionTestUtils.setField(category, "categoryId", 10);
-        ReflectionTestUtils.setField(category, "depth", 2);
+        ScheduleRequest request = newScheduleRequest(
+                LocalDate.now().plusDays(1),
+                List.of(slot("13:00", "15:00"), slot("09:00", "12:00")));
 
-        EngineerProfile completedProfile = EngineerProfile.builder()
-                .user(user).category(category).careerStartedYear(2020).skillLevel(SkillLevel.BEGINNER).build();
-
-        // 1. ScheduleRequest 생성 우회
-        Constructor<ScheduleRequest> reqConstructor = ScheduleRequest.class.getDeclaredConstructor();
-        reqConstructor.setAccessible(true);
-        ScheduleRequest request = reqConstructor.newInstance();
-        ReflectionTestUtils.setField(request, "workDate", LocalDate.now().plusDays(1));
-
-        // 2. TimeSlotDto 생성 우회
-        Constructor<ScheduleRequest.TimeSlotDto> slotConstructor = ScheduleRequest.TimeSlotDto.class.getDeclaredConstructor();
-        slotConstructor.setAccessible(true);
-
-        ScheduleRequest.TimeSlotDto slot1 = slotConstructor.newInstance();
-        ReflectionTestUtils.setField(slot1, "start", "13:00");
-        ReflectionTestUtils.setField(slot1, "end", "15:00");
-
-        ScheduleRequest.TimeSlotDto slot2 = slotConstructor.newInstance();
-        ReflectionTestUtils.setField(slot2, "start", "09:00");
-        ReflectionTestUtils.setField(slot2, "end", "12:00");
-
-        ReflectionTestUtils.setField(request, "timeSlots", List.of(slot1, slot2));
-
-        // 팀원이 수정한 메서드명 적용
-        given(userRepository.findById(1L)).willReturn(Optional.of(user));
-        given(engineerProfileRepository.findByUser_Id(1L)).willReturn(Optional.of(completedProfile));
-        given(engineerScheduleRepository.existsByUser_IdAndWorkDate(1L, request.getWorkDate())).willReturn(false);
-
+        given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
+        given(engineerProfileRepository.findByUser_Id(USER_ID)).willReturn(Optional.of(completedProfile));
+        given(engineerScheduleRepository.existsByUser_IdAndWorkDate(USER_ID, request.getWorkDate())).willReturn(false);
         given(engineerScheduleRepository.save(any(EngineerSchedule.class)))
                 .willAnswer(invocation -> invocation.getArgument(0));
 
         // When
-        ScheduleResponse response = engineerScheduleService.createSchedule(1L, request);
+        ScheduleResponse response = engineerScheduleService.createSchedule(USER_ID, request);
 
         // Then
         assertThat(response.getTimeSlots()).hasSize(2);
-        // 정렬이 잘 되었다면 첫 번째 슬롯은 09:00 이어야 함
-        assertThat(response.getTimeSlots().get(0).getStart()).isEqualTo("09:00");
+        assertThat(response.getTimeSlots().get(0).getStart()).isEqualTo("09:00"); // 정렬 검증
     }
 
     @Test
-    @DisplayName("실패: 시간대가 겹치는 경우 예외 발생")
+    @DisplayName("실패: 근무 시간대가 서로 겹침")
     void createSchedule_Fail_TimeOverlap() throws Exception {
         // Given
-        Long userId = 1L;
-        User user = User.builder().role(Role.ENGINEER).build();
-        ReflectionTestUtils.setField(user, "id", userId);
+        User user = engineer(USER_ID);
+        EngineerProfile completedProfile = completedProfile(user);
 
+        ScheduleRequest request = newScheduleRequest(
+                LocalDate.now().plusDays(1),
+                List.of(slot("09:00", "12:00"), slot("11:00", "14:00")));
+
+        given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
+        given(engineerProfileRepository.findByUser_Id(USER_ID)).willReturn(Optional.of(completedProfile));
+
+        // When & Then
+        assertThatThrownBy(() -> engineerScheduleService.createSchedule(USER_ID, request))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("근무 가능 시간이 서로 겹칠 수 없습니다.");
+    }
+
+    @Test
+    @DisplayName("실패: 프로필 미완성 상태에서 근무표 등록 시도")
+    void createSchedule_Fail_ProfileNotCompleted() throws Exception {
+        // Given
+        User user = engineer(USER_ID);
+        EngineerProfile emptyProfile = EngineerProfile.createInitial(user); // 카테고리·경력 미입력
+
+        ScheduleRequest request = newScheduleRequest(
+                LocalDate.now().plusDays(1),
+                List.of(slot("09:00", "12:00")));
+
+        given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
+        given(engineerProfileRepository.findByUser_Id(USER_ID)).willReturn(Optional.of(emptyProfile));
+
+        // When & Then
+        assertThatThrownBy(() -> engineerScheduleService.createSchedule(USER_ID, request))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("프로필 필수 정보를 먼저 완성");
+    }
+
+    // ---------- 픽스처 헬퍼 ----------
+
+    private User engineer(Long id) {
+        User user = User.builder().role(Role.ENGINEER).build();
+        ReflectionTestUtils.setField(user, "id", id);
+        return user;
+    }
+
+    private EngineerProfile completedProfile(User user) {
         ApplianceCategory category = new ApplianceCategory();
         ReflectionTestUtils.setField(category, "categoryId", 10);
         ReflectionTestUtils.setField(category, "depth", 2);
 
-        EngineerProfile completedProfile = EngineerProfile.builder()
-                .user(user).category(category).careerStartedYear(2020).skillLevel(SkillLevel.BEGINNER).build();
+        EngineerProfile profile = EngineerProfile.createInitial(user);
+        profile.completeProfile(category, 2020, SkillLevel.BEGINNER, null);
+        return profile;
+    }
 
-        Constructor<ScheduleRequest> reqConstructor = ScheduleRequest.class.getDeclaredConstructor();
-        reqConstructor.setAccessible(true);
-        ScheduleRequest request = reqConstructor.newInstance();
-        ReflectionTestUtils.setField(request, "workDate", LocalDate.now().plusDays(1));
+    private ScheduleRequest.TimeSlotDto slot(String start, String end) throws Exception {
+        Constructor<ScheduleRequest.TimeSlotDto> constructor =
+                ScheduleRequest.TimeSlotDto.class.getDeclaredConstructor();
+        constructor.setAccessible(true);
+        ScheduleRequest.TimeSlotDto slot = constructor.newInstance();
+        ReflectionTestUtils.setField(slot, "start", start);
+        ReflectionTestUtils.setField(slot, "end", end);
+        return slot;
+    }
 
-        Constructor<ScheduleRequest.TimeSlotDto> slotConstructor = ScheduleRequest.TimeSlotDto.class.getDeclaredConstructor();
-        slotConstructor.setAccessible(true);
-
-        ScheduleRequest.TimeSlotDto slot1 = slotConstructor.newInstance();
-        ReflectionTestUtils.setField(slot1, "start", "09:00");
-        ReflectionTestUtils.setField(slot1, "end", "12:00");
-
-        ScheduleRequest.TimeSlotDto slot2 = slotConstructor.newInstance();
-        ReflectionTestUtils.setField(slot2, "start", "11:00");
-        ReflectionTestUtils.setField(slot2, "end", "14:00");
-
-        ReflectionTestUtils.setField(request, "timeSlots", List.of(slot1, slot2));
-
-        given(userRepository.findById(1L)).willReturn(Optional.of(user));
-        given(engineerProfileRepository.findByUser_Id(1L)).willReturn(Optional.of(completedProfile));
-
-        // When & Then
-        assertThatThrownBy(() -> engineerScheduleService.createSchedule(1L, request))
-                .isInstanceOf(IllegalArgumentException.class)
-                .hasMessageContaining("근무 가능 시간이 서로 겹칠 수 없습니다.");
+    private ScheduleRequest newScheduleRequest(LocalDate workDate, List<ScheduleRequest.TimeSlotDto> slots) throws Exception {
+        Constructor<ScheduleRequest> constructor = ScheduleRequest.class.getDeclaredConstructor();
+        constructor.setAccessible(true);
+        ScheduleRequest request = constructor.newInstance();
+        ReflectionTestUtils.setField(request, "workDate", workDate);
+        ReflectionTestUtils.setField(request, "timeSlots", slots);
+        return request;
     }
 }
