@@ -42,7 +42,9 @@ public class AgenciesService {
 
         if (agencies != null) {
 
-            if (userRepository.existsByEmail(agencyCreateRequest.email())) {
+            // users 뿐 아니라 account_requests 에도 동일 이메일이 없어야 함 (unique 제약 선제 검증)
+            if (userRepository.existsByEmail(agencyCreateRequest.email())
+                    || accountRequestsRepository.existsByEmail(agencyCreateRequest.email())) {
                 throw new IllegalArgumentException("이미 가입된 이메일입니다.");
             }
 
@@ -71,7 +73,9 @@ public class AgenciesService {
             return accountRequestId;
 
         } else {
-            if (userRepository.existsByEmail(agencyCreateRequest.email())) {
+            // users 뿐 아니라 account_requests 에도 동일 이메일이 없어야 함 (unique 제약 선제 검증)
+            if (userRepository.existsByEmail(agencyCreateRequest.email())
+                    || accountRequestsRepository.existsByEmail(agencyCreateRequest.email())) {
                 throw new IllegalArgumentException("이미 가입된 이메일입니다.");
             }
             // 1. 대행사 정보 우선 저장(approval_status : PENDING)

@@ -1,10 +1,18 @@
+# 테스트용 H2 DB 설정
 spring:
   datasource:
     # H2 인메모리 DB 연결 주소 (테스트 데이터 격리를 위해 매번 새로 생성)
-    url: jdbc:h2:mem:testdb;MODE=MySQL;DB_CLOSE_DELAY=-1
+    url: jdbc:h2:mem:testdb;MODE=MySQL;DATABASE_TO_UPPER=false
     driver-class-name: org.h2.Driver
     username: sa
     password:
+    # 임의의 무작위 DB 이름 생성 비활성화
+    generate-unique-name: false
+
+  h2:
+    console:
+      enabled: true
+      path: /h2-console
 
   jpa:
     hibernate:
@@ -17,6 +25,16 @@ spring:
         format_sql: true
         # 쿼리 내의 바인딩 파라미터 값(? 표시)을 확인하기 위한 설정
         use_sql_comments: true
+        dialect: org.hibernate.dialect.H2Dialect
+  data:
+    redis:
+      host: localhost
+      port: 6379
+
+jwt:
+  secret: careflow-secret-key-32charslongenough!!
+  access-token-expiration: 1800000
+  refresh-token-expiration: 604800000
 
 # SQL 로그 레벨 상세 설정 (파라미터 값 로깅)
 logging:
