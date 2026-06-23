@@ -33,7 +33,9 @@ public class EngineerService {
         String businessNumber = request.businessNumber();
         Agencies agencies = agenciesRepository.findByBusinessNumber(businessNumber).orElseThrow(() -> new NoSuchElementException("입력받은 대행사 정보가 존재하지 않습니다."));
 
-        if (userRepository.existsByEmail(request.email())) {
+        // users 뿐 아니라 account_requests 에도 동일 이메일이 없어야 함 (unique 제약 선제 검증)
+        if (userRepository.existsByEmail(request.email())
+                || accountRequestsRepository.existsByEmail(request.email())) {
             throw new IllegalArgumentException("이미 가입된 이메일입니다.");
         }
 
