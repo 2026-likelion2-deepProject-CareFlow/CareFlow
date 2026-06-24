@@ -25,8 +25,6 @@ public class EngineerScheduleSlot {
     private Long slotId;
 
     @ManyToOne(fetch = FetchType.LAZY)
-    // H2 2.x 에서 IDENTITY PK 컬럼으로의 FK 타입 호환 문제(NOT NULL 컬럼 한정) 우회
-    // DB 레벨 FK 선언을 생략하되, NOT NULL + JPA 관계는 그대로 유지됨
     @JoinColumn(name = "schedule_id", nullable = false,
             foreignKey = @ForeignKey(ConstraintMode.NO_CONSTRAINT))
     private EngineerSchedule schedule;
