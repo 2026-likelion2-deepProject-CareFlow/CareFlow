@@ -8,5 +8,6 @@ import java.util.List;
 
 @Repository
 public interface AsRequestRepository extends JpaRepository<AsRequest, Long> {
-    List<AsRequest> findByCustomerIdOrderByIdDesc(Long customerId);
+    // customer 연관관계 객체의 id(user_id)로 조회
+    List<AsRequest> findByCustomer_IdOrderByIdDesc(Long customerId);
 }

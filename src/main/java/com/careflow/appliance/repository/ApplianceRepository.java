@@ -2,6 +2,7 @@ package com.careflow.appliance.repository;
 
 import com.careflow.appliance.entity.Appliance;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
 
 import java.util.List;
 import java.util.Optional;
@@ -13,4 +14,6 @@ public interface ApplianceRepository extends JpaRepository<Appliance, Long> {
 
     // 삭제되지 않은 단건 조회 (상세 조회 시 사용)
     Optional<Appliance> findByIdAndDeletedAtIsNull(Long id);
+
+    List<Appliance> findByUser_IdOrderByIdDesc(Long ownerId);
 }

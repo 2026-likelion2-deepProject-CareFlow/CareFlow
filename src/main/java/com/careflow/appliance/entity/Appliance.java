@@ -24,10 +24,12 @@ public class Appliance {
     @Column(name = "appliance_id")
     private Long id;
 
+    // 소유 고객 (users.user_id FK)
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
+    // 가전 카테고리 소분류 (appliance_categories.category_id FK)
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "category_id", nullable = false)
     private ApplianceCategory category;
@@ -35,7 +37,7 @@ public class Appliance {
     @Column(name = "brand", nullable = false, length = 50)
     private String brand;
 
-    @Column(name = "model_name", length = 100)
+    @Column(name = "model_name", nullable = false, length = 100)
     private String modelName;
 
     @Column(name = "serial_number", length = 100)
@@ -47,16 +49,22 @@ public class Appliance {
     @Column(name = "warranty_end_date")
     private LocalDate warrantyEndDate;
 
+    // columnDefinition 삭제하지 말아주세요(H2 DB 테스트에 필요)
     @Enumerated(EnumType.STRING)
     @Column(name = "register_method", nullable = false, length = 10,
             columnDefinition = "ENUM('MANUAL','OCR') DEFAULT 'MANUAL'")
     private RegisterMethod registerMethod;
 
+    @Column(name = "image_url", length = 500)
+    private String imageUrl;
+
+    // columnDefinition 삭제하지 말아주세요(H2 DB 테스트에 필요)
     @Enumerated(EnumType.STRING)
     @Column(name = "status", nullable = false, length = 15,
             columnDefinition = "ENUM('NORMAL','NEED_REPAIR','SOLD') DEFAULT 'NORMAL'")
     private ApplianceStatus status;
 
+    // columnDefinition 삭제하지 말아주세요(H2 DB 테스트에 필요)
     @Column(name = "created_at", nullable = false, updatable = false,
             columnDefinition = "DATETIME DEFAULT CURRENT_TIMESTAMP")
     private LocalDateTime createdAt;
@@ -72,7 +80,7 @@ public class Appliance {
     @Builder
     public Appliance(User user, ApplianceCategory category, String brand, String modelName,
                      String serialNumber, LocalDate purchaseDate, LocalDate warrantyEndDate,
-                     RegisterMethod registerMethod) {
+                     RegisterMethod registerMethod, String imageUrl) {
         this.user = user;
         this.category = category;
         this.brand = brand;
@@ -81,6 +89,7 @@ public class Appliance {
         this.purchaseDate = purchaseDate;
         this.warrantyEndDate = warrantyEndDate;
         this.registerMethod = registerMethod != null ? registerMethod : RegisterMethod.MANUAL;
+        this.imageUrl = imageUrl;
         this.status = ApplianceStatus.NORMAL;
         this.createdAt = LocalDateTime.now();
         this.updatedAt = LocalDateTime.now();
