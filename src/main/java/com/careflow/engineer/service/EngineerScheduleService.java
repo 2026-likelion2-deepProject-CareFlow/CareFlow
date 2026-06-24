@@ -15,6 +15,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.Comparator;
 import java.util.List;
@@ -97,5 +98,35 @@ public class EngineerScheduleService {
         }
 
         return parsedSlots;
+    }
+
+    @Transactional(readOnly = true)
+    public List<ScheduleResponse> getMonthlySchedules(Long userId, int year, int month) {   // 월간 내 근무 일정 조회
+        LocalDate startDate = LocalDate.of(year, month, 1);
+        LocalDate endDate = startDate.withDayOfMonth(startDate.lengthOfMonth());
+
+        List<EngineerSchedule> schedules = engineerScheduleRepository
+                .findByUser_IdAndWorkDateBetweenOrderByWorkDateAsc(userId, startDate, endDate);
+
+        return schedules.stream()
+                .map(ScheduleResponse::from)
+                .collect(Collectors.toList());
+    }
+
+    @Transactional
+    public void deleteSchedule(Long userId, Long scheduleId) {  // 스케줄 삭제 및 OFF 상태 처리
+        EngineerSchedule schedule = engineerScheduleRepository.findById(scheduleId)
+                .orElseThrow(() -> new IllegalArgumentException("해당 근무표를 찾을 수 없습니다."));
+
+        if (!schedule.getUser().getId().equals(userId)) {
+            throw new IllegalArgumentException("본인의 근무표만 삭제할 수 있습니다.");
+        }
+
+        if (schedule.getStatus() == ScheduleStatus.BOOKED) {
+            throw new IllegalStateException("이미 A/S가 배정된 근무표는 삭제할 수 없습니다. 대행사에 문의해주세요.");
+        }
+
+        schedule.changeScheduleStatus(ScheduleStatus.OFF);
+        schedule.getTimeSlots().clear();
     }
 }
