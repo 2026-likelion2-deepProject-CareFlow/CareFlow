@@ -4,6 +4,7 @@ import com.careflow.common.enums.Role;
 import com.careflow.engineer.domain.entity.ApplianceCategory;
 import com.careflow.engineer.domain.entity.EngineerProfile;
 import com.careflow.engineer.domain.entity.EngineerSchedule;
+import com.careflow.engineer.domain.enums.ScheduleStatus;
 import com.careflow.engineer.domain.enums.SkillLevel;
 import com.careflow.engineer.dto.ScheduleRequest;
 import com.careflow.engineer.dto.ScheduleResponse;
@@ -141,5 +142,74 @@ class EngineerScheduleServiceTest {
         ReflectionTestUtils.setField(request, "workDate", workDate);
         ReflectionTestUtils.setField(request, "timeSlots", slots);
         return request;
+    }
+
+    // ─────────────────────────────────────────────
+    //  조회 및 삭제 로직 테스트 (Vibe Coding)
+    // ─────────────────────────────────────────────
+
+    @Test
+    @DisplayName("성공: 월간 근무 일정 조회 (getMonthlySchedules)")
+    void getMonthlySchedules_Success() throws Exception {
+        // Given
+        User user = engineer(USER_ID);
+        EngineerSchedule schedule1 = EngineerSchedule.builder()
+                .user(user).workDate(LocalDate.of(2026, 6, 1)).status(ScheduleStatus.AVAILABLE).build();
+        EngineerSchedule schedule2 = EngineerSchedule.builder()
+                .user(user).workDate(LocalDate.of(2026, 6, 15)).status(ScheduleStatus.AVAILABLE).build();
+
+        LocalDate startDate = LocalDate.of(2026, 6, 1);
+        LocalDate endDate = LocalDate.of(2026, 6, 30);
+
+        given(engineerScheduleRepository.findByUser_IdAndWorkDateBetweenOrderByWorkDateAsc(USER_ID, startDate, endDate))
+                .willReturn(List.of(schedule1, schedule2));
+
+        // When
+        List<ScheduleResponse> responses = engineerScheduleService.getMonthlySchedules(USER_ID, 2026, 6);
+
+        // Then
+        assertThat(responses).hasSize(2);
+        assertThat(responses.get(0).getWorkDate()).isEqualTo(LocalDate.of(2026, 6, 1));
+        assertThat(responses.get(1).getWorkDate()).isEqualTo(LocalDate.of(2026, 6, 15));
+    }
+
+    @Test
+    @DisplayName("성공: 스케줄 삭제 및 OFF 상태 처리 (deleteSchedule)")
+    void deleteSchedule_Success() throws Exception {
+        // Given
+        User user = engineer(USER_ID);
+        EngineerSchedule schedule = EngineerSchedule.builder()
+                .user(user).workDate(LocalDate.now()).status(ScheduleStatus.AVAILABLE).build();
+        ReflectionTestUtils.setField(schedule, "scheduleId", 1L);
+
+        // 슬롯도 하나 추가해둠 (삭제 시 비워지는지 확인하기 위해)
+        schedule.addTimeSlot(com.careflow.engineer.domain.entity.EngineerScheduleSlot.builder()
+                .startTime(java.time.LocalTime.of(9, 0)).endTime(java.time.LocalTime.of(12, 0)).build());
+
+        given(engineerScheduleRepository.findById(1L)).willReturn(Optional.of(schedule));
+
+        // When
+        engineerScheduleService.deleteSchedule(USER_ID, 1L);
+
+        // Then
+        assertThat(schedule.getStatus()).isEqualTo(ScheduleStatus.OFF);
+        assertThat(schedule.getTimeSlots()).isEmpty(); // 슬롯이 싹 날아갔는지 검증!
+    }
+
+    @Test
+    @DisplayName("실패: 이미 배정(BOOKED)된 스케줄은 삭제 불가")
+    void deleteSchedule_Fail_Booked() throws Exception {
+        // Given
+        User user = engineer(USER_ID);
+        EngineerSchedule schedule = EngineerSchedule.builder()
+                .user(user).workDate(LocalDate.now()).status(ScheduleStatus.BOOKED).build(); // 상태를 BOOKED로 세팅
+        ReflectionTestUtils.setField(schedule, "scheduleId", 1L);
+
+        given(engineerScheduleRepository.findById(1L)).willReturn(Optional.of(schedule));
+
+        // When & Then
+        assertThatThrownBy(() -> engineerScheduleService.deleteSchedule(USER_ID, 1L))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("이미 A/S가 배정된 근무표");
     }
 }

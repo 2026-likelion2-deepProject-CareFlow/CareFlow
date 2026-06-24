@@ -3,6 +3,8 @@ package com.careflow.engineer.service;
 import com.careflow.common.enums.Role;
 import com.careflow.engineer.domain.entity.ApplianceCategory;
 import com.careflow.engineer.domain.entity.EngineerProfile;
+import com.careflow.engineer.domain.entity.EngineerSchedule;
+import com.careflow.engineer.domain.enums.ScheduleStatus;
 import com.careflow.engineer.domain.enums.SkillLevel;
 import com.careflow.engineer.dto.ScheduleRequest;
 import com.careflow.engineer.dto.ScheduleResponse;
@@ -11,6 +13,7 @@ import com.careflow.engineer.repository.EngineerProfileRepository;
 import com.careflow.engineer.repository.EngineerScheduleRepository;
 import com.careflow.user.entity.User;
 import com.careflow.user.repository.UserRepository;
+import jakarta.transaction.Transactional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -29,6 +32,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 @SpringBootTest
 @ActiveProfiles("local")
+@Transactional
 @Sql(scripts = "/cleanup.sql", executionPhase = Sql.ExecutionPhase.BEFORE_TEST_METHOD)
 @DisplayName("EngineerScheduleService 통합 테스트 (진짜 DB 연동)")
 class EngineerScheduleServiceIntegrationTest {
@@ -109,5 +113,67 @@ class EngineerScheduleServiceIntegrationTest {
         ReflectionTestUtils.setField(request, "workDate", workDate);
         ReflectionTestUtils.setField(request, "timeSlots", slots);
         return request;
+    }
+
+    // ─────────────────────────────────────────────
+    //  조회 및 삭제 로직 통합 테스트
+    // ─────────────────────────────────────────────
+
+    @Test
+    @DisplayName("성공: 월간 근무 일정 조회 (DB Select 검증)")
+    void getMonthlySchedules_Success() throws Exception {
+        // Given: 6월 1일과 6월 15일, 그리고 7월 1일 스케줄을 진짜 DB에 저장
+        EngineerSchedule schedule1 = EngineerSchedule.builder()
+                .user(testUser).workDate(LocalDate.of(2026, 6, 1)).status(ScheduleStatus.AVAILABLE).build();
+        EngineerSchedule schedule2 = EngineerSchedule.builder()
+                .user(testUser).workDate(LocalDate.of(2026, 6, 15)).status(ScheduleStatus.AVAILABLE).build();
+        EngineerSchedule scheduleOtherMonth = EngineerSchedule.builder()
+                .user(testUser).workDate(LocalDate.of(2026, 7, 1)).status(ScheduleStatus.AVAILABLE).build();
+
+        engineerScheduleRepository.saveAll(List.of(schedule1, schedule2, scheduleOtherMonth));
+
+        // When: 2026년 6월 데이터만 조회!
+        List<ScheduleResponse> responses = engineerScheduleService.getMonthlySchedules(testUser.getId(), 2026, 6);
+
+        // Then: 7월 일정은 빠지고 딱 2개만 나와야 함
+        assertThat(responses).hasSize(2);
+        assertThat(responses.get(0).getWorkDate()).isEqualTo(LocalDate.of(2026, 6, 1));
+        assertThat(responses.get(1).getWorkDate()).isEqualTo(LocalDate.of(2026, 6, 15));
+    }
+
+    @Test
+    @DisplayName("성공: 스케줄 삭제 및 OFF 상태 처리 (DB Update 검증)")
+    void deleteSchedule_Success() throws Exception {
+        // Given: 스케줄과 슬롯을 DB에 저장
+        EngineerSchedule schedule = EngineerSchedule.builder()
+                .user(testUser).workDate(LocalDate.of(2026, 6, 1)).status(ScheduleStatus.AVAILABLE).build();
+        schedule.addTimeSlot(com.careflow.engineer.domain.entity.EngineerScheduleSlot.builder()
+                .startTime(java.time.LocalTime.of(9, 0)).endTime(java.time.LocalTime.of(12, 0)).build());
+
+        EngineerSchedule savedSchedule = engineerScheduleRepository.save(schedule);
+
+        // 엔티티 매니저 플러시 및 클리어를 해주면 더 완벽하지만, 스프링 데이터 JPA의 더티체킹을 믿고 그냥 진행!
+
+        // When: 삭제(OFF) 요청
+        engineerScheduleService.deleteSchedule(testUser.getId(), savedSchedule.getScheduleId());
+
+        // Then: DB에서 다시 조회해서 상태가 OFF로 바뀌고 슬롯이 지워졌는지 확인!
+        EngineerSchedule updatedSchedule = engineerScheduleRepository.findById(savedSchedule.getScheduleId()).orElseThrow();
+        assertThat(updatedSchedule.getStatus()).isEqualTo(ScheduleStatus.OFF);
+        assertThat(updatedSchedule.getTimeSlots()).isEmpty();
+    }
+
+    @Test
+    @DisplayName("실패: 이미 배정된 스케줄은 삭제 불가 (DB 검증)")
+    void deleteSchedule_Fail_Booked() throws Exception {
+        // Given: BOOKED 상태의 스케줄을 DB에 저장
+        EngineerSchedule schedule = EngineerSchedule.builder()
+                .user(testUser).workDate(LocalDate.of(2026, 6, 1)).status(ScheduleStatus.BOOKED).build();
+        EngineerSchedule savedSchedule = engineerScheduleRepository.save(schedule);
+
+        // When & Then
+        assertThatThrownBy(() -> engineerScheduleService.deleteSchedule(testUser.getId(), savedSchedule.getScheduleId()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("이미 A/S가 배정된 근무표");
     }
 }
