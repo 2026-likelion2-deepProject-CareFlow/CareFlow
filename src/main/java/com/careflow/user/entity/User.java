@@ -22,8 +22,8 @@ public class User {
     @Column(name = "user_id")
     private Long id;
 
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "agency_id", nullable = true, unique = true)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "agency_id", nullable = true)
     private Agencies agency;
 
     @Column(nullable = false, unique = true, length = 100)
@@ -45,8 +45,8 @@ public class User {
     @Column(length = 20, nullable = false)
     private String status; // ACTIVE / INACTIVE / SUSPENDED
 
-    @OneToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "region_id", nullable = true, unique = true)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "region_id", nullable = true)
     private Regions regionId;
 
     @Column(name = "address_detail", length = 100)
