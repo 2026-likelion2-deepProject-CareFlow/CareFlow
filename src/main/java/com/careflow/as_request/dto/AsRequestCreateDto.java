@@ -1,5 +1,6 @@
 package com.careflow.as_request.dto;
 
+import com.careflow.common.enums.AssignType;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
 import lombok.Getter;
@@ -14,12 +15,17 @@ public class AsRequestCreateDto {
     @NotNull(message = "가전제품 선택은 필수입니다.")
     private Long applianceId;
 
-    @NotBlank(message = "증상 코드는 필수입니다.")
-    private String symptomCode;
+    // v5 스키마: symptom_code VARCHAR → symptoms 테이블 FK(symptom_id)로 변경
+    @NotNull(message = "증상 선택은 필수입니다.")
+    private Long symptomId;
 
     private String symptomDesc;
 
     private String imageUrls; // JSON 문자열 (사진 URL 목록)
+
+    // AUTO: 시스템 자동 배정, MANUAL: 고객이 수리 기사 직접 지정
+    @NotNull(message = "배정 방식 선택은 필수입니다.")
+    private AssignType assignType;
 
     @NotNull(message = "방문 지역 선택은 필수입니다.")
     private Integer visitRegionId;

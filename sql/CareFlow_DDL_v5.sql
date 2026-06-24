@@ -1,0 +1,674 @@
+-- ============================================================
+-- CareFlow DDL v5
+-- DB명세서 v19 기준 / 모든 FK를 CREATE TABLE 내부 CONSTRAINT로 정의
+--
+-- ※ 유일한 예외: users ↔ agencies 순환참조
+--   agencies.representative_user_id → users (users가 먼저 생성되어야 함)
+--   users.agency_id                 → agencies (agencies가 먼저 생성되어야 함)
+--   → agencies 먼저 CREATE (representative_user_id FK 제외)
+--   → users CREATE (agency_id FK 포함)
+--   → 파일 맨 마지막에 ALTER 1개로 agencies FK 후처리
+--
+-- ※ 초기 데이터 INSERT 시 순환참조로 인해
+--   SET FOREIGN_KEY_CHECKS = 0; 후 삽입, 완료 후 SET FOREIGN_KEY_CHECKS = 1;
+-- ============================================================
+
+DROP DATABASE IF EXISTS careflow;
+CREATE DATABASE careflow DEFAULT CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
+USE careflow;
+
+-- ============================================================
+-- 1. regions
+-- ============================================================
+CREATE TABLE `regions` (
+    `region_id`  INT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT '지역 ID',
+    `parent_id`  INT UNSIGNED NULL     DEFAULT NULL              COMMENT '상위 지역 ID (NULL=시·도 단위, 자기참조)',
+    `name`       VARCHAR(50)  NOT NULL                           COMMENT '지역명 (서울특별시 / 강남구 등)',
+    `depth`      TINYINT      NOT NULL DEFAULT 1                 COMMENT '계층 깊이 (1=시·도, 2=구·시)',
+    `sort_order` INT          NOT NULL DEFAULT 0                 COMMENT '정렬 순서',
+
+    CONSTRAINT FK_regions_self
+        FOREIGN KEY (`parent_id`) REFERENCES `regions` (`region_id`),
+
+    INDEX idx_region_parent (parent_id)
+);
+
+-- ============================================================
+-- 2. appliance_categories
+-- ============================================================
+CREATE TABLE `appliance_categories` (
+    `category_id` INT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT '카테고리 고유 ID',
+    `parent_id`   INT UNSIGNED NULL     DEFAULT NULL              COMMENT '상위 카테고리 ID (NULL=대분류, 자기참조)',
+    `name`        VARCHAR(50)  NOT NULL                           COMMENT '카테고리명',
+    `depth`       TINYINT      NOT NULL DEFAULT 1                 COMMENT '계층 깊이 (1=대분류, 2=소분류)',
+    `sort_order`  INT          NOT NULL DEFAULT 0                 COMMENT '정렬 순서',
+
+    CONSTRAINT FK_appliance_categories_self
+        FOREIGN KEY (`parent_id`) REFERENCES `appliance_categories` (`category_id`),
+
+    UNIQUE uk_category_name   (name),
+    INDEX  idx_category_parent (parent_id)
+);
+
+-- ============================================================
+-- 3. agencies
+-- ※ representative_user_id FK는 users 생성 후 파일 맨 끝 ALTER로 처리
+-- ============================================================
+CREATE TABLE `agencies` (
+    `agency_id`              BIGINT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT '대행사 고유 ID',
+    `representative_user_id` BIGINT UNSIGNED NOT NULL                            COMMENT '대표 슈퍼계정 user_id (1:1 UNIQUE) — FK는 파일 하단 ALTER로 추가',
+    `name`                   VARCHAR(100)    NOT NULL                            COMMENT '대행사 상호명',
+    `business_number`        VARCHAR(20)     NOT NULL                            COMMENT '사업자등록번호',
+    `address`                VARCHAR(255)    NULL     DEFAULT NULL               COMMENT '소재지 주소',
+    `agency_fee_rate`        DECIMAL(5,2)    NOT NULL DEFAULT 0.00               COMMENT '대행사 기사 수수료율(%) — settlements 산정 기준',
+    `approval_status`        ENUM('PENDING','APPROVED','REJECTED') NOT NULL DEFAULT 'PENDING' COMMENT '승인 상태',
+    `approved_at`            DATETIME        NULL     DEFAULT NULL               COMMENT '승인 처리 일시',
+    `approved_by`            BIGINT UNSIGNED NULL     DEFAULT NULL               COMMENT '승인한 관리자 user_id',
+    `created_at`             DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT '등록일',
+    `updated_at`             DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '수정일',
+
+    -- approved_by FK는 users 생성 후이므로 여기서 선언 불가 → 하단 ALTER로 처리
+    UNIQUE uk_agencies_biz_no  (business_number),
+    UNIQUE uk_agencies_rep_user (representative_user_id),
+    INDEX  idx_agencies_status  (approval_status)
+);
+
+-- ============================================================
+-- 4. users
+-- ============================================================
+CREATE TABLE `users` (
+    `user_id`        BIGINT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT '사용자 고유 ID',
+    `agency_id`      BIGINT UNSIGNED NULL     DEFAULT NULL               COMMENT '소속 대행사 ID (ENGINEER·AGENCY 역할 사용)',
+    `email`          VARCHAR(100)    NOT NULL                            COMMENT '로그인 이메일',
+    `password_hash`  VARCHAR(255)    NULL     DEFAULT NULL               COMMENT '비밀번호 해시 (소셜 로그인 시 NULL)',
+    `name`           VARCHAR(50)     NOT NULL                            COMMENT '이름',
+    `phone`          VARCHAR(20)     NULL     DEFAULT NULL               COMMENT '연락처',
+    `role`           ENUM('CUSTOMER','ENGINEER','AGENCY','ADMIN') NOT NULL DEFAULT 'CUSTOMER' COMMENT '역할 구분',
+    `region_id`      INT UNSIGNED    NULL     DEFAULT NULL               COMMENT '거주 지역 ID (regions depth=2). CUSTOMER·ENGINEER 입력. AGENCY·ADMIN은 NULL.',
+    `address_detail` VARCHAR(100)    NULL     DEFAULT NULL               COMMENT '상세 주소 (동·호수 등). CUSTOMER·ENGINEER 입력. AGENCY·ADMIN은 NULL.',
+    `status`         ENUM('ACTIVE','INACTIVE','SUSPENDED') NOT NULL DEFAULT 'ACTIVE' COMMENT '계정 상태',
+    `last_login_at`  DATETIME        NULL     DEFAULT NULL               COMMENT '최근 로그인 일시',
+    `created_at`     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT '가입일',
+    `updated_at`     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '수정일',
+    `deleted_at`     DATETIME        NULL     DEFAULT NULL               COMMENT '논리 삭제일',
+
+    CONSTRAINT FK_agencies_TO_users
+        FOREIGN KEY (`agency_id`) REFERENCES `agencies` (`agency_id`),
+    CONSTRAINT FK_regions_TO_users
+        FOREIGN KEY (`region_id`) REFERENCES `regions` (`region_id`),
+
+    UNIQUE uk_users_email   (email),
+    INDEX  idx_users_role   (role),
+    INDEX  idx_users_agency (agency_id),
+    INDEX  idx_users_status (status),
+    INDEX  idx_users_region (region_id)
+);
+
+-- ============================================================
+-- 5. account_requests
+-- ============================================================
+CREATE TABLE `account_requests` (
+    `account_request_id` BIGINT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT '요청 ID',
+    `agency_id`          BIGINT UNSIGNED NOT NULL                            COMMENT '가입 신청 대상 대행사 ID',
+    `requested_role`     ENUM('AGENCY','ENGINEER') NOT NULL                  COMMENT '신청 역할 구분 — AGENCY=담당자, ENGINEER=기사',
+    `email`              VARCHAR(100)    NOT NULL                            COMMENT '신청자 이메일 → APPROVED 시 users.email로 이관',
+    `password_hash`      VARCHAR(255)    NOT NULL                            COMMENT '비밀번호 해시 → APPROVED 시 users.password_hash로 이관',
+    `name`               VARCHAR(50)     NOT NULL                            COMMENT '신청자 이름 → APPROVED 시 users.name으로 이관',
+    `phone`              VARCHAR(20)     NULL     DEFAULT NULL               COMMENT '연락처 → APPROVED 시 users.phone으로 이관',
+    `region_id`          INT UNSIGNED    NULL     DEFAULT NULL               COMMENT '거주 지역 ID (regions depth=2) → APPROVED 시 users.region_id로 이관',
+    `address_detail`     VARCHAR(100)    NULL     DEFAULT NULL               COMMENT '상세 주소 → APPROVED 시 users.address_detail로 이관',
+    `status`             ENUM('PENDING','APPROVED','REJECTED') NOT NULL DEFAULT 'PENDING' COMMENT '처리 상태',
+    `reviewed_by`        BIGINT UNSIGNED NULL                                COMMENT '처리한 슈퍼계정 user_id (agencies.representative_user_id)',
+    `reviewed_at`        DATETIME        NULL     DEFAULT NULL               COMMENT '처리 일시',
+    `reject_reason`      VARCHAR(255)    NULL     DEFAULT NULL               COMMENT '거절 사유 (REJECTED 시 입력)',
+    `created_user_id`    BIGINT UNSIGNED NULL     DEFAULT NULL               COMMENT 'APPROVED 후 생성된 users.user_id',
+    `created_at`         DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT '신청일',
+    `updated_at`         DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '수정일',
+
+    CONSTRAINT FK_agencies_TO_account_requests
+        FOREIGN KEY (`agency_id`) REFERENCES `agencies` (`agency_id`),
+    CONSTRAINT FK_regions_TO_account_requests
+        FOREIGN KEY (`region_id`) REFERENCES `regions` (`region_id`),
+    CONSTRAINT FK_users_TO_account_requests_reviewed_by
+        FOREIGN KEY (`reviewed_by`) REFERENCES `users` (`user_id`),
+    CONSTRAINT FK_users_TO_account_requests_created_user
+        FOREIGN KEY (`created_user_id`) REFERENCES `users` (`user_id`),
+
+    INDEX idx_acc_req_agency_status (agency_id, status),
+    INDEX idx_acc_req_role_status   (requested_role, status),
+    INDEX idx_acc_req_email         (email)
+);
+
+-- ============================================================
+-- 6. engineer_profiles
+-- ============================================================
+CREATE TABLE `engineer_profiles` (
+    `profile_id`          BIGINT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT '프로필 ID',
+    `user_id`             BIGINT UNSIGNED NOT NULL                            COMMENT '기사 user_id (users.user_id 참조, 1:1)',
+    `category_id`         INT UNSIGNED    NULL                                COMMENT '전문 가전 카테고리 ID (appliance_categories depth=2 소분류만). 기사당 1개. 첫 로그인 전 NULL.',
+    `career_started_year` YEAR            NULL                                COMMENT '경력 시작 연도 — skill_level 산정 기준',
+    `skill_level`         ENUM('BEGINNER','INTERMEDIATE','ADVANCED') NOT NULL DEFAULT 'BEGINNER' COMMENT '기술 등급 (career_started_year 기반 자동 산정)',
+    `is_lms_completed`    TINYINT(1)      NOT NULL DEFAULT 0                  COMMENT '당해 연도 필수 교육 이수 여부 (0=미이수, 1=이수) — 배차 조건',
+    `introduction`        TEXT            NULL     DEFAULT NULL               COMMENT '기사 자기소개',
+    `profile_image_url`   VARCHAR(500)    NULL     DEFAULT NULL               COMMENT '프로필 사진 URL',
+    `avg_rating`          DECIMAL(3,2)    NOT NULL DEFAULT 0.00               COMMENT '평균 평점 (역정규화 — reviews 집계)',
+    `total_reviews`       INT UNSIGNED    NOT NULL DEFAULT 0                  COMMENT '총 리뷰 수 (역정규화)',
+    `created_at`          DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT '등록일',
+    `updated_at`          DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '수정일',
+
+    CONSTRAINT FK_users_TO_engineer_profiles
+        FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`),
+    CONSTRAINT FK_appliance_categories_TO_engineer_profiles
+        FOREIGN KEY (`category_id`) REFERENCES `appliance_categories` (`category_id`),
+
+    UNIQUE uk_engineer_profiles_user (user_id),
+    INDEX  idx_engineer_category     (category_id),
+    INDEX  idx_engineer_skill_lms    (skill_level, is_lms_completed),
+    INDEX  idx_engineer_avg_rating   (avg_rating)
+);
+
+-- ============================================================
+-- 7. engineer_service_regions
+-- ============================================================
+CREATE TABLE `engineer_service_regions` (
+    `id`          BIGINT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT '매핑 ID',
+    `engineer_id` BIGINT UNSIGNED NOT NULL                            COMMENT '기사 user_id (users.user_id 참조)',
+    `region_id`   INT UNSIGNED    NOT NULL                            COMMENT '지역 ID (regions depth=2 구 단위)',
+
+    CONSTRAINT FK_users_TO_engineer_service_regions
+        FOREIGN KEY (`engineer_id`) REFERENCES `users` (`user_id`),
+    CONSTRAINT FK_regions_TO_engineer_service_regions
+        FOREIGN KEY (`region_id`) REFERENCES `regions` (`region_id`),
+
+    UNIQUE uk_eng_region      (engineer_id, region_id),
+    INDEX  idx_eng_region_reg (region_id)
+);
+
+-- ============================================================
+-- 8. engineer_expert_brands
+-- ============================================================
+CREATE TABLE `engineer_expert_brands` (
+    `id`          BIGINT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT 'ID',
+    `engineer_id` BIGINT UNSIGNED NOT NULL                            COMMENT '기사 user_id (users.user_id 참조)',
+    `brand_name`  VARCHAR(50)     NOT NULL                            COMMENT '브랜드명 (삼성·LG·위니아 등)',
+
+    CONSTRAINT FK_users_TO_engineer_expert_brands
+        FOREIGN KEY (`engineer_id`) REFERENCES `users` (`user_id`),
+
+    UNIQUE uk_eng_brand       (engineer_id, brand_name),
+    INDEX  idx_eng_brand_name (brand_name)
+);
+
+-- ============================================================
+-- 9. engineer_schedules
+-- ============================================================
+CREATE TABLE `engineer_schedules` (
+    `schedule_id`  BIGINT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT '근무표 ID',
+    `user_id`      BIGINT UNSIGNED NOT NULL                            COMMENT '기사 user_id',
+    `work_date`    DATE            NOT NULL                            COMMENT '근무 가능 날짜',
+    `status`       ENUM('AVAILABLE','BOOKED','OFF') NOT NULL DEFAULT 'AVAILABLE' COMMENT '근무 상태 (BOOKED=배차 완료)',
+    `submitted_at` DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT '제출 일시',
+    `updated_at`   DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '수정일',
+
+    CONSTRAINT FK_users_TO_engineer_schedules
+        FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`),
+
+    UNIQUE uk_eng_schedule          (user_id, work_date),
+    INDEX  idx_schedule_date_status (work_date, status),
+    INDEX  idx_schedule_user_date   (user_id, work_date, status)
+);
+
+-- ============================================================
+-- 10. appliances
+-- ============================================================
+CREATE TABLE `appliances` (
+    `appliance_id`      BIGINT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT '가전 ID',
+    `user_id`           BIGINT UNSIGNED NOT NULL                            COMMENT '소유 고객 user_id',
+    `category_id`       INT UNSIGNED    NOT NULL                            COMMENT '가전 카테고리 ID (소분류 depth=2)',
+    `brand`             VARCHAR(50)     NOT NULL                            COMMENT '브랜드명',
+    `model_name`        VARCHAR(100)    NOT NULL                            COMMENT '모델명',
+    `serial_number`     VARCHAR(100)    NULL     DEFAULT NULL               COMMENT '시리얼 번호',
+    `purchase_date`     DATE            NULL     DEFAULT NULL               COMMENT '구매일',
+    `warranty_end_date` DATE            NULL     DEFAULT NULL               COMMENT '무상 A/S 만료일 (Quartz 알림 기준)',
+    `register_method`   ENUM('MANUAL','OCR') NOT NULL DEFAULT 'MANUAL'     COMMENT '등록 방식',
+    `image_url`         VARCHAR(500)    NULL     DEFAULT NULL               COMMENT '가전 사진 URL',
+    `status`            ENUM('NORMAL','NEED_REPAIR','SOLD') NOT NULL DEFAULT 'NORMAL' COMMENT '가전 상태',
+    `created_at`        DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT '등록일',
+    `updated_at`        DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '수정일',
+    `deleted_at`        DATETIME        NULL     DEFAULT NULL               COMMENT '논리 삭제일',
+
+    CONSTRAINT FK_users_TO_appliances
+        FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`),
+    CONSTRAINT FK_appliance_categories_TO_appliances
+        FOREIGN KEY (`category_id`) REFERENCES `appliance_categories` (`category_id`),
+
+    INDEX idx_appliances_user        (user_id, status),
+    INDEX idx_appliances_warranty    (warranty_end_date, status),
+    INDEX idx_appliances_brand_model (brand, model_name),
+    INDEX idx_appliances_serial      (serial_number)
+);
+
+-- ============================================================
+-- 11. consumable_alerts
+-- ============================================================
+CREATE TABLE `consumable_alerts` (
+    `alert_id`        BIGINT UNSIGNED  NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT '알림 ID',
+    `appliance_id`    BIGINT UNSIGNED  NOT NULL                            COMMENT '대상 가전 ID',
+    `user_id`         BIGINT UNSIGNED  NOT NULL                            COMMENT '소유 고객 user_id (조회 최적화용 역정규화)',
+    `consumable_name` VARCHAR(100)     NOT NULL                            COMMENT '소모품명 (필터, 배수 호스 등)',
+    `cycle_months`    TINYINT UNSIGNED NOT NULL                            COMMENT '교체 주기 (개월)',
+    `last_changed_at` DATE             NULL     DEFAULT NULL               COMMENT '최근 교체일 (NULL이면 purchase_date 기준으로 계산)',
+    `next_alert_date` DATE             NOT NULL                            COMMENT '다음 알림 발송 예정일',
+    `is_active`       TINYINT(1)       NOT NULL DEFAULT 1                  COMMENT '알림 활성화 여부',
+    `created_at`      DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT '등록일',
+
+    CONSTRAINT FK_appliances_TO_consumable_alerts
+        FOREIGN KEY (`appliance_id`) REFERENCES `appliances` (`appliance_id`),
+    CONSTRAINT FK_users_TO_consumable_alerts
+        FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`),
+
+    INDEX idx_consumable_alert_date (next_alert_date, is_active),
+    INDEX idx_consumable_user       (user_id)
+);
+
+-- ============================================================
+-- 12. symptoms
+-- ============================================================
+CREATE TABLE `symptoms` (
+    `symptom_id`   BIGINT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT '증상 마스터 ID',
+    `category_id`  INT UNSIGNED    NOT NULL                            COMMENT '가전 카테고리 ID (appliance_categories depth=2 소분류만). 카테고리별 증상 목록 분리.',
+    `symptom_code` VARCHAR(50)     NOT NULL                            COMMENT '증상 코드 (예: COOLING_FAIL). (category_id, symptom_code) UNIQUE. Quartz 배치 집계 쿼리의 GROUP BY 기준.',
+    `symptom_name` VARCHAR(100)    NOT NULL                            COMMENT '증상명 (화면 표시용 한글명, 예: 냉방 불량). A/S 신청 화면 드롭다운에 표시.',
+    `is_active`    TINYINT(1)      NOT NULL DEFAULT 1                  COMMENT '노출 여부 (0=비활성화). is_active=0이어도 기존 as_requests 참조 유지.',
+    `created_at`   DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT '등록일',
+    `updated_at`   DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '수정일',
+
+    CONSTRAINT FK_appliance_categories_TO_symptoms
+        FOREIGN KEY (`category_id`) REFERENCES `appliance_categories` (`category_id`),
+
+    UNIQUE uk_symptom_cat_code  (category_id, symptom_code),
+    INDEX  idx_symptom_category (category_id, is_active),
+    INDEX  idx_symptom_active   (is_active)
+);
+
+-- ============================================================
+-- 13. expected_repair_costs
+-- ============================================================
+CREATE TABLE `expected_repair_costs` (
+    `repair_cost_id`     BIGINT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT '비용 가이드 ID',
+    `category_id`        INT UNSIGNED    NOT NULL                            COMMENT '가전 카테고리 ID (appliance_categories)',
+    `symptom_id`         BIGINT UNSIGNED NOT NULL                            COMMENT '증상 ID (symptoms.symptom_id 참조). Quartz 배치 집계의 GROUP BY 기준.',
+    `avg_cost`           INT UNSIGNED    NULL     DEFAULT NULL               COMMENT '지난 1년간 동일 증상 평균 수리 금액 (Quartz 자동 집계, NULL=미집계 → 프론트 데이터 수집 중 표시)',
+    `sample_count`       INT UNSIGNED    NULL     DEFAULT 0                  COMMENT '집계 기준 수리 완료 건수 (신뢰도 표시용)',
+    `last_calculated_at` DATETIME        NULL     DEFAULT NULL               COMMENT '마지막 Quartz 배치 집계 시각',
+    `created_at`         DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT '등록일',
+    `updated_at`         DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '수정일',
+
+    CONSTRAINT FK_appliance_categories_TO_expected_repair_costs
+        FOREIGN KEY (`category_id`) REFERENCES `appliance_categories` (`category_id`),
+    CONSTRAINT FK_symptoms_TO_expected_repair_costs
+        FOREIGN KEY (`symptom_id`) REFERENCES `symptoms` (`symptom_id`),
+
+    UNIQUE uk_erc_symptom         (symptom_id),
+    INDEX  idx_repair_cost_lookup (symptom_id),
+    INDEX  idx_repair_cost_calc   (last_calculated_at)
+);
+
+-- ============================================================
+-- 14. as_requests
+-- ============================================================
+CREATE TABLE `as_requests` (
+    `request_id`            BIGINT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT 'A/S 신청 ID',
+    `customer_id`           BIGINT UNSIGNED NOT NULL                            COMMENT '신청 고객 user_id',
+    `appliance_id`          BIGINT UNSIGNED NOT NULL                            COMMENT '대상 가전 ID',
+    `agency_id`             BIGINT UNSIGNED NULL     DEFAULT NULL               COMMENT '접수 대행사 ID',
+    `preferred_engineer_id` BIGINT UNSIGNED NULL     DEFAULT NULL               COMMENT '고객 선호 기사 user_id (수동 배정 시)',
+    `symptom_id`             BIGINT UNSIGNED NOT NULL                            COMMENT '증상 ID (symptoms.symptom_id 참조). A/S 신청 시 카테고리 선택 후 해당 카테고리 활성 증상 드롭다운에서 선택.',
+    `symptom_desc`          TEXT            NULL     DEFAULT NULL               COMMENT '증상 상세 설명',
+    `image_urls`            JSON            NULL     DEFAULT NULL               COMMENT '첨부 사진 URL 목록 (화면 출력용)',
+    `assign_type`           ENUM('AUTO','MANUAL') NOT NULL DEFAULT 'MANUAL'     COMMENT '배정 방식 (MVP: MANUAL 고정)',
+    `visit_region_id`       INT UNSIGNED    NOT NULL                            COMMENT '방문 지역 ID (regions depth=2). 자동 배정 필터링 기준.',
+    `visit_address_detail`  VARCHAR(100)    NOT NULL                            COMMENT '방문 상세 주소 (동·호수·번지). 기사 방문 필수 입력.',
+    `scheduled_date`        DATE            NOT NULL                            COMMENT '방문 예약 날짜',
+    `scheduled_time`        VARCHAR(10)     NOT NULL                            COMMENT '방문 예약 시간 (HH:MM)',
+    `status`                ENUM('PENDING','AGENCY_RECEIVED','ASSIGNED','ACCEPTED','IN_PROGRESS','COMPLETED','PAID','CANCELLED') NOT NULL DEFAULT 'PENDING' COMMENT 'A/S 상태',
+    `cancel_reason`         VARCHAR(255)    NULL     DEFAULT NULL               COMMENT '취소 사유',
+    `created_at`            DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT '신청일',
+    `updated_at`            DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '수정일',
+
+    CONSTRAINT FK_users_TO_as_requests_customer
+        FOREIGN KEY (`customer_id`) REFERENCES `users` (`user_id`),
+    CONSTRAINT FK_users_TO_as_requests_preferred_engineer
+        FOREIGN KEY (`preferred_engineer_id`) REFERENCES `users` (`user_id`),
+    CONSTRAINT FK_appliances_TO_as_requests
+        FOREIGN KEY (`appliance_id`) REFERENCES `appliances` (`appliance_id`),
+    CONSTRAINT FK_agencies_TO_as_requests
+        FOREIGN KEY (`agency_id`) REFERENCES `agencies` (`agency_id`),
+    CONSTRAINT FK_regions_TO_as_requests_visit
+        FOREIGN KEY (`visit_region_id`) REFERENCES `regions` (`region_id`),
+    CONSTRAINT FK_symptoms_TO_as_requests
+        FOREIGN KEY (`symptom_id`) REFERENCES `symptoms` (`symptom_id`),
+
+    INDEX idx_as_req_customer      (customer_id, status, created_at),
+    INDEX idx_as_req_agency        (agency_id, status),
+    INDEX idx_as_req_status_date   (status, scheduled_date),
+    INDEX idx_as_req_pref_engineer (preferred_engineer_id),
+    INDEX idx_as_req_visit_region  (visit_region_id, status)
+);
+
+-- ============================================================
+-- 15. as_assignments
+-- ============================================================
+CREATE TABLE `as_assignments` (
+    `assignment_id` BIGINT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT '배차 ID',
+    `request_id`    BIGINT UNSIGNED NOT NULL                            COMMENT 'A/S 신청 ID',
+    `engineer_id`   BIGINT UNSIGNED NOT NULL                            COMMENT '배정 기사 user_id',
+    `agency_id`     BIGINT UNSIGNED NOT NULL                            COMMENT '배차 대행사 ID',
+    `assign_method` ENUM('AUTO','MANUAL') NOT NULL DEFAULT 'MANUAL'     COMMENT '배차 방식',
+    `status`        ENUM('WAITING','ACCEPTED','REJECTED','COMPLETED') NOT NULL DEFAULT 'WAITING' COMMENT '배차 상태',
+    `accepted_at`   DATETIME        NULL     DEFAULT NULL               COMMENT '기사 수락 일시',
+    `rejected_at`   DATETIME        NULL     DEFAULT NULL               COMMENT '거절 일시',
+    `reject_reason` VARCHAR(255)    NULL     DEFAULT NULL               COMMENT '거절 사유',
+    `assigned_at`   DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT '배차 일시',
+
+    CONSTRAINT FK_as_requests_TO_as_assignments
+        FOREIGN KEY (`request_id`) REFERENCES `as_requests` (`request_id`),
+    CONSTRAINT FK_users_TO_as_assignments_engineer
+        FOREIGN KEY (`engineer_id`) REFERENCES `users` (`user_id`),
+    CONSTRAINT FK_agencies_TO_as_assignments
+        FOREIGN KEY (`agency_id`) REFERENCES `agencies` (`agency_id`),
+
+    INDEX idx_assignment_request  (request_id, status),
+    INDEX idx_assignment_engineer (engineer_id, status),
+    INDEX idx_assignment_agency   (agency_id, status)
+);
+
+-- ============================================================
+-- 16. as_status_logs
+-- ============================================================
+CREATE TABLE `as_status_logs` (
+    `log_id`      BIGINT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT '로그 ID',
+    `request_id`  BIGINT UNSIGNED NOT NULL                            COMMENT 'A/S 신청 ID',
+    `changed_by`  BIGINT UNSIGNED NOT NULL                            COMMENT '상태 변경 주체 user_id',
+    `from_status` ENUM('WAITING','ENGINEER_DEPARTED','ENGINEER_ARRIVED','IN_PROGRESS','COMPLETED') NULL DEFAULT NULL COMMENT '변경 전 상태',
+    `to_status`   ENUM('WAITING','ENGINEER_DEPARTED','ENGINEER_ARRIVED','IN_PROGRESS','COMPLETED') NOT NULL DEFAULT 'WAITING' COMMENT '변경 후 상태',
+    `memo`        VARCHAR(255)    NULL     DEFAULT NULL               COMMENT '변경 메모',
+    `created_at`  DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT '변경 일시',
+
+    CONSTRAINT FK_as_requests_TO_as_status_logs
+        FOREIGN KEY (`request_id`) REFERENCES `as_requests` (`request_id`),
+    CONSTRAINT FK_users_TO_as_status_logs
+        FOREIGN KEY (`changed_by`) REFERENCES `users` (`user_id`),
+
+    INDEX idx_status_log_request (request_id, created_at)
+);
+
+-- ============================================================
+-- 17. repair_parts
+-- ============================================================
+CREATE TABLE `repair_parts` (
+    `repair_part_id`  BIGINT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT '부품 마스터 ID',
+    `part_code`       VARCHAR(50)     NOT NULL                            COMMENT '부품 코드 (예: COMP-AC-R410A-1HP) — 제조사 부품번호',
+    `part_name`       VARCHAR(100)    NOT NULL                            COMMENT '부품명',
+    `spec`            VARCHAR(200)    NULL                                COMMENT '부품 규격·사양',
+    `importance`      ENUM('CRITICAL','MAJOR','NORMAL','MINOR') NOT NULL DEFAULT 'NORMAL' COMMENT '부품 중요도 — 진단서 등급 산정 기준. CRITICAL(핵심)/MAJOR(주요)/NORMAL(일반)/MINOR(소모품)',
+    `base_unit_price` INT UNSIGNED    NOT NULL                            COMMENT '부품 기준 단가 (원) — work_report_parts.applied_unit_price 스냅샷 기준값',
+    `is_active`       TINYINT(1)      NOT NULL DEFAULT 1                  COMMENT '활성 여부 (0=단종·사용중단)',
+    `created_at`      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT '등록일',
+    `updated_at`      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '수정일',
+
+    UNIQUE uk_repair_parts_code       (part_code),
+    INDEX  idx_repair_parts_importance (importance),
+    INDEX  idx_repair_parts_active     (is_active)
+);
+
+-- ============================================================
+-- 18. work_reports
+-- ============================================================
+CREATE TABLE `work_reports` (
+    `report_id`         BIGINT UNSIGNED   NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT '보고서 ID',
+    `request_id`        BIGINT UNSIGNED   NOT NULL                            COMMENT 'A/S 신청 ID (1:1)',
+    `engineer_id`       BIGINT UNSIGNED   NOT NULL                            COMMENT '작업 기사 user_id',
+    `diagnosis_result`  ENUM('NORMAL','REPAIRED','PART_REPLACED','UNREPAIRABLE') NOT NULL COMMENT '진단 결과 — 필수',
+    `work_duration_min` SMALLINT UNSIGNED NOT NULL                            COMMENT '실제 작업 시간 (분) — 필수',
+    `final_amount`      INT UNSIGNED      NOT NULL                            COMMENT '최종 청구 금액 (원) — 필수',
+    `memo`              TEXT              NULL     DEFAULT NULL               COMMENT '작업 메모',
+    `image_urls`        JSON              NULL     DEFAULT NULL               COMMENT '작업 사진 URL 목록',
+    `customer_approved` TINYINT(1)        NOT NULL DEFAULT 0                  COMMENT '고객 승인 여부',
+    `approved_at`       DATETIME          NULL     DEFAULT NULL               COMMENT '고객 승인 일시',
+    `submitted_at`      DATETIME          NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT '보고서 제출 일시 (데이터 적재 기준점)',
+    `updated_at`        DATETIME          NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '수정일',
+
+    CONSTRAINT FK_as_requests_TO_work_reports
+        FOREIGN KEY (`request_id`) REFERENCES `as_requests` (`request_id`),
+    CONSTRAINT FK_users_TO_work_reports
+        FOREIGN KEY (`engineer_id`) REFERENCES `users` (`user_id`),
+
+    UNIQUE uk_work_report_request   (request_id),
+    INDEX  idx_work_report_engineer (engineer_id, submitted_at),
+    INDEX  idx_work_report_approval (customer_approved, submitted_at)
+);
+
+-- ============================================================
+-- 19. work_report_parts
+-- ============================================================
+CREATE TABLE `work_report_parts` (
+    `part_id`            BIGINT UNSIGNED  NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT '부품 ID',
+    `report_id`          BIGINT UNSIGNED  NOT NULL                            COMMENT '보고서 ID (work_reports.report_id 참조)',
+    `repair_part_id`     BIGINT UNSIGNED  NOT NULL                            COMMENT '부품 마스터 ID (repair_parts.repair_part_id 참조)',
+    `quantity`           TINYINT UNSIGNED NOT NULL DEFAULT 1                  COMMENT '교체 수량',
+    `applied_unit_price` INT UNSIGNED     NULL     DEFAULT NULL               COMMENT '보고서 적용 단가 스냅샷(원) — 단가 변경 후에도 과거 보고서 금액 보존',
+    `created_at`         DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT '등록일',
+
+    CONSTRAINT FK_work_reports_TO_work_report_parts
+        FOREIGN KEY (`report_id`) REFERENCES `work_reports` (`report_id`),
+    CONSTRAINT FK_repair_parts_TO_work_report_parts
+        FOREIGN KEY (`repair_part_id`) REFERENCES `repair_parts` (`repair_part_id`),
+
+    INDEX idx_parts_report      (report_id),
+    INDEX idx_parts_repair_part (repair_part_id)
+);
+
+-- ============================================================
+-- 20. health_certificates
+-- ============================================================
+CREATE TABLE `health_certificates` (
+    `cert_id`                 BIGINT UNSIGNED  NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT '진단서 ID',
+    `appliance_id`            BIGINT UNSIGNED  NOT NULL                            COMMENT '가전 ID (1:1)',
+    `grade`                   CHAR(1)          NOT NULL DEFAULT 'E'                COMMENT 'A·B·C·D·E 등급',
+    `score`                   TINYINT UNSIGNED NOT NULL DEFAULT 0                  COMMENT '환산 점수 (0~100)',
+    `repair_count`            TINYINT UNSIGNED NOT NULL DEFAULT 0                  COMMENT '누적 수리 횟수',
+    `critical_parts_replaced` TINYINT UNSIGNED NOT NULL DEFAULT 0                  COMMENT '핵심 부품 교체 횟수',
+    `last_repaired_at`        DATETIME         NULL     DEFAULT NULL               COMMENT '최근 수리 완료 일시',
+    `is_certified`            TINYINT(1)       NOT NULL DEFAULT 0                  COMMENT 'CareFlow 인증 여부 (B등급↑, 75점↑ 자동 부여)',
+    `issued_at`               DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT '최초 발급일',
+    `updated_at`              DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '최근 갱신일',
+
+    CONSTRAINT FK_appliances_TO_health_certificates
+        FOREIGN KEY (`appliance_id`) REFERENCES `appliances` (`appliance_id`),
+
+    UNIQUE uk_cert_appliance (appliance_id),
+    INDEX  idx_cert_grade    (grade, is_certified)
+);
+
+-- ============================================================
+-- 21. reviews
+-- ============================================================
+CREATE TABLE `reviews` (
+    `review_id`   BIGINT UNSIGNED  NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT '리뷰 ID',
+    `request_id`  BIGINT UNSIGNED  NOT NULL                            COMMENT 'A/S 신청 ID (1:1)',
+    `customer_id` BIGINT UNSIGNED  NOT NULL                            COMMENT '리뷰 작성 고객 user_id',
+    `engineer_id` BIGINT UNSIGNED  NOT NULL                            COMMENT '평가 대상 기사 user_id',
+    `rating`      TINYINT UNSIGNED NOT NULL                            COMMENT '평점 1~5',
+    `content`     TEXT             NULL     DEFAULT NULL               COMMENT '리뷰 내용',
+    `is_visible`  TINYINT(1)       NOT NULL DEFAULT 1                  COMMENT '노출 여부',
+    `created_at`  DATETIME         NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT '작성일',
+
+    CONSTRAINT FK_as_requests_TO_reviews
+        FOREIGN KEY (`request_id`) REFERENCES `as_requests` (`request_id`),
+    CONSTRAINT FK_users_TO_reviews_customer
+        FOREIGN KEY (`customer_id`) REFERENCES `users` (`user_id`),
+    CONSTRAINT FK_users_TO_reviews_engineer
+        FOREIGN KEY (`engineer_id`) REFERENCES `users` (`user_id`),
+
+    UNIQUE uk_review_request   (request_id),
+    INDEX  idx_review_engineer (engineer_id, created_at),
+    INDEX  idx_review_customer (customer_id)
+);
+
+-- ============================================================
+-- 22. payments
+-- ============================================================
+CREATE TABLE `payments` (
+    `payment_id`        BIGINT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT '결제 ID',
+    `request_id`        BIGINT UNSIGNED NOT NULL                            COMMENT 'A/S 신청 ID (1:1)',
+    `customer_id`       BIGINT UNSIGNED NOT NULL                            COMMENT '결제 고객 user_id',
+    `amount`            INT UNSIGNED    NOT NULL                            COMMENT '결제 금액 (원)',
+    `pg_provider`       ENUM('MOCK','KAKAO','TOSS','NAVER') NOT NULL DEFAULT 'MOCK' COMMENT 'PG사 코드',
+    `pg_transaction_id` VARCHAR(100)    NULL     DEFAULT NULL               COMMENT 'PG사 거래 ID (Mocking 시 NULL)',
+    `status`            ENUM('READY','SUCCESS','FAILED','CANCELLED','REFUNDED') NOT NULL DEFAULT 'READY' COMMENT '결제 상태',
+    `paid_at`           DATETIME        NULL     DEFAULT NULL               COMMENT '결제 완료 일시',
+    `cancelled_at`      DATETIME        NULL     DEFAULT NULL               COMMENT '취소 일시',
+    `created_at`        DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT '생성일',
+
+    CONSTRAINT FK_as_requests_TO_payments
+        FOREIGN KEY (`request_id`) REFERENCES `as_requests` (`request_id`),
+    CONSTRAINT FK_users_TO_payments
+        FOREIGN KEY (`customer_id`) REFERENCES `users` (`user_id`),
+
+    UNIQUE uk_payment_request  (request_id),
+    UNIQUE uk_payment_pg_txid  (pg_transaction_id),
+    INDEX  idx_payment_status  (status, paid_at),
+    INDEX  idx_payment_customer (customer_id, created_at)
+);
+
+-- ============================================================
+-- 23. settlements
+-- ============================================================
+CREATE TABLE `settlements` (
+    `settlement_id`       BIGINT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT '정산 ID',
+    `payment_id`          BIGINT UNSIGNED NOT NULL                            COMMENT '결제 ID (1:1)',
+    `request_id`          BIGINT UNSIGNED NOT NULL                            COMMENT 'A/S 신청 ID',
+    `engineer_id`         BIGINT UNSIGNED NOT NULL                            COMMENT '기사 user_id',
+    `agency_id`           BIGINT UNSIGNED NOT NULL                            COMMENT '소속 대행사 ID',
+    `gross_amount`        INT UNSIGNED    NOT NULL                            COMMENT '작업 총 금액 (원)',
+    `platform_fee`        INT UNSIGNED    NOT NULL                            COMMENT 'CareFlow 수수료 (원)',
+    `fee_rate`            DECIMAL(5,2)    NOT NULL                            COMMENT 'CareFlow 수수료율(%) 스냅샷',
+    `agency_fee`          INT UNSIGNED    NOT NULL                            COMMENT '대행사 수수료 (원)',
+    `agency_fee_rate`     DECIMAL(5,2)    NOT NULL                            COMMENT '대행사 수수료율(%) 스냅샷',
+    `engineer_net_amount` INT UNSIGNED    NOT NULL                            COMMENT '기사 실수령액 (원)',
+    `status`              ENUM('PENDING','APPROVED','PAID','DISPUTED') NOT NULL DEFAULT 'PENDING' COMMENT '정산 상태',
+    `approved_at`         DATETIME        NULL     DEFAULT NULL               COMMENT '승인 일시',
+    `paid_at`             DATETIME        NULL     DEFAULT NULL               COMMENT '지급 일시',
+    `created_at`          DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT '생성일',
+
+    CONSTRAINT FK_payments_TO_settlements
+        FOREIGN KEY (`payment_id`) REFERENCES `payments` (`payment_id`),
+    CONSTRAINT FK_as_requests_TO_settlements
+        FOREIGN KEY (`request_id`) REFERENCES `as_requests` (`request_id`),
+    CONSTRAINT FK_users_TO_settlements_engineer
+        FOREIGN KEY (`engineer_id`) REFERENCES `users` (`user_id`),
+    CONSTRAINT FK_agencies_TO_settlements
+        FOREIGN KEY (`agency_id`) REFERENCES `agencies` (`agency_id`),
+
+    UNIQUE uk_settlement_payment   (payment_id),
+    INDEX  idx_settlement_engineer (engineer_id, status, created_at),
+    INDEX  idx_settlement_agency   (agency_id, status, created_at),
+    INDEX  idx_settlement_status   (status, created_at)
+);
+
+-- ============================================================
+-- 24. notifications
+-- ============================================================
+CREATE TABLE `notifications` (
+    `notification_id` BIGINT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT '알림 ID',
+    `user_id`         BIGINT UNSIGNED NOT NULL                            COMMENT '수신 대상 user_id',
+    `type`            ENUM('AS_STATUS','CONSUMABLE','WARRANTY','LMS') NOT NULL COMMENT '알림 유형',
+    `title`           VARCHAR(200)    NOT NULL                            COMMENT '알림 제목',
+    `body`            TEXT            NOT NULL                            COMMENT '알림 내용',
+    `channel`         ENUM('SSE','PUSH','SMS','KAKAO') NOT NULL DEFAULT 'SSE' COMMENT '발송 채널',
+    `created_at`      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT '생성일',
+
+    CONSTRAINT FK_users_TO_notifications
+        FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`),
+
+    INDEX idx_notif_user (user_id, created_at),
+    INDEX idx_notif_type (type)
+);
+
+-- ============================================================
+-- 25. lms_contents
+-- ============================================================
+CREATE TABLE `lms_contents` (
+    `content_id`     BIGINT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT '콘텐츠 ID',
+    `category_id`    INT UNSIGNED    NULL     DEFAULT NULL               COMMENT '가전 카테고리 ID (appliance_categories depth=2) — 제품군별 교육 구분',
+    `title`          VARCHAR(200)    NOT NULL                            COMMENT '교육 콘텐츠 제목',
+    `body`           TEXT            NOT NULL                            COMMENT '콘텐츠 본문 (HTML 또는 Markdown)',
+    `required_level` ENUM('BEGINNER','INTERMEDIATE','ADVANCED','ALL') NOT NULL DEFAULT 'ALL' COMMENT '필수 이수 대상 등급',
+    `content_type`   ENUM('TEXT','VIDEO') NOT NULL DEFAULT 'TEXT'       COMMENT '콘텐츠 유형 (추후 VIDEO 확장)',
+    `version`        VARCHAR(10)     NOT NULL DEFAULT '1.0'             COMMENT '콘텐츠 버전',
+    `is_active`      TINYINT(1)      NOT NULL DEFAULT 1                  COMMENT '노출 여부',
+    `created_by`     BIGINT UNSIGNED NOT NULL                            COMMENT '작성한 관리자 user_id',
+    `created_at`     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT '등록일',
+    `updated_at`     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '수정일',
+
+    CONSTRAINT FK_appliance_categories_TO_lms_contents
+        FOREIGN KEY (`category_id`) REFERENCES `appliance_categories` (`category_id`),
+    CONSTRAINT FK_users_TO_lms_contents_created_by
+        FOREIGN KEY (`created_by`) REFERENCES `users` (`user_id`),
+
+    INDEX idx_lms_category_level (category_id, required_level, is_active),
+    INDEX idx_lms_active         (is_active)
+);
+
+
+-- ============================================================
+-- 26. lms_confirmations
+-- ============================================================
+CREATE TABLE `lms_confirmations` (
+    `confirmation_id`   BIGINT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT '이수 이력 ID',
+    `user_id`           BIGINT UNSIGNED NOT NULL                            COMMENT '이수한 기사 user_id',
+    `content_id`        BIGINT UNSIGNED NOT NULL                            COMMENT '이수한 콘텐츠 content_id',
+    `completion_year`   YEAR            NOT NULL                            COMMENT '이수 연도',
+    `confirmed_version` VARCHAR(10)     NOT NULL                            COMMENT '이수 당시 콘텐츠 버전',
+    `confirmed_at`      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT '이수 완료 일시',
+    `updated_at`        DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '수정일',
+
+    CONSTRAINT FK_users_TO_lms_confirmations
+        FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`),
+    CONSTRAINT FK_lms_contents_TO_lms_confirmations
+        FOREIGN KEY (`content_id`) REFERENCES `lms_contents` (`content_id`),
+
+    UNIQUE uk_lms_confirm_year       (user_id, content_id, completion_year),
+    INDEX  idx_lms_confirm_user_year (user_id, completion_year),
+    INDEX  idx_lms_confirm_content   (content_id, confirmed_at)
+);
+
+
+
+-- ============================================================
+-- 27. engineer_schedule_slots
+-- ============================================================
+CREATE TABLE `engineer_schedule_slots` (
+    `slot_id`     BIGINT UNSIGNED  NOT NULL PRIMARY KEY AUTO_INCREMENT,
+    `schedule_id` BIGINT UNSIGNED  NOT NULL COMMENT 'engineer_schedules.schedule_id 참조',
+    `start_time`  TIME             NOT NULL COMMENT '근무 시작 시각',
+    `end_time`    TIME             NOT NULL COMMENT '근무 종료 시각',
+
+    CONSTRAINT FK_engineer_schedules_TO_slots
+        FOREIGN KEY (`schedule_id`) REFERENCES `engineer_schedules` (`schedule_id`),
+
+    INDEX idx_slot_time (schedule_id, start_time, end_time)
+);
+
+-- ============================================================
+-- ※ 순환참조 후처리 ALTER (agencies ↔ users)
+-- agencies.representative_user_id → users.user_id
+-- agencies.approved_by            → users.user_id
+-- 두 FK만 불가피하게 ALTER로 처리
+-- ============================================================
+ALTER TABLE `agencies`
+    ADD CONSTRAINT FK_users_TO_agencies_representative
+        FOREIGN KEY (`representative_user_id`) REFERENCES `users` (`user_id`),
+    ADD CONSTRAINT FK_users_TO_agencies_approved_by
+        FOREIGN KEY (`approved_by`) REFERENCES `users` (`user_id`);
