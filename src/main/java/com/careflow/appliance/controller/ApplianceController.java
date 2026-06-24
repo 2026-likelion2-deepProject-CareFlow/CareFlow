@@ -47,7 +47,7 @@ public class ApplianceController {
     @GetMapping("/{applianceId}")
     public ResponseEntity<ApplianceResponse> getApplianceDetail(
             @RequestParam Long userId,
-            @PathVariable Long applianceId) {
+            @PathVariable Long applianceId) throws IllegalAccessException {
 
         return ResponseEntity.ok(applianceService.getApplianceDetail(userId, applianceId));
     }
@@ -59,7 +59,7 @@ public class ApplianceController {
     @DeleteMapping("/{applianceId}")
     public ResponseEntity<Void> deleteAppliance(
             @RequestParam Long userId,
-            @PathVariable Long applianceId) {
+            @PathVariable Long applianceId) throws IllegalAccessException {
 
         applianceService.deleteAppliance(userId, applianceId);
         return ResponseEntity.noContent().build();

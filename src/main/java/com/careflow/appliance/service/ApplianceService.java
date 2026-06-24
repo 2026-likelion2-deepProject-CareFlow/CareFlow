@@ -71,7 +71,7 @@ public class ApplianceService {
      * 가전제품 상세 조회
      * 본인 소유 가전인지 확인 후 반환
      */
-    public ApplianceResponse getApplianceDetail(Long userId, Long applianceId) {
+    public ApplianceResponse getApplianceDetail(Long userId, Long applianceId) throws IllegalAccessException {
         Appliance appliance = applianceRepository.findByIdAndDeletedAtIsNull(applianceId)
                 .orElseThrow(() -> new NoSuchElementException("존재하지 않는 가전제품입니다."));
 
@@ -87,7 +87,7 @@ public class ApplianceService {
      * 본인 소유 가전인지 확인 후 deletedAt 세팅
      */
     @Transactional
-    public void deleteAppliance(Long userId, Long applianceId) {
+    public void deleteAppliance(Long userId, Long applianceId) throws IllegalAccessException {
         Appliance appliance = applianceRepository.findByIdAndDeletedAtIsNull(applianceId)
                 .orElseThrow(() -> new NoSuchElementException("존재하지 않는 가전제품입니다."));
 
