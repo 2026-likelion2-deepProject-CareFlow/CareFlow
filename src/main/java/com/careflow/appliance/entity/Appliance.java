@@ -2,7 +2,6 @@ package com.careflow.appliance.entity;
 
 import com.careflow.common.enums.ApplianceStatus;
 import com.careflow.common.enums.RegisterMethod;
-import com.careflow.engineer.domain.entity.ApplianceCategory;
 import com.careflow.user.entity.User;
 import jakarta.persistence.*;
 import lombok.AccessLevel;

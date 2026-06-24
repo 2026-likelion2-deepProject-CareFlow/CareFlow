@@ -1,10 +1,10 @@
 package com.careflow.engineer.domain.entity;
 
+import com.careflow.appliance.entity.ApplianceCategory;
 import com.careflow.engineer.domain.enums.SkillLevel;
 import com.careflow.user.entity.User;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
-import lombok.Builder;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import org.springframework.data.annotation.CreatedDate;

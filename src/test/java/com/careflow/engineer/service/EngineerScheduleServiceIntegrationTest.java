@@ -1,14 +1,14 @@
 package com.careflow.engineer.service;
 
 import com.careflow.common.enums.Role;
-import com.careflow.engineer.domain.entity.ApplianceCategory;
+import com.careflow.appliance.entity.ApplianceCategory;
 import com.careflow.engineer.domain.entity.EngineerProfile;
 import com.careflow.engineer.domain.entity.EngineerSchedule;
 import com.careflow.engineer.domain.enums.ScheduleStatus;
 import com.careflow.engineer.domain.enums.SkillLevel;
 import com.careflow.engineer.dto.ScheduleRequest;
 import com.careflow.engineer.dto.ScheduleResponse;
-import com.careflow.engineer.repository.ApplianceCategoryRepository;
+import com.careflow.appliance.repository.ApplianceCategoryRepository;
 import com.careflow.engineer.repository.EngineerProfileRepository;
 import com.careflow.engineer.repository.EngineerScheduleRepository;
 import com.careflow.user.entity.User;
