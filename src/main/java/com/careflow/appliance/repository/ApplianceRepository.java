@@ -5,8 +5,15 @@ import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.stereotype.Repository;
 
 import java.util.List;
+import java.util.Optional;
 
-@Repository
 public interface ApplianceRepository extends JpaRepository<Appliance, Long> {
-    List<Appliance> findByOwner_IdOrderByIdDesc(Long ownerId);
+
+    // 특정 사용자의 삭제되지 않은 가전 목록 (최신순)
+    List<Appliance> findByUser_IdAndDeletedAtIsNullOrderByCreatedAtDesc(Long userId);
+
+    // 삭제되지 않은 단건 조회 (상세 조회 시 사용)
+    Optional<Appliance> findByIdAndDeletedAtIsNull(Long id);
+
+    List<Appliance> findByUser_IdOrderByIdDesc(Long ownerId);
 }
