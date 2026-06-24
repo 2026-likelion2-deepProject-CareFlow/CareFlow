@@ -18,6 +18,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.lang.reflect.Constructor;
@@ -29,8 +31,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.mock;
 
 @ExtendWith(MockitoExtension.class)
+// mock(ApplianceCategory.class)로 생성한 stub 중 일부는 해당 테스트에서 호출 안 될 수 있어 LENIENT 적용
+@MockitoSettings(strictness = Strictness.LENIENT)
 class EngineerScheduleServiceTest {
 
     @InjectMocks
@@ -116,9 +121,10 @@ class EngineerScheduleServiceTest {
     }
 
     private EngineerProfile completedProfile(User user) {
-        ApplianceCategory category = new ApplianceCategory();
-        ReflectionTestUtils.setField(category, "categoryId", 10);
-        ReflectionTestUtils.setField(category, "depth", 2);
+        // v5 신규 ApplianceCategory 는 생성자가 protected — 단위 테스트에서는 mock 으로 대체
+        ApplianceCategory category = mock(ApplianceCategory.class);
+        given(category.getCategoryId()).willReturn(10);
+        given(category.getDepth()).willReturn(2);
 
         EngineerProfile profile = EngineerProfile.createInitial(user);
         profile.completeProfile(category, 2020, SkillLevel.BEGINNER, null);

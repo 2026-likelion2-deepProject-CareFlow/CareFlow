@@ -3,6 +3,8 @@ package com.careflow.as_request.controller;
 import com.careflow.agency.entity.Agencies;
 import com.careflow.agency.repository.AgenciesRepository;
 import com.careflow.appliance.entity.Appliance;
+import com.careflow.appliance.entity.ApplianceCategory;
+import com.careflow.appliance.repository.ApplianceCategoryRepository;
 import com.careflow.appliance.repository.ApplianceRepository;
 import com.careflow.as_request.entity.AsRequest;
 import com.careflow.as_request.repository.AsRequestRepository;
@@ -83,8 +85,9 @@ class AsRequestControllerIntegrationTest {
         // 1. 방문 지역
         region = regionRepository.save(Regions.create("서울특별시 강남구", null, 1, 0));
 
-        // 2. 가전 카테고리 (depth=2 소분류)
-        category = categoryRepository.save(ApplianceCategory.create(2));
+        // 2. 가전 카테고리 (depth=2 소분류) — v5 신규 API: createRoot → createChild 2단계 생성
+        ApplianceCategory rootCat = categoryRepository.save(ApplianceCategory.createRoot("에어컨", 1));
+        category = categoryRepository.save(ApplianceCategory.createChild("에어컨 소분류", rootCat, 1));
 
         // 3. 대행사 (APPROVED)
         agency = agenciesRepository.save(Agencies.builder()
@@ -127,7 +130,8 @@ class AsRequestControllerIntegrationTest {
 
         // 10. 고객 소유 가전 (삼성 에어컨, category 일치)
         appliance = applianceRepository.save(Appliance.create(
-                customer, category, "삼성", "에어컨 Q9000", RegisterMethod.MANUAL));
+                customer, category, "삼성", "에어컨 Q9000",
+                null, null, null, RegisterMethod.MANUAL));
 
         // 11. 증상 마스터
         symptom = symptomRepository.save(Symptom.builder()
@@ -174,7 +178,8 @@ class AsRequestControllerIntegrationTest {
             // 브랜드가 "LG"인 가전 → 기사의 전문 브랜드("삼성")와 불일치
             // Fallback 1/2/3 단계를 거쳐 스케줄 조건만으로 기사 매칭
             Appliance lgAppliance = applianceRepository.save(
-                    Appliance.create(customer, category, "LG", "에어컨 LX500", RegisterMethod.MANUAL));
+                    Appliance.create(customer, category, "LG", "에어컨 LX500",
+                            null, null, null, RegisterMethod.MANUAL));
 
             String body = requestBody(lgAppliance.getId(), symptom.getId(), region.getId(),
                     SCHEDULED_DATE.toString(), "10:00", "AUTO", null);

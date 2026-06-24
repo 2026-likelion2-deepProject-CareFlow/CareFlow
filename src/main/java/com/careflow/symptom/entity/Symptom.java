@@ -1,6 +1,6 @@
 package com.careflow.symptom.entity;
 
-import com.careflow.engineer.domain.entity.ApplianceCategory;
+import com.careflow.appliance.entity.ApplianceCategory;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Builder;
