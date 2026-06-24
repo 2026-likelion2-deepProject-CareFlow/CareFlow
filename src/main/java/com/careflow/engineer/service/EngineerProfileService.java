@@ -8,6 +8,7 @@ import com.careflow.engineer.domain.entity.EngineerServiceRegion;
 import com.careflow.engineer.domain.enums.SkillLevel;
 import com.careflow.engineer.dto.CreateProfileRequest;
 import com.careflow.engineer.dto.ProfileResponse;
+import com.careflow.engineer.dto.UpdateProfileRequest;
 import com.careflow.engineer.repository.ApplianceCategoryRepository;
 import com.careflow.engineer.repository.EngineerExpertBrandRepository;
 import com.careflow.engineer.repository.EngineerProfileRepository;
@@ -128,5 +129,46 @@ public class EngineerProfileService {
         } else {
             return SkillLevel.ADVANCED;
         }
+    }
+
+    @Transactional(readOnly = true)
+    public ProfileResponse getProfile(Long userId) {    // 프로필 상세 조회
+        EngineerProfile profile = profileRepository.findByUser_Id(userId)
+                .orElseThrow(() -> new IllegalArgumentException("프로필 정보가 존재하지 않습니다."));
+
+        List<String> expertBrands = expertBrandRepository.findByEngineer_Id(userId).stream()
+                .map(EngineerExpertBrand::getBrandName)
+                .toList();
+
+        List<Integer> serviceRegionIds = serviceRegionRepository.findByEngineer_Id(userId).stream()
+                .map(region -> region.getRegion().getId())
+                .toList();
+
+        return ProfileResponse.from(profile, expertBrands, serviceRegionIds);
+    }
+
+    @Transactional
+    public ProfileResponse updateProfile(Long userId, UpdateProfileRequest request) {   // 프로필 정보 수정
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("유저 정보가 존재하지 않습니다."));
+
+        EngineerProfile profile = profileRepository.findByUser_Id(userId)
+                .orElseThrow(() -> new IllegalArgumentException("프로필 정보가 존재하지 않습니다."));
+
+        profile.updateBasicInfo(request.getIntroduction(), request.getProfileImageUrl());
+
+        List<String> brandNames = expertBrandRepository.findByEngineer_Id(userId).stream()
+                .map(EngineerExpertBrand::getBrandName).toList();
+        List<Integer> regionIds = serviceRegionRepository.findByEngineer_Id(userId).stream()
+                .map(r -> r.getRegion().getId()).toList();
+
+        if (request.getExpertBrands() != null && !request.getExpertBrands().isEmpty()) {
+            brandNames = saveExpertBrands(user, request.getExpertBrands());
+        }
+        if (request.getServiceRegionIds() != null && !request.getServiceRegionIds().isEmpty()) {
+            regionIds = saveServiceRegions(user, request.getServiceRegionIds());
+        }
+
+        return ProfileResponse.from(profile, brandNames, regionIds);
     }
 }

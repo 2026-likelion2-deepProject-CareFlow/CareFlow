@@ -2,7 +2,9 @@ package com.careflow.engineer.service;
 
 import com.careflow.common.enums.Role;
 import com.careflow.engineer.domain.entity.ApplianceCategory;
+import com.careflow.engineer.domain.entity.EngineerExpertBrand;
 import com.careflow.engineer.domain.entity.EngineerProfile;
+import com.careflow.engineer.domain.entity.EngineerServiceRegion;
 import com.careflow.engineer.domain.enums.SkillLevel;
 import com.careflow.engineer.dto.CreateProfileRequest;
 import com.careflow.engineer.dto.ProfileResponse;
@@ -210,5 +212,77 @@ class EngineerProfileServiceTest {
         ReflectionTestUtils.setField(request, "expertBrands", expertBrands);
         ReflectionTestUtils.setField(request, "serviceRegionIds", serviceRegionIds);
         return request;
+    }
+
+    // ─────────────────────────────────────────────
+    //  조회 및 수정 로직 테스트 (Vibe Coding)
+    // ─────────────────────────────────────────────
+
+    @Test
+    @DisplayName("성공: 프로필 상세 조회 (getProfile)")
+    void getProfile_Success() throws Exception {
+        // Given
+        User user = engineer(USER_ID);
+        EngineerProfile profile = EngineerProfile.createInitial(user);
+        ApplianceCategory category = category(10, 2);
+        profile.completeProfile(category, 2020, SkillLevel.BEGINNER, "안녕하세요 수리기사입니다.");
+
+        // 모킹용 연관 데이터 생성
+        EngineerExpertBrand brand1 = EngineerExpertBrand.builder().engineer(user).brandName("삼성").build();
+        EngineerExpertBrand brand2 = EngineerExpertBrand.builder().engineer(user).brandName("LG").build();
+
+        Regions regionMock = region(2);
+        ReflectionTestUtils.setField(regionMock, "id", 10);
+        EngineerServiceRegion serviceRegion = EngineerServiceRegion.builder().engineer(user).region(regionMock).build();
+
+        given(profileRepository.findByUser_Id(USER_ID)).willReturn(Optional.of(profile));
+        given(expertBrandRepository.findByEngineer_Id(USER_ID)).willReturn(List.of(brand1, brand2));
+        given(serviceRegionRepository.findByEngineer_Id(USER_ID)).willReturn(List.of(serviceRegion));
+
+        // When
+        ProfileResponse response = engineerProfileService.getProfile(USER_ID);
+
+        // Then
+        assertThat(response.getIntroduction()).isEqualTo("안녕하세요 수리기사입니다.");
+        assertThat(response.getExpertBrands()).containsExactly("삼성", "LG");
+        assertThat(response.getServiceRegionIds()).containsExactly(10);
+    }
+
+    @Test
+    @DisplayName("성공: 프로필 정보 수정 (updateProfile)")
+    void updateProfile_Success() throws Exception {
+        // Given
+        User user = engineer(USER_ID);
+        EngineerProfile profile = EngineerProfile.createInitial(user);
+        profile.completeProfile(category(10, 2), 2020, SkillLevel.BEGINNER, "기존 소개글");
+
+        // DTO 리플렉션 생성 (기존 헬퍼 방식 활용)
+        Constructor<com.careflow.engineer.dto.UpdateProfileRequest> constructor =
+                com.careflow.engineer.dto.UpdateProfileRequest.class.getDeclaredConstructor();
+        constructor.setAccessible(true);
+        com.careflow.engineer.dto.UpdateProfileRequest request = constructor.newInstance();
+        ReflectionTestUtils.setField(request, "introduction", "수정된 소개글");
+        ReflectionTestUtils.setField(request, "profileImageUrl", "http://new-image.com");
+        ReflectionTestUtils.setField(request, "expertBrands", List.of("다이슨"));
+        ReflectionTestUtils.setField(request, "serviceRegionIds", List.of(99));
+
+        Regions regionMock = region(2);
+        ReflectionTestUtils.setField(regionMock, "id", 99);
+
+        given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
+        given(profileRepository.findByUser_Id(USER_ID)).willReturn(Optional.of(profile));
+        // 기존 데이터가 없다고 가정하고 새로운 데이터 삽입 로직 테스트
+        given(expertBrandRepository.findByEngineer_Id(USER_ID)).willReturn(List.of());
+        given(serviceRegionRepository.findByEngineer_Id(USER_ID)).willReturn(List.of());
+        given(regionRepository.findById(99)).willReturn(Optional.of(regionMock));
+
+        // When
+        ProfileResponse response = engineerProfileService.updateProfile(USER_ID, request);
+
+        // Then
+        assertThat(response.getIntroduction()).isEqualTo("수정된 소개글");
+        assertThat(response.getProfileImageUrl()).isEqualTo("http://new-image.com");
+        assertThat(response.getExpertBrands()).containsExactly("다이슨");
+        assertThat(response.getServiceRegionIds()).containsExactly(99);
     }
 }

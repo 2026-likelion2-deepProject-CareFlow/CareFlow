@@ -102,4 +102,13 @@ public class EngineerProfile {
     public boolean isCompleted() {
         return this.category != null && this.careerStartedYear != null;
     }
+
+    public void updateBasicInfo(String introduction, String profileImageUrl) {  // 데이터 수정
+        if (introduction != null) {
+            this.introduction = introduction;
+        }
+        if (profileImageUrl != null) {
+            this.profileImageUrl = profileImageUrl;
+        }
+    }
 }
