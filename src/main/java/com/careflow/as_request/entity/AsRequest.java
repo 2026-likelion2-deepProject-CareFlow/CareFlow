@@ -139,4 +139,12 @@ public class AsRequest {
         this.cancelReason = cancelReason;
         this.updatedAt = LocalDateTime.now();
     }
+
+    public void completeWork() {   // 기사용: 작업 완료 보고서 제출 시 상태를 COMPLETED로 변경
+        if (this.status == AsStatus.CANCELLED) {
+            throw new IllegalStateException("이미 취소된 A/S 건은 완료 처리할 수 없습니다.");
+        }
+        this.status = AsStatus.COMPLETED;
+        this.updatedAt = LocalDateTime.now();
+    }
 }
