@@ -85,8 +85,9 @@ class AsRequestControllerIntegrationTest {
         // 1. 방문 지역
         region = regionRepository.save(Regions.create("서울특별시 강남구", null, 1, 0));
 
-        // 2. 가전 카테고리 (depth=2 소분류)
-        category = categoryRepository.save(ApplianceCategory.create(2));
+        // 2. 가전 카테고리 (depth=2 소분류) — v5 신규 API: createRoot → createChild 2단계 생성
+        ApplianceCategory rootCat = categoryRepository.save(ApplianceCategory.createRoot("에어컨", 1));
+        category = categoryRepository.save(ApplianceCategory.createChild("에어컨 소분류", rootCat, 1));
 
         // 3. 대행사 (APPROVED)
         agency = agenciesRepository.save(Agencies.builder()

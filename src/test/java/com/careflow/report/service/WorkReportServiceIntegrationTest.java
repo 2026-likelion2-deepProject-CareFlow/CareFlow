@@ -9,6 +9,7 @@ import com.careflow.appliance.repository.HealthCertificateRepository;
 import com.careflow.as_request.entity.AsRequest;
 import com.careflow.as_request.repository.AsRequestRepository;
 import com.careflow.common.enums.AsStatus;
+import com.careflow.common.enums.RegisterMethod;
 import com.careflow.common.enums.Role;
 import com.careflow.engineer.dto.CreateWorkReportRequest;
 import com.careflow.part.domain.entity.RepairPart;
@@ -67,27 +68,22 @@ class WorkReportServiceIntegrationTest {
         ApplianceCategory childCategory = ApplianceCategory.createChild("에어컨", rootCategory, 1);
         categoryRepository.save(childCategory);
 
-        Constructor<Appliance> appConstructor = Appliance.class.getDeclaredConstructor();
-        appConstructor.setAccessible(true);
-        Appliance testAppliance = appConstructor.newInstance();
-        ReflectionTestUtils.setField(testAppliance, "user", testCustomer);
-        ReflectionTestUtils.setField(testAppliance, "category", childCategory);
-        ReflectionTestUtils.setField(testAppliance, "brand", "삼성");
+        // createdAt 등 필수 필드가 Builder 에서 설정되므로 reflection 대신 정적 팩토리 사용
+        Appliance testAppliance = Appliance.create(
+                testCustomer, childCategory, "삼성", "테스트모델",
+                null, null, null, RegisterMethod.MANUAL);
         applianceRepository.save(testAppliance);
 
-        // 🎯 변경점: 증상(Symptom)과 지역(Regions)을 강제 생성 후 영속화
-        Constructor<Symptom> sympConst = Symptom.class.getDeclaredConstructor();
-        sympConst.setAccessible(true);
-        Symptom testSymptom = sympConst.newInstance();
-        ReflectionTestUtils.setField(testSymptom, "symptomCode", "ERR-01");
-        ReflectionTestUtils.setField(testSymptom, "symptomName", "고장");
+        // Symptom — category_id NOT NULL 이므로 Builder 로 category 설정 필수
+        Symptom testSymptom = Symptom.builder()
+                .category(childCategory)
+                .symptomCode("ERR-01")
+                .symptomName("고장")
+                .build();
         em.persist(testSymptom);
 
-        Constructor<Regions> regConst = Regions.class.getDeclaredConstructor();
-        regConst.setAccessible(true);
-        Regions testRegion = regConst.newInstance();
-        ReflectionTestUtils.setField(testRegion, "name", "서울시 강남구");
-        ReflectionTestUtils.setField(testRegion, "depth", 2);
+        // Regions — create() 팩토리로 필수 필드 초기화
+        Regions testRegion = Regions.create("서울시 강남구", null, 2, 0);
         em.persist(testRegion);
 
         // 팀원분의 AsRequest 빌더 규격에 완벽히 맞춤

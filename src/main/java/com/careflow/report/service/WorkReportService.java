@@ -75,12 +75,13 @@ public class WorkReportService {
             }
         }
 
-        workReportRepository.save(report);
+        // save() 반환값을 사용해야 DB 생성 ID를 정확히 얻을 수 있음
+        WorkReport savedReport = workReportRepository.save(report);
 
-                HealthCertificate certificate = healthCertificateRepository.findByAppliance_Id(asRequest.getAppliance().getId())
+        HealthCertificate certificate = healthCertificateRepository.findByAppliance_Id(asRequest.getAppliance().getId())
                 .orElseGet(() -> healthCertificateRepository.save(
                         HealthCertificate.builder()
-                                .appliance(asRequest.getAppliance()) // 저장할 때도 조회 없이 객체 그대로 삽입!
+                                .appliance(asRequest.getAppliance())
                                 .build()
                 ));
 
@@ -101,6 +102,6 @@ public class WorkReportService {
 
         certificate.updateHealthGrade(newGrade, newScore, isCriticalReplaced);
 
-        return report.getReportId();
+        return savedReport.getReportId();
     }
 }
