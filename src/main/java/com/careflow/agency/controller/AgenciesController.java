@@ -1,13 +1,18 @@
 package com.careflow.agency.controller;
 
 import com.careflow.agency.dto.request.AgencyCreateRequest;
+import com.careflow.agency.dto.request.AgencyFeeRateUpdateRequest;
+import com.careflow.agency.dto.request.AgencyProfileUpdateRequest;
+import com.careflow.agency.dto.response.AgencyFeeRateResponse;
+import com.careflow.agency.dto.response.AgencyProfileResponse;
 import com.careflow.agency.entity.Agencies;
 import com.careflow.agency.service.AgenciesService;
-import com.careflow.engineer.domain.entity.EngineerProfile;
+import com.careflow.auth.security.CustomUserDetails;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
@@ -41,5 +46,40 @@ public class AgenciesController {
         // 대행사 조회 결과가 존재하지 않아 NoSuchElementException 발생 및 NotFound 반환 시 flag = 0 설정
         Agencies agencies = agenciesService.findByAgencyName(agencyName);
         return ResponseEntity.ok(agencies);
+    }
+
+    // ─────────────────────────────────────────────
+    //  대행사 설정 API (인증 필요 — ROLE_AGENCY)
+    // ─────────────────────────────────────────────
+
+    // 대행사 프로필(상호명, 주소) 수정
+    // JWT에서 userId 추출 → 해당 대행사 조회 → 상호명/주소 갱신
+    @PatchMapping("/profile")
+    public ResponseEntity<AgencyProfileResponse> updateProfile(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @Valid @RequestBody AgencyProfileUpdateRequest request) {
+
+        AgencyProfileResponse response = agenciesService.updateProfile(userDetails.getUserId(), request);
+        return ResponseEntity.ok(response);
+    }
+
+    // 대행사 수수료율 조회
+    @GetMapping("/fee-rate")
+    public ResponseEntity<AgencyFeeRateResponse> getFeeRate(
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+
+        AgencyFeeRateResponse response = agenciesService.getFeeRate(userDetails.getUserId());
+        return ResponseEntity.ok(response);
+    }
+
+    // 대행사 수수료율 수정
+    // 변경된 수수료율은 이후 생성되는 정산(settlements)에 적용됨 — 기존 정산 소급 적용 없음
+    @PatchMapping("/fee-rate")
+    public ResponseEntity<AgencyFeeRateResponse> updateFeeRate(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @Valid @RequestBody AgencyFeeRateUpdateRequest request) {
+
+        AgencyFeeRateResponse response = agenciesService.updateFeeRate(userDetails.getUserId(), request);
+        return ResponseEntity.ok(response);
     }
 }

@@ -102,6 +102,19 @@ public class Agencies {
         this.updatedAt = LocalDateTime.now();
     }
 
+    // 대행사 프로필(상호명, 주소) 수정 — 더티 체킹으로 UPDATE 처리
+    public void updateProfile(String agencyName, String agencyAddress) {
+        this.agencyName = agencyName;
+        this.agencyAddress = agencyAddress;
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    // 대행사 수수료율 수정 — 이후 생성되는 정산에 적용됨 (기존 정산 소급 적용 없음)
+    public void updateFeeRate(Double agencyFeeRate) {
+        this.agencyFeeRate = agencyFeeRate;
+        this.updatedAt = LocalDateTime.now();
+    }
+
     // 생성 메서드
     public static Agencies create(String agencyName, String businessNumber, String agencyAddress, Double agencyFeeRate) {
         return Agencies.builder()
