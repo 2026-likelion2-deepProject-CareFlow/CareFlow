@@ -117,6 +117,14 @@ public class EngineerProfile {
         }
     }
 
+    // 대행사 관리자가 기사의 전문 카테고리를 수정할 때 사용
+    public void updateCategory(ApplianceCategory category) {
+        if (category == null) {
+            throw new IllegalArgumentException("카테고리 정보가 필요합니다.");
+        }
+        this.category = category;
+    }
+
     // LMS 교육 이수 시 실행 메서드
     public void completeLms() {
         this.isLmsCompleted = true;
