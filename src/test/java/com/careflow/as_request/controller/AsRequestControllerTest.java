@@ -2,6 +2,7 @@ package com.careflow.as_request.controller;
 
 import com.careflow.as_request.dto.AsRequestCreateDto;
 import com.careflow.as_request.dto.AsRequestCreateResponseDto;
+import com.careflow.as_request.service.AgencyAsRequestService;
 import com.careflow.as_request.service.AsRequestService;
 import com.careflow.auth.security.CustomOAuth2UserService;
 import com.careflow.auth.security.CustomUserDetails;
@@ -47,6 +48,8 @@ class AsRequestControllerTest {
 
     @MockitoBean
     private AsRequestService asRequestService;
+    @MockitoBean
+    private AgencyAsRequestService agencyAsRequestService;
     @MockitoBean
     private JwtProvider jwtProvider;
     @MockitoBean
