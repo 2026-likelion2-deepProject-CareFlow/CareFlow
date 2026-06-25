@@ -14,7 +14,7 @@ import org.hibernate.annotations.SQLRestriction;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "users")
+@Table(name = "users", uniqueConstraints = @UniqueConstraint(name = "uk_users_email", columnNames = "email"))
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 @SQLDelete(sql = "UPDATE users SET deleted_at = NOW(), email = CONCAT(email, '_deleted_', user_id) WHERE user_id = ?")
@@ -30,7 +30,7 @@ public class User {
     @JoinColumn(name = "agency_id", nullable = true)
     private Agencies agency;
 
-    @Column(nullable = false, unique = true, length = 100)
+    @Column(nullable = false, length = 100)
     private String email;
 
     @Column(name = "password_hash", length = 255)
