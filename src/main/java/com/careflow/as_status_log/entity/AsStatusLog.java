@@ -1,4 +1,4 @@
-package com.careflow.assignment.entity;
+package com.careflow.as_status_log.entity;
 
 import com.careflow.as_request.entity.AsRequest;
 import com.careflow.user.entity.User;

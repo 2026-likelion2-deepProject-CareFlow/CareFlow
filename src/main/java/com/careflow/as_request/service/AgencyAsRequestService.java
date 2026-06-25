@@ -2,6 +2,7 @@ package com.careflow.as_request.service;
 
 import com.careflow.as_request.dto.AgencyAsRequestDetailResponse;
 import com.careflow.as_request.dto.AgencyAsRequestListResponse;
+import com.careflow.as_request.dto.AgencyDashboardSummaryResponse;
 import com.careflow.as_request.entity.AsRequest;
 import com.careflow.as_request.repository.AsRequestRepository;
 import com.careflow.auth.security.CustomUserDetails;
@@ -14,6 +15,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.NoSuchElementException;
 
@@ -47,7 +49,7 @@ public class AgencyAsRequestService {
 
     /**
      * 대행사 소속 A/S 요청 필터링 조회.
-     * - date 미입력 시 전체 날짜 조회
+     * - date(접수일, created_at 기준) 미입력 시 전체 날짜 조회
      * - status 미입력 시 전체 상태 조회
      * - status = COMPLETED 전달 시 빈 리스트 반환 (수리 완료 요청은 이 API 범위 밖)
      */
@@ -65,8 +67,13 @@ public class AgencyAsRequestService {
             return List.of();
         }
 
+        // 날짜 입력 시 해당 날짜 하루 범위(00:00:00 이상, 다음날 00:00:00 미만)로 변환
+        // H2·MySQL 양쪽 호환을 위해 범위 비교 방식 사용
+        LocalDateTime startOfDay = (date != null) ? date.atStartOfDay() : null;
+        LocalDateTime endOfDay   = (date != null) ? date.plusDays(1).atStartOfDay() : null;
+
         List<AsRequest> requests = asRequestRepository
-                .searchByAgencyFilter(agencyId, AsStatus.COMPLETED, date, filterStatus);
+                .searchByAgencyFilter(agencyId, AsStatus.COMPLETED, startOfDay, endOfDay, filterStatus);
 
         return requests.stream()
                 .map(AgencyAsRequestListResponse::from)
@@ -93,6 +100,48 @@ public class AgencyAsRequestService {
         }
 
         return AgencyAsRequestDetailResponse.from(request);
+    }
+
+    /**
+     * 대행사 대시보드 요약 통계 조회.
+     * 1. 대행사 전체 누적 A/S 요청 건수
+     * 2. 오늘 신규 접수 건수(created_at 기준)
+     * 3. 오늘 접수 중 ASSIGNED(기사 배정 대기) 건수
+     * 4. 오늘 접수 중 ACCEPTED(기사 배정 승인) 건수
+     * 5. 오늘 접수 중 CANCELLED(고객 취소) 건수
+     */
+    @Transactional(readOnly = true)
+    public AgencyDashboardSummaryResponse getDashboardSummary(
+            CustomUserDetails userDetails) throws IllegalAccessException {
+
+        Long agencyId = extractAgencyId(userDetails);
+
+        // 오늘 하루 범위 — created_at >= 오늘 00:00:00 AND < 내일 00:00:00
+        LocalDateTime startOfDay = LocalDate.now().atStartOfDay();
+        LocalDateTime endOfDay   = startOfDay.plusDays(1);
+
+        long totalCount = asRequestRepository.countByAgencyId(agencyId);
+
+        // status=null → 오늘 신규 접수 전체 건수
+        long todayNewCount = asRequestRepository
+                .countByAgencyIdAndCreatedDateAndStatus(agencyId, startOfDay, endOfDay, null);
+
+        long todayAssignedCount = asRequestRepository
+                .countByAgencyIdAndCreatedDateAndStatus(agencyId, startOfDay, endOfDay, AsStatus.ASSIGNED);
+
+        long todayAcceptedCount = asRequestRepository
+                .countByAgencyIdAndCreatedDateAndStatus(agencyId, startOfDay, endOfDay, AsStatus.ACCEPTED);
+
+        long todayCancelledCount = asRequestRepository
+                .countByAgencyIdAndCreatedDateAndStatus(agencyId, startOfDay, endOfDay, AsStatus.CANCELLED);
+
+        return new AgencyDashboardSummaryResponse(
+                totalCount,
+                todayNewCount,
+                todayAssignedCount,
+                todayAcceptedCount,
+                todayCancelledCount
+        );
     }
 
     /**
