@@ -57,6 +57,9 @@ public class WorkReport {
     @Column(name = "memo", columnDefinition = "TEXT")
     private String memo;
 
+    @Column(name = "image_urls", columnDefinition = "JSON")
+    private String imageUrls;
+
     @Column(name = "customer_approved", nullable = false, columnDefinition = "TINYINT(1) DEFAULT 0")
     private boolean customerApproved;
 
@@ -75,13 +78,14 @@ public class WorkReport {
     private List<WorkReportPart> parts = new ArrayList<>();
 
     @Builder
-    public WorkReport(AsRequest asRequest, User engineer, DiagnosisResult diagnosisResult, Integer workDurationMin, Integer finalAmount, String memo) {
+    public WorkReport(AsRequest asRequest, User engineer, DiagnosisResult diagnosisResult, Integer workDurationMin, Integer finalAmount, String memo, String imageUrls) {
         this.asRequest = asRequest;
         this.engineer = engineer;
         this.diagnosisResult = diagnosisResult;
         this.workDurationMin = workDurationMin;
         this.finalAmount = finalAmount;
         this.memo = memo;
+        this.imageUrls = imageUrls;
         this.customerApproved = false; // 기본값
     }
 
