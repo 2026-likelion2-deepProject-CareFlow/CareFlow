@@ -2,6 +2,7 @@ package com.careflow.as_request.controller;
 
 import com.careflow.agency.entity.Agencies;
 import com.careflow.agency.repository.AgenciesRepository;
+import org.springframework.jdbc.core.JdbcTemplate;
 import com.careflow.appliance.entity.Appliance;
 import com.careflow.appliance.entity.ApplianceCategory;
 import com.careflow.appliance.repository.ApplianceCategoryRepository;
@@ -45,6 +46,7 @@ class AgencyAsRequestIntegrationTest {
 
     @Autowired private MockMvc mockMvc;
     @Autowired private JwtProvider jwtProvider;
+    @Autowired private JdbcTemplate jdbcTemplate;
 
     @Autowired private UserRepository userRepository;
     @Autowired private AgenciesRepository agenciesRepository;
@@ -182,31 +184,50 @@ class AgencyAsRequestIntegrationTest {
     //  GET /api/as-requests/agency/search — 필터링 조회
     // ─────────────────────────────────────────────────────────────
     @Nested
-    @DisplayName("GET /api/as-requests/agency/search — 필터링 조회")
+    @DisplayName("GET /api/as-requests/agency/search — 필터링 조회 (접수일 기준)")
     class SearchAgencyAsRequests {
+
+        // 날짜 필터 검증을 위해 오늘/어제로 접수일을 구분해서 데이터를 세팅
+        // saveRequest()는 createdAt = now()로 고정되므로
+        // 과거 날짜는 saveRequestWithCreatedAt()으로 createdAt을 직접 지정
+        private static final LocalDate TODAY     = LocalDate.now();
+        private static final LocalDate YESTERDAY = LocalDate.now().minusDays(1);
 
         @BeforeEach
         void setUpRequests() {
-            // 날짜별 구분: 7/1(ASSIGNED), 7/2(IN_PROGRESS), 7/1(ACCEPTED)
-            saveRequest(AsStatus.ASSIGNED,    agency, LocalDate.of(2026, 7, 1));
-            saveRequest(AsStatus.IN_PROGRESS, agency, LocalDate.of(2026, 7, 2));
-            saveRequest(AsStatus.ACCEPTED,    agency, LocalDate.of(2026, 7, 1));
-            // COMPLETED — 항상 제외
-            saveRequest(AsStatus.COMPLETED,   agency, LocalDate.of(2026, 7, 1));
+            // 오늘 접수: ASSIGNED, ACCEPTED
+            saveRequest(AsStatus.ASSIGNED, agency, SCHED_DATE);
+            saveRequest(AsStatus.ACCEPTED, agency, SCHED_DATE);
+            // 어제 접수: IN_PROGRESS
+            saveRequestWithCreatedAt(AsStatus.IN_PROGRESS, agency, SCHED_DATE,
+                    YESTERDAY.atStartOfDay());
+            // COMPLETED — 접수일 무관하게 항상 제외
+            saveRequest(AsStatus.COMPLETED, agency, SCHED_DATE);
         }
 
         @Test
-        @DisplayName("성공: 날짜 필터(7/1) — ASSIGNED + ACCEPTED 2건, COMPLETED 제외")
-        void dateFilter_returnsTwo() throws Exception {
+        @DisplayName("성공: 접수일 필터(오늘) — ASSIGNED + ACCEPTED 2건, 어제/COMPLETED 제외")
+        void dateFilter_today() throws Exception {
             mockMvc.perform(get("/api/as-requests/agency/search")
                             .header("Authorization", "Bearer " + agencyToken)
-                            .param("date", "2026-07-01"))
+                            .param("date", TODAY.toString()))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.length()").value(2));
         }
 
         @Test
-        @DisplayName("성공: 상태 필터(ASSIGNED) — 1건")
+        @DisplayName("성공: 접수일 필터(어제) — IN_PROGRESS 1건")
+        void dateFilter_yesterday() throws Exception {
+            mockMvc.perform(get("/api/as-requests/agency/search")
+                            .header("Authorization", "Bearer " + agencyToken)
+                            .param("date", YESTERDAY.toString()))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.length()").value(1))
+                    .andExpect(jsonPath("$[0].status").value("IN_PROGRESS"));
+        }
+
+        @Test
+        @DisplayName("성공: 상태 필터(ASSIGNED) — 접수일 무관 1건")
         void statusFilter_assigned() throws Exception {
             mockMvc.perform(get("/api/as-requests/agency/search")
                             .header("Authorization", "Bearer " + agencyToken)
@@ -217,11 +238,11 @@ class AgencyAsRequestIntegrationTest {
         }
 
         @Test
-        @DisplayName("성공: 날짜 + 상태 복합 필터 — 날짜 7/1 AND ACCEPTED")
+        @DisplayName("성공: 접수일 + 상태 복합 필터 — 오늘 접수 AND ACCEPTED 1건")
         void dateAndStatusFilter() throws Exception {
             mockMvc.perform(get("/api/as-requests/agency/search")
                             .header("Authorization", "Bearer " + agencyToken)
-                            .param("date", "2026-07-01")
+                            .param("date", TODAY.toString())
                             .param("status", "ACCEPTED"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.length()").value(1))
@@ -314,6 +335,121 @@ class AgencyAsRequestIntegrationTest {
         }
     }
 
+    // ─────────────────────────────────────────────────────────────
+    //  GET /api/as-requests/agency/dashboard-summary — 대시보드 요약 통계
+    // ─────────────────────────────────────────────────────────────
+    @Nested
+    @DisplayName("GET /api/as-requests/agency/dashboard-summary — 대시보드 요약 통계 조회")
+    class GetAgencyDashboardSummary {
+
+        @Test
+        @DisplayName("성공: 전체 누적 3건, 오늘 신규 2건, ASSIGNED 1건, ACCEPTED 1건, CANCELLED 0건")
+        void success_normalCounts() throws Exception {
+            // 오늘 접수: ASSIGNED, ACCEPTED
+            saveRequest(AsStatus.ASSIGNED, agency, SCHED_DATE);
+            saveRequest(AsStatus.ACCEPTED, agency, SCHED_DATE);
+            // 어제 접수된 요청 (totalCount에는 포함, todayNewCount에는 제외)
+            saveRequestWithCreatedAt(AsStatus.ASSIGNED, agency, SCHED_DATE,
+                    LocalDate.now().minusDays(1).atStartOfDay());
+
+            mockMvc.perform(get("/api/as-requests/agency/dashboard-summary")
+                            .header("Authorization", "Bearer " + agencyToken))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.totalCount").value(3))
+                    .andExpect(jsonPath("$.todayNewCount").value(2))
+                    .andExpect(jsonPath("$.todayAssignedCount").value(1))
+                    .andExpect(jsonPath("$.todayAcceptedCount").value(1))
+                    .andExpect(jsonPath("$.todayCancelledCount").value(0));
+        }
+
+        @Test
+        @DisplayName("성공: 오늘 CANCELLED 건 포함 — todayCancelledCount 정확히 집계")
+        void success_withCancelled() throws Exception {
+            // CANCELLED: 고객이 취소한 건 (cancel()은 PENDING 상태에서만 가능)
+            AsRequest cancelledReq = AsRequest.builder()
+                    .customer(customer).appliance(appliance).symptom(symptom)
+                    .visitRegion(region).visitAddressDetail("테헤란로 1")
+                    .scheduledDate(SCHED_DATE).scheduledTime("10:00").build();
+            cancelledReq.cancel("고객 변심");
+            asRequestRepository.save(cancelledReq);
+
+            saveRequest(AsStatus.ASSIGNED, agency, SCHED_DATE);
+
+            // CANCELLED 요청은 agency_id = null 이므로 대행사 집계에 포함되지 않음
+            // totalCount = 1(ASSIGNED), todayNewCount = 2(ASSIGNED + CANCELLED 접수)
+            // 단, CANCELLED는 agency_id가 없어 countByAgencyId 쿼리에서 제외되므로 totalCount = 1
+            mockMvc.perform(get("/api/as-requests/agency/dashboard-summary")
+                            .header("Authorization", "Bearer " + agencyToken))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.totalCount").value(1))
+                    .andExpect(jsonPath("$.todayNewCount").value(1))
+                    .andExpect(jsonPath("$.todayAssignedCount").value(1))
+                    .andExpect(jsonPath("$.todayCancelledCount").value(0));
+        }
+
+        @Test
+        @DisplayName("성공: 타 대행사 요청은 집계에서 제외 — 데이터 격리 확인")
+        void success_dataIsolation() throws Exception {
+            // 현재 대행사 요청 2건
+            saveRequest(AsStatus.ASSIGNED, agency, SCHED_DATE);
+            saveRequest(AsStatus.ACCEPTED, agency, SCHED_DATE);
+            // 타 대행사 요청 — 집계 제외 대상
+            saveRequest(AsStatus.ASSIGNED, otherAgency, SCHED_DATE);
+
+            mockMvc.perform(get("/api/as-requests/agency/dashboard-summary")
+                            .header("Authorization", "Bearer " + agencyToken))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.totalCount").value(2))
+                    .andExpect(jsonPath("$.todayNewCount").value(2));
+        }
+
+        @Test
+        @DisplayName("성공: 신규 대행사(요청 전혀 없음) — 모든 카운트 0")
+        void success_allZero() throws Exception {
+            mockMvc.perform(get("/api/as-requests/agency/dashboard-summary")
+                            .header("Authorization", "Bearer " + agencyToken))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.totalCount").value(0))
+                    .andExpect(jsonPath("$.todayNewCount").value(0))
+                    .andExpect(jsonPath("$.todayAssignedCount").value(0))
+                    .andExpect(jsonPath("$.todayAcceptedCount").value(0))
+                    .andExpect(jsonPath("$.todayCancelledCount").value(0));
+        }
+
+        @Test
+        @DisplayName("성공: 오늘 접수 없고 과거 누적만 있을 때 — totalCount만 집계")
+        void success_onlyPastRequests() throws Exception {
+            // 어제 접수 2건
+            saveRequestWithCreatedAt(AsStatus.ASSIGNED, agency, SCHED_DATE,
+                    LocalDate.now().minusDays(1).atStartOfDay());
+            saveRequestWithCreatedAt(AsStatus.ACCEPTED, agency, SCHED_DATE,
+                    LocalDate.now().minusDays(1).atStartOfDay());
+
+            mockMvc.perform(get("/api/as-requests/agency/dashboard-summary")
+                            .header("Authorization", "Bearer " + agencyToken))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.totalCount").value(2))
+                    .andExpect(jsonPath("$.todayNewCount").value(0))
+                    .andExpect(jsonPath("$.todayAssignedCount").value(0))
+                    .andExpect(jsonPath("$.todayAcceptedCount").value(0));
+        }
+
+        @Test
+        @DisplayName("실패: CUSTOMER 계정으로 요청 — 401 Unauthorized")
+        void customerRole_401() throws Exception {
+            mockMvc.perform(get("/api/as-requests/agency/dashboard-summary")
+                            .header("Authorization", "Bearer " + customerToken))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        @Test
+        @DisplayName("실패: 인증 토큰 없음 — 401 Unauthorized")
+        void noToken_401() throws Exception {
+            mockMvc.perform(get("/api/as-requests/agency/dashboard-summary"))
+                    .andExpect(status().isUnauthorized());
+        }
+    }
+
     // ── 헬퍼 ──────────────────────────────────────────────────────
 
     /**
@@ -362,5 +498,20 @@ class AgencyAsRequestIntegrationTest {
         }
 
         return asRequestRepository.save(req);
+    }
+
+    /**
+     * createdAt을 JdbcTemplate으로 직접 UPDATE해 과거 날짜 데이터를 생성하는 헬퍼.
+     * AsRequest.createdAt 이 @Column(updatable=false)라 JPA save()로는 반영이 안 되므로
+     * JDBC로 직접 UPDATE를 실행한다.
+     * totalCount vs todayNewCount 분리 검증 시 사용.
+     */
+    private AsRequest saveRequestWithCreatedAt(AsStatus targetStatus, Agencies targetAgency,
+                                               LocalDate schedDate, java.time.LocalDateTime createdAt) {
+        AsRequest req = saveRequest(targetStatus, targetAgency, schedDate);
+        jdbcTemplate.update(
+                "UPDATE as_requests SET created_at = ? WHERE request_id = ?",
+                createdAt, req.getId());
+        return req;
     }
 }

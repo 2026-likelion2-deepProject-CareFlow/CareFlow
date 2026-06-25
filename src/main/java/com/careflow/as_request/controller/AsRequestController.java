@@ -2,6 +2,7 @@ package com.careflow.as_request.controller;
 
 import com.careflow.as_request.dto.AgencyAsRequestDetailResponse;
 import com.careflow.as_request.dto.AgencyAsRequestListResponse;
+import com.careflow.as_request.dto.AgencyDashboardSummaryResponse;
 import com.careflow.as_request.dto.AsRequestCreateDto;
 import com.careflow.as_request.dto.AsRequestCreateResponseDto;
 import com.careflow.as_request.dto.AsRequestResponseDto;
@@ -110,6 +111,26 @@ public class AsRequestController {
         }
 
         return ResponseEntity.ok(result);
+    }
+
+    /**
+     * 대행사용: 대시보드 요약 통계 조회
+     * 대행사 작업 관리 대시보드 최초 진입 시 호출하는 API.
+     * - 전체 누적 A/S 접수 건수
+     * - 오늘 신규 접수 건수
+     * - 오늘 접수 중 ASSIGNED(기사 배정 대기) 건수
+     * - 오늘 접수 중 ACCEPTED(기사 배정 승인) 건수
+     * - 오늘 접수 중 CANCELLED(고객 취소) 건수
+     * role != AGENCY → 401
+     */
+    @GetMapping("/agency/dashboard-summary")
+    public ResponseEntity<AgencyDashboardSummaryResponse> getAgencyDashboardSummary(
+            @AuthenticationPrincipal CustomUserDetails userDetails) throws IllegalAccessException {
+
+        AgencyDashboardSummaryResponse response =
+                agencyAsRequestService.getDashboardSummary(userDetails);
+
+        return ResponseEntity.ok(response);
     }
 
     /**

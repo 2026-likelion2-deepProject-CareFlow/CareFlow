@@ -16,7 +16,7 @@ public interface AgenciesRepository extends JpaRepository<Agencies, Long> {
     @Fetch(FetchMode.JOIN)
     Optional<Agencies> findByBusinessNumber(String businessNumber);
 
-    @Query("SELECT a FROM Agencies a WHERE a.representativeId = :userId")
+    @Query("SELECT a FROM Agencies a WHERE a.representativeId.id = :userId")
     Optional<Agencies> findByRepresentativeById(Long userId);
 
     // 상호명 + 승인 상태로 조회 — PENDING/REJECTED 대행사는 검색 결과에서 제외

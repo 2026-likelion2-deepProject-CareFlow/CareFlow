@@ -6,7 +6,7 @@ import com.careflow.assignment.dto.AssignmentDetailResponse.StatusLogInfo;
 import com.careflow.assignment.dto.AssignmentDetailResponse.WorkReportInfo;
 import com.careflow.assignment.entity.AsAssignment;
 import com.careflow.assignment.repository.AsAssignmentRepository;
-import com.careflow.assignment.repository.AsStatusLogRepository;
+import com.careflow.as_status_log.repository.AsStatusLogRepository;
 import com.careflow.assignment.repository.ExpectedRepairCostRepository;
 import com.careflow.auth.security.CustomUserDetails;
 import com.careflow.common.enums.Role;

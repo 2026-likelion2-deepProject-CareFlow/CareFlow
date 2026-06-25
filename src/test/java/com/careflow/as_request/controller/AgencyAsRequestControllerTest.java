@@ -2,6 +2,7 @@ package com.careflow.as_request.controller;
 
 import com.careflow.as_request.dto.AgencyAsRequestDetailResponse;
 import com.careflow.as_request.dto.AgencyAsRequestListResponse;
+import com.careflow.as_request.dto.AgencyDashboardSummaryResponse;
 import com.careflow.as_request.service.AgencyAsRequestService;
 import com.careflow.as_request.service.AsRequestService;
 import com.careflow.auth.security.CustomOAuth2UserService;
@@ -222,6 +223,63 @@ class AgencyAsRequestControllerTest {
 
             mockMvc.perform(get("/api/as-requests/agency/1"))
                     .andExpect(status().isUnauthorized())
+                    .andExpect(jsonPath("$.success").value(false));
+        }
+    }
+
+    // ─────────────────────────────────────────────
+    //  GET /api/as-requests/agency/dashboard-summary — 대시보드 요약 통계
+    // ─────────────────────────────────────────────
+    @Nested
+    @DisplayName("GET /api/as-requests/agency/dashboard-summary — 대시보드 요약 통계 조회")
+    class GetAgencyDashboardSummary {
+
+        @Test
+        @DisplayName("성공: 전체 5건, 오늘 신규 3건 포함 — 200 OK, 5개 필드 응답")
+        void success_200() throws Exception {
+            given(agencyAsRequestService.getDashboardSummary(any()))
+                    .willReturn(new AgencyDashboardSummaryResponse(5L, 3L, 1L, 1L, 1L));
+
+            mockMvc.perform(get("/api/as-requests/agency/dashboard-summary"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.totalCount").value(5))
+                    .andExpect(jsonPath("$.todayNewCount").value(3))
+                    .andExpect(jsonPath("$.todayAssignedCount").value(1))
+                    .andExpect(jsonPath("$.todayAcceptedCount").value(1))
+                    .andExpect(jsonPath("$.todayCancelledCount").value(1));
+        }
+
+        @Test
+        @DisplayName("성공: 신규 대행사(요청 전혀 없음) — 200 OK, 모든 카운트 0")
+        void success_allZero() throws Exception {
+            given(agencyAsRequestService.getDashboardSummary(any()))
+                    .willReturn(new AgencyDashboardSummaryResponse(0L, 0L, 0L, 0L, 0L));
+
+            mockMvc.perform(get("/api/as-requests/agency/dashboard-summary"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.totalCount").value(0))
+                    .andExpect(jsonPath("$.todayNewCount").value(0));
+        }
+
+        @Test
+        @DisplayName("실패: AGENCY 권한 없음 — 401 Unauthorized")
+        void notAgency_401() throws Exception {
+            given(agencyAsRequestService.getDashboardSummary(any()))
+                    .willThrow(new IllegalAccessException("대행사 관리자 권한이 없습니다."));
+
+            mockMvc.perform(get("/api/as-requests/agency/dashboard-summary"))
+                    .andExpect(status().isUnauthorized())
+                    .andExpect(jsonPath("$.success").value(false));
+        }
+
+        @Test
+        @DisplayName("실패: 소속 대행사 정보 없음 — 403 Forbidden")
+        void noAgencyInfo_403() throws Exception {
+            given(agencyAsRequestService.getDashboardSummary(any()))
+                    .willThrow(new IllegalStateException("소속 대행사 정보가 없습니다."));
+
+            mockMvc.perform(get("/api/as-requests/agency/dashboard-summary"))
+                    .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.success").value(false));
         }
     }

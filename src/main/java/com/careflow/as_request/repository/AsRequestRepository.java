@@ -7,7 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
 
-import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -28,21 +28,24 @@ public interface AsRequestRepository extends JpaRepository<AsRequest, Long> {
             @Param("agencyId") Long agencyId,
             @Param("excludeStatus") AsStatus excludeStatus);
 
-    // 대행사 소속 A/S 요청 필터링 조회 — 날짜·상태 선택 적용, COMPLETED 항상 제외
-    // date/filterStatus null 허용 — null 파라미터는 해당 조건 미적용
+    // 대행사 소속 A/S 요청 필터링 조회 — 접수일(created_at)·상태 선택 적용, COMPLETED 항상 제외
+    // startOfDay/endOfDay null 허용 — null 이면 날짜 조건 미적용
+    // filterStatus null 허용 — null 이면 상태 조건 미적용
     @Query("SELECT r FROM AsRequest r " +
            "JOIN FETCH r.symptom " +
            "JOIN FETCH r.customer " +
            "JOIN FETCH r.visitRegion " +
            "WHERE r.agency.id = :agencyId " +
            "AND r.status != :excludeStatus " +
-           "AND (:date IS NULL OR r.scheduledDate = :date) " +
+           "AND (:startOfDay IS NULL OR r.createdAt >= :startOfDay) " +
+           "AND (:endOfDay IS NULL OR r.createdAt < :endOfDay) " +
            "AND (:filterStatus IS NULL OR r.status = :filterStatus) " +
-           "ORDER BY r.scheduledDate ASC, r.createdAt ASC")
+           "ORDER BY r.createdAt DESC")
     List<AsRequest> searchByAgencyFilter(
             @Param("agencyId") Long agencyId,
             @Param("excludeStatus") AsStatus excludeStatus,
-            @Param("date") LocalDate date,
+            @Param("startOfDay") LocalDateTime startOfDay,
+            @Param("endOfDay") LocalDateTime endOfDay,
             @Param("filterStatus") AsStatus filterStatus);
 
     // 대행사용 단건 상세 조회 — appliance까지 JOIN FETCH (N+1 방지)
@@ -53,4 +56,20 @@ public interface AsRequestRepository extends JpaRepository<AsRequest, Long> {
            "JOIN FETCH r.visitRegion " +
            "WHERE r.id = :requestId")
     Optional<AsRequest> findDetailById(@Param("requestId") Long requestId);
+
+    // 대행사 소속 A/S 요청 전체 누적 건수 집계
+    @Query("SELECT COUNT(r) FROM AsRequest r WHERE r.agency.id = :agencyId")
+    long countByAgencyId(@Param("agencyId") Long agencyId);
+
+    // 대행사 소속 A/S 요청 중 특정 날짜 범위 + 상태 조건 건수 집계
+    // created_at 범위 조건(startOfDay 이상, endOfDay 미만)으로 H2·MySQL 양쪽 호환
+    @Query("SELECT COUNT(r) FROM AsRequest r " +
+           "WHERE r.agency.id = :agencyId " +
+           "AND r.createdAt >= :startOfDay AND r.createdAt < :endOfDay " +
+           "AND (:status IS NULL OR r.status = :status)")
+    long countByAgencyIdAndCreatedDateAndStatus(
+            @Param("agencyId") Long agencyId,
+            @Param("startOfDay") LocalDateTime startOfDay,
+            @Param("endOfDay") LocalDateTime endOfDay,
+            @Param("status") AsStatus status);
 }

@@ -15,7 +15,7 @@ public interface AccountRequestsRepository extends JpaRepository<AccountRequests
     @Query("SELECT aq FROM AccountRequests aq join fetch aq.agency ag WHERE ag.approvalStatus = AgencyStatus.PENDING AND aq.status = AccountRequestsStatus.PENDING")
     List<AccountRequests> findRequestByPendingAgencies();
 
-    @Query("SELECT aq FROM AccountRequests aq join fetch aq.agency ag WHERE aq.agency = :agencyId and ag.approvalStatus = AgencyStatus.APPROVED AND aq.status = AccountRequestsStatus.PENDING")
+    @Query("SELECT aq FROM AccountRequests aq join fetch aq.agency ag WHERE aq.agency.id = :agencyId and ag.approvalStatus = AgencyStatus.APPROVED AND aq.status = AccountRequestsStatus.PENDING")
     List<AccountRequests> findRequestByAgencyIdAndApproved(Long agencyId);
 
     @Query("SELECT aq FROM AccountRequests aq join fetch aq.agency ag WHERE ag.id = :agencyId AND aq.requestsRole = AccountRequestsRole.ENGINEER and aq.status = AccountRequestsStatus.PENDING")

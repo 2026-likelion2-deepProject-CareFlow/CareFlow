@@ -5,6 +5,7 @@ import com.careflow.appliance.entity.Appliance;
 import com.careflow.appliance.entity.ApplianceCategory;
 import com.careflow.as_request.dto.AgencyAsRequestDetailResponse;
 import com.careflow.as_request.dto.AgencyAsRequestListResponse;
+import com.careflow.as_request.dto.AgencyDashboardSummaryResponse;
 import com.careflow.as_request.entity.AsRequest;
 import com.careflow.as_request.repository.AsRequestRepository;
 import com.careflow.auth.security.CustomUserDetails;
@@ -28,6 +29,7 @@ import org.mockito.quality.Strictness;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
@@ -132,11 +134,15 @@ class AgencyAsRequestServiceTest {
     class SearchAsRequests {
 
         private static final LocalDate FILTER_DATE = LocalDate.of(2026, 7, 1);
+        // 접수일 기준 범위 — 서비스 내부 변환 결과와 동일하게 맞춤
+        private static final LocalDateTime START_OF_DAY = FILTER_DATE.atStartOfDay();
+        private static final LocalDateTime END_OF_DAY   = FILTER_DATE.plusDays(1).atStartOfDay();
 
         @Test
-        @DisplayName("성공: 날짜 필터만 적용 — 결과 1건 반환")
+        @DisplayName("성공: 날짜 필터만 적용(접수일 기준) — 결과 1건 반환")
         void success_dateOnly() throws IllegalAccessException {
-            given(asRequestRepository.searchByAgencyFilter(AGENCY_ID, AsStatus.COMPLETED, FILTER_DATE, null))
+            given(asRequestRepository.searchByAgencyFilter(
+                    AGENCY_ID, AsStatus.COMPLETED, START_OF_DAY, END_OF_DAY, null))
                     .willReturn(List.of(stubRequest));
 
             List<AgencyAsRequestListResponse> result =
@@ -148,7 +154,8 @@ class AgencyAsRequestServiceTest {
         @Test
         @DisplayName("성공: 상태 필터만 적용 (ASSIGNED) — 결과 1건 반환")
         void success_statusOnly() throws IllegalAccessException {
-            given(asRequestRepository.searchByAgencyFilter(AGENCY_ID, AsStatus.COMPLETED, null, AsStatus.ASSIGNED))
+            given(asRequestRepository.searchByAgencyFilter(
+                    AGENCY_ID, AsStatus.COMPLETED, null, null, AsStatus.ASSIGNED))
                     .willReturn(List.of(stubRequest));
 
             List<AgencyAsRequestListResponse> result =
@@ -161,7 +168,8 @@ class AgencyAsRequestServiceTest {
         @Test
         @DisplayName("성공: 필터 미입력 — 전체 조회 (날짜/상태 모두 null)")
         void success_noFilter() throws IllegalAccessException {
-            given(asRequestRepository.searchByAgencyFilter(AGENCY_ID, AsStatus.COMPLETED, null, null))
+            given(asRequestRepository.searchByAgencyFilter(
+                    AGENCY_ID, AsStatus.COMPLETED, null, null, null))
                     .willReturn(List.of(stubRequest));
 
             List<AgencyAsRequestListResponse> result =
@@ -246,6 +254,110 @@ class AgencyAsRequestServiceTest {
             assertThatThrownBy(() ->
                     agencyAsRequestService.getAsRequestDetail(agencyUserDetails, REQUEST_ID))
                     .isInstanceOf(IllegalAccessException.class);
+        }
+    }
+
+    // ─────────────────────────────────────────────
+    //  getDashboardSummary — 대시보드 요약 통계 조회
+    // ─────────────────────────────────────────────
+    @Nested
+    @DisplayName("getDashboardSummary — 대시보드 요약 통계 조회")
+    class GetDashboardSummary {
+
+        private LocalDateTime startOfDay;
+        private LocalDateTime endOfDay;
+
+        @BeforeEach
+        void setUpDates() {
+            startOfDay = LocalDate.now().atStartOfDay();
+            endOfDay   = startOfDay.plusDays(1);
+        }
+
+        @Test
+        @DisplayName("성공: 전체 5건, 오늘 신규 3건, ASSIGNED 1건, ACCEPTED 1건, CANCELLED 1건")
+        void success_normalCounts() throws IllegalAccessException {
+            given(asRequestRepository.countByAgencyId(AGENCY_ID)).willReturn(5L);
+            given(asRequestRepository.countByAgencyIdAndCreatedDateAndStatus(
+                    AGENCY_ID, startOfDay, endOfDay, null)).willReturn(3L);
+            given(asRequestRepository.countByAgencyIdAndCreatedDateAndStatus(
+                    AGENCY_ID, startOfDay, endOfDay, AsStatus.ASSIGNED)).willReturn(1L);
+            given(asRequestRepository.countByAgencyIdAndCreatedDateAndStatus(
+                    AGENCY_ID, startOfDay, endOfDay, AsStatus.ACCEPTED)).willReturn(1L);
+            given(asRequestRepository.countByAgencyIdAndCreatedDateAndStatus(
+                    AGENCY_ID, startOfDay, endOfDay, AsStatus.CANCELLED)).willReturn(1L);
+
+            AgencyDashboardSummaryResponse result =
+                    agencyAsRequestService.getDashboardSummary(agencyUserDetails);
+
+            assertThat(result.totalCount()).isEqualTo(5L);
+            assertThat(result.todayNewCount()).isEqualTo(3L);
+            assertThat(result.todayAssignedCount()).isEqualTo(1L);
+            assertThat(result.todayAcceptedCount()).isEqualTo(1L);
+            assertThat(result.todayCancelledCount()).isEqualTo(1L);
+        }
+
+        @Test
+        @DisplayName("성공: 오늘 접수된 요청이 없을 경우 — 오늘 관련 카운트 모두 0")
+        void success_noTodayRequests() throws IllegalAccessException {
+            given(asRequestRepository.countByAgencyId(AGENCY_ID)).willReturn(10L);
+            given(asRequestRepository.countByAgencyIdAndCreatedDateAndStatus(
+                    AGENCY_ID, startOfDay, endOfDay, null)).willReturn(0L);
+            given(asRequestRepository.countByAgencyIdAndCreatedDateAndStatus(
+                    AGENCY_ID, startOfDay, endOfDay, AsStatus.ASSIGNED)).willReturn(0L);
+            given(asRequestRepository.countByAgencyIdAndCreatedDateAndStatus(
+                    AGENCY_ID, startOfDay, endOfDay, AsStatus.ACCEPTED)).willReturn(0L);
+            given(asRequestRepository.countByAgencyIdAndCreatedDateAndStatus(
+                    AGENCY_ID, startOfDay, endOfDay, AsStatus.CANCELLED)).willReturn(0L);
+
+            AgencyDashboardSummaryResponse result =
+                    agencyAsRequestService.getDashboardSummary(agencyUserDetails);
+
+            assertThat(result.totalCount()).isEqualTo(10L);
+            assertThat(result.todayNewCount()).isZero();
+            assertThat(result.todayAssignedCount()).isZero();
+            assertThat(result.todayAcceptedCount()).isZero();
+            assertThat(result.todayCancelledCount()).isZero();
+        }
+
+        @Test
+        @DisplayName("성공: 전체 요청이 없는 신규 대행사 — 모든 카운트 0")
+        void success_brandNewAgency() throws IllegalAccessException {
+            given(asRequestRepository.countByAgencyId(AGENCY_ID)).willReturn(0L);
+            given(asRequestRepository.countByAgencyIdAndCreatedDateAndStatus(
+                    AGENCY_ID, startOfDay, endOfDay, null)).willReturn(0L);
+            given(asRequestRepository.countByAgencyIdAndCreatedDateAndStatus(
+                    AGENCY_ID, startOfDay, endOfDay, AsStatus.ASSIGNED)).willReturn(0L);
+            given(asRequestRepository.countByAgencyIdAndCreatedDateAndStatus(
+                    AGENCY_ID, startOfDay, endOfDay, AsStatus.ACCEPTED)).willReturn(0L);
+            given(asRequestRepository.countByAgencyIdAndCreatedDateAndStatus(
+                    AGENCY_ID, startOfDay, endOfDay, AsStatus.CANCELLED)).willReturn(0L);
+
+            AgencyDashboardSummaryResponse result =
+                    agencyAsRequestService.getDashboardSummary(agencyUserDetails);
+
+            assertThat(result.totalCount()).isZero();
+            assertThat(result.todayNewCount()).isZero();
+        }
+
+        @Test
+        @DisplayName("실패: AGENCY 권한 없음 — IllegalAccessException")
+        void fail_notAgencyRole() {
+            CustomUserDetails customer = new CustomUserDetails(2L, "c@test.com", "pw", "CUSTOMER");
+
+            assertThatThrownBy(() -> agencyAsRequestService.getDashboardSummary(customer))
+                    .isInstanceOf(IllegalAccessException.class)
+                    .hasMessageContaining("대행사 관리자 권한이 없습니다");
+        }
+
+        @Test
+        @DisplayName("실패: 소속 대행사 정보 없음 — IllegalStateException")
+        void fail_noAgency() {
+            User userWithoutAgency = buildUser(AGENCY_USER_ID, Role.AGENCY, null);
+            given(userRepository.findById(AGENCY_USER_ID)).willReturn(Optional.of(userWithoutAgency));
+
+            assertThatThrownBy(() -> agencyAsRequestService.getDashboardSummary(agencyUserDetails))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessageContaining("소속 대행사 정보가 없습니다");
         }
     }
 
