@@ -5,13 +5,13 @@ import com.careflow.appliance.entity.Appliance;
 import com.careflow.appliance.repository.ApplianceRepository;
 import com.careflow.as_request.dto.AsRequestCreateDto;
 import com.careflow.as_request.dto.AsRequestCreateResponseDto;
+import com.careflow.assignment.dto.MatchReason;
 import com.careflow.as_request.entity.AsRequest;
 import com.careflow.as_request.repository.AsRequestRepository;
 import com.careflow.assignment.entity.AsAssignment;
 import com.careflow.assignment.repository.AsAssignmentRepository;
-import com.careflow.common.enums.AssignType;
 import com.careflow.common.enums.Role;
-import com.careflow.engineer.domain.entity.ApplianceCategory;
+import com.careflow.appliance.entity.ApplianceCategory;
 import com.careflow.engineer.domain.entity.EngineerProfile;
 import com.careflow.engineer.domain.enums.ScheduleStatus;
 import com.careflow.engineer.repository.EngineerProfileRepository;
@@ -150,7 +150,7 @@ class AsRequestServiceTest {
         }
 
         @Test
-        @DisplayName("성공: Fallback 0 (모든 조건) 에서 기사 매칭 → requestId + assignmentId 반환")
+        @DisplayName("성공: Fallback 0 (모든 조건) 에서 기사 매칭 → requestId + assignmentId + matchReason 반환")
         void auto_fullCondition_success() {
             stubCommonLookups();
             given(engineerProfileRepository.findByAllConditions(
@@ -161,12 +161,13 @@ class AsRequestServiceTest {
 
             assertThat(result.requestId()).isEqualTo(10L);
             assertThat(result.assignmentId()).isEqualTo(20L);
+            assertThat(result.matchReason()).isEqualTo(MatchReason.FALLBACK_0);
             // Fallback 1 이후 쿼리는 호출 안 됨
             verify(engineerProfileRepository, never()).findWithoutBrand(any(), any(), any(), any(), any());
         }
 
         @Test
-        @DisplayName("성공: Fallback 1 (브랜드 조건 완화) 에서 기사 매칭")
+        @DisplayName("성공: Fallback 1 (브랜드 조건 완화) 에서 기사 매칭 → matchReason FALLBACK_1")
         void auto_fallback1_brandRelaxed_success() {
             stubCommonLookups();
             given(engineerProfileRepository.findByAllConditions(any(), any(), any(), any(), any(), any()))
@@ -177,11 +178,12 @@ class AsRequestServiceTest {
             AsRequestCreateResponseDto result = asRequestService.createAsRequest(1L, autoDto);
 
             assertThat(result.assignmentId()).isEqualTo(20L);
+            assertThat(result.matchReason()).isEqualTo(MatchReason.FALLBACK_1);
             verify(engineerProfileRepository, never()).findWithoutBrandAndRegion(any(), any(), any(), any());
         }
 
         @Test
-        @DisplayName("성공: Fallback 2 (브랜드 + 지역 조건 완화) 에서 기사 매칭")
+        @DisplayName("성공: Fallback 2 (브랜드 + 지역 조건 완화) 에서 기사 매칭 → matchReason FALLBACK_2")
         void auto_fallback2_brandAndRegionRelaxed_success() {
             stubCommonLookups();
             given(engineerProfileRepository.findByAllConditions(any(), any(), any(), any(), any(), any()))
@@ -194,6 +196,7 @@ class AsRequestServiceTest {
             AsRequestCreateResponseDto result = asRequestService.createAsRequest(1L, autoDto);
 
             assertThat(result.assignmentId()).isEqualTo(20L);
+            assertThat(result.matchReason()).isEqualTo(MatchReason.FALLBACK_2);
         }
 
         @Test
@@ -212,6 +215,25 @@ class AsRequestServiceTest {
             assertThatThrownBy(() -> asRequestService.createAsRequest(1L, autoDto))
                     .isInstanceOf(IllegalStateException.class)
                     .hasMessageContaining("가용한 수리 기사가 없습니다");
+        }
+
+        @Test
+        @DisplayName("성공: Fallback 3 (스케줄 조건만) 에서 기사 매칭 → matchReason FALLBACK_3")
+        void auto_fallback3_scheduleOnly_success() {
+            stubCommonLookups();
+            given(engineerProfileRepository.findByAllConditions(any(), any(), any(), any(), any(), any()))
+                    .willReturn(List.of());
+            given(engineerProfileRepository.findWithoutBrand(any(), any(), any(), any(), any()))
+                    .willReturn(List.of());
+            given(engineerProfileRepository.findWithoutBrandAndRegion(any(), any(), any(), any()))
+                    .willReturn(List.of());
+            given(engineerProfileRepository.findByScheduleOnly(any(), any(), eq(ScheduleStatus.AVAILABLE)))
+                    .willReturn(List.of(engineerProfile));
+
+            AsRequestCreateResponseDto result = asRequestService.createAsRequest(1L, autoDto);
+
+            assertThat(result.assignmentId()).isEqualTo(20L);
+            assertThat(result.matchReason()).isEqualTo(MatchReason.FALLBACK_3);
         }
 
         @Test
@@ -302,7 +324,7 @@ class AsRequestServiceTest {
         }
 
         @Test
-        @DisplayName("성공: ENGINEER 역할 사용자 지정 → 배정 완료")
+        @DisplayName("성공: ENGINEER 역할 사용자 지정 → 배정 완료, matchReason null (수동 배정)")
         void manual_success() {
             stubCommonLookups();
             given(userRepository.findById(5L)).willReturn(Optional.of(engineer));
@@ -311,6 +333,8 @@ class AsRequestServiceTest {
 
             assertThat(result.requestId()).isEqualTo(10L);
             assertThat(result.assignmentId()).isEqualTo(20L);
+            // MANUAL 배차는 matchReason 없음
+            assertThat(result.matchReason()).isNull();
             // AUTO 쿼리 미호출 검증
             verify(engineerProfileRepository, never()).findByAllConditions(any(), any(), any(), any(), any(), any());
         }

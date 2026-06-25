@@ -53,9 +53,9 @@ class EngineerScheduleServiceIntegrationTest {
                 .email("schedule@test.com").passwordHash("hashed")
                 .name("스케줄기사").phone("010-9999-8888").role(Role.ENGINEER).build());
 
-        ApplianceCategory cat = new ApplianceCategory();
-        ReflectionTestUtils.setField(cat, "depth", 2);
-        testCategory = categoryRepository.save(cat);
+        // v5 신규 API: createRoot → createChild 2단계 생성
+        ApplianceCategory rootCat = categoryRepository.save(ApplianceCategory.createRoot("테스트대분류", 1));
+        testCategory = categoryRepository.save(ApplianceCategory.createChild("테스트소분류", rootCat, 1));
     }
 
     @Test

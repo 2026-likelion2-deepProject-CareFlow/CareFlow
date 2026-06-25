@@ -140,9 +140,25 @@ public class AsRequest {
         this.updatedAt = LocalDateTime.now();
     }
 
+    public void acceptAssignment() {    // 기사용: 배정 수락 시 ACCEPTED 로 전환
+        if (this.status != AsStatus.ASSIGNED) {
+            throw new IllegalStateException("기사가 배정된(ASSIGNED) 상태에서만 수락할 수 있습니다.");
+        }
+        this.status = AsStatus.ACCEPTED;
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    public void startWork() {   // 기사용: 현장 도착 후 수리 시작 시 IN_PROGRESS 로 전환
+        if (this.status != AsStatus.ACCEPTED) {
+            throw new IllegalStateException("배정을 수락한(ACCEPTED) 상태에서만 작업을 시작할 수 있습니다.");
+        }
+        this.status = AsStatus.IN_PROGRESS;
+        this.updatedAt = LocalDateTime.now();
+    }
+
     public void completeWork() {   // 기사용: 작업 완료 보고서 제출 시 상태를 COMPLETED로 변경
-        if (this.status == AsStatus.CANCELLED) {
-            throw new IllegalStateException("이미 취소된 A/S 건은 완료 처리할 수 없습니다.");
+        if (this.status != AsStatus.IN_PROGRESS) {
+            throw new IllegalStateException("수리 진행 중(IN_PROGRESS)인 상태에서만 작업 완료 처리가 가능합니다. (현재 상태: " + this.status + ")");
         }
         this.status = AsStatus.COMPLETED;
         this.updatedAt = LocalDateTime.now();

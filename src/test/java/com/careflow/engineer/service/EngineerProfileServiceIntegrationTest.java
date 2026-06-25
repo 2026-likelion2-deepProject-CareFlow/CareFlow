@@ -58,9 +58,9 @@ class EngineerProfileServiceIntegrationTest {
                 .email("engineer@test.com").passwordHash("hashed")
                 .name("테스트기사").phone("010-1234-5678").role(Role.ENGINEER).build());
 
-        ApplianceCategory cat = new ApplianceCategory();
-        ReflectionTestUtils.setField(cat, "depth", 2);
-        testCategory = categoryRepository.save(cat);
+        // v5 신규 API: createRoot → createChild 2단계 생성
+        ApplianceCategory rootCat = categoryRepository.save(ApplianceCategory.createRoot("테스트대분류", 1));
+        testCategory = categoryRepository.save(ApplianceCategory.createChild("테스트소분류", rootCat, 1));
 
         testRegion = regionRepository.save(Regions.create("테스트구", null, 2, 0));
     }

@@ -4,6 +4,8 @@ import com.careflow.appliance.entity.HealthCertificate;
 import com.careflow.appliance.repository.HealthCertificateRepository;
 import com.careflow.as_request.entity.AsRequest;
 import com.careflow.as_request.repository.AsRequestRepository;
+import com.careflow.assignment.entity.AsAssignment;
+import com.careflow.assignment.repository.AsAssignmentRepository;
 import com.careflow.engineer.dto.CreateWorkReportRequest;
 import com.careflow.part.domain.entity.RepairPart;
 import com.careflow.part.repository.RepairPartRepository;
@@ -18,6 +20,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
+
 @Service
 @RequiredArgsConstructor
 public class WorkReportService {
@@ -27,6 +31,7 @@ public class WorkReportService {
     private final HealthCertificateRepository healthCertificateRepository;
     private final AsRequestRepository asRequestRepository;
     private final UserRepository userRepository;
+    private final AsAssignmentRepository asAssignmentRepository;
 
     @Transactional
     public Long submitWorkReport(Long engineerId, CreateWorkReportRequest request) {
@@ -35,6 +40,19 @@ public class WorkReportService {
 
         AsRequest asRequest = asRequestRepository.findById(request.getRequestId())
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 A/S 신청 건입니다."));
+
+        List<AsAssignment> assignments = asAssignmentRepository.findByAsRequest_Id(asRequest.getId());
+        boolean isAssignedToMe = assignments.stream()
+                .anyMatch(a -> a.getEngineer().getId().equals(engineerId)
+                        && ("ACCEPTED".equals(a.getStatus()) || "COMPLETED".equals(a.getStatus())));
+
+        if (!isAssignedToMe) {
+            throw new IllegalStateException("본인에게 배정된 A/S 건만 보고서를 작성할 수 있습니다.");
+        }
+
+        if (workReportRepository.existsByAsRequest_Id(asRequest.getId())) {
+            throw new IllegalStateException("해당 A/S 건에 대해 이미 제출된 보고서가 존재합니다.");
+        }
 
         asRequest.completeWork();
 
@@ -45,10 +63,10 @@ public class WorkReportService {
                 .workDurationMin(request.getWorkDurationMin())
                 .finalAmount(request.getFinalAmount())
                 .memo(request.getMemo())
+                .imageUrls(request.getImageUrls())
                 .build();
 
-        boolean isCriticalReplaced = false;
-        PartImportance maxImportance = PartImportance.MINOR;
+        PartImportance maxImportance = null;
 
         if (request.getParts() != null && !request.getParts().isEmpty()) {
             for (CreateWorkReportRequest.PartDto partDto : request.getParts()) {
@@ -66,41 +84,23 @@ public class WorkReportService {
 
                 report.addPart(reportPart);
 
-                if (repairPart.getImportance().ordinal() < maxImportance.ordinal()) {
+                if (maxImportance == null || repairPart.getImportance().getSeverity() < maxImportance.getSeverity()) {
                     maxImportance = repairPart.getImportance();
                 }
-                if (repairPart.getImportance() == PartImportance.CRITICAL) {
-                    isCriticalReplaced = true;
-                }
+
             }
         }
 
-        workReportRepository.save(report);
-
-                HealthCertificate certificate = healthCertificateRepository.findByAppliance_Id(asRequest.getAppliance().getId())
+        WorkReport savedReport = workReportRepository.save(report);
+        HealthCertificate certificate = healthCertificateRepository.findByAppliance_Id(asRequest.getAppliance().getId())
                 .orElseGet(() -> healthCertificateRepository.save(
                         HealthCertificate.builder()
-                                .appliance(asRequest.getAppliance()) // 저장할 때도 조회 없이 객체 그대로 삽입!
+                                .appliance(asRequest.getAppliance())
                                 .build()
                 ));
 
-        String newGrade = "A";
-        int newScore = 100;
+        certificate.calculateAndUpdateHealth(maxImportance, asRequest.getAppliance().getPurchaseDate());
 
-        if (request.getParts() == null || request.getParts().isEmpty()) {
-            newGrade = "A";
-            newScore = 95;
-        } else {
-            switch (maxImportance) {
-                case CRITICAL -> { newGrade = "E"; newScore = 30; }
-                case MAJOR -> { newGrade = "D"; newScore = 50; }
-                case NORMAL -> { newGrade = "C"; newScore = 70; }
-                case MINOR -> { newGrade = "B"; newScore = 85; }
-            }
-        }
-
-        certificate.updateHealthGrade(newGrade, newScore, isCriticalReplaced);
-
-        return report.getReportId();
+        return savedReport.getReportId();
     }
 }
