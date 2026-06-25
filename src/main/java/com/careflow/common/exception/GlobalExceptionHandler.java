@@ -65,6 +65,11 @@ public class GlobalExceptionHandler {
                     .body(ErrorResponse.of("해당 날짜에 이미 등록된 근무표가 존재합니다. (동시 요청 방어)"));
         }
 
+        if (msg != null && msg.contains("uk_lms_confirm_year")) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(ErrorResponse.of("이미 이수한 콘텐츠입니다. (동시 요청 방어)"));
+        }
+
         return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(ErrorResponse.of("데이터 처리 중 충돌이 발생했습니다. 잠시 후 다시 시도해주세요."));
     }
