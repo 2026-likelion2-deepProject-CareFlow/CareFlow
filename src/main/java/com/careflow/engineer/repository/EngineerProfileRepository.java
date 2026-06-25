@@ -3,6 +3,7 @@ package com.careflow.engineer.repository;
 import com.careflow.engineer.domain.entity.EngineerProfile;
 import com.careflow.engineer.domain.enums.ScheduleStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
@@ -101,4 +102,19 @@ public interface EngineerProfileRepository extends JpaRepository<EngineerProfile
             @Param("workTime") LocalTime workTime,
             @Param("availableStatus") ScheduleStatus availableStatus
     );
+
+
+    // 매년 LMS교육 이수 전부 리셋
+    @Modifying
+    @Query("UPDATE EngineerProfile ep SET ep.isLmsCompleted = false")
+    int resetAllLmsCompleted();
+
+
+    // 대행사에 소속된 엔지니어 전체 조회
+    @Query("""
+    SELECT ep FROM EngineerProfile ep
+    JOIN FETCH ep.user
+    WHERE ep.user.agency = :agencyId
+    """)
+    List<EngineerProfile> findByAgencyId(@Param("agencyId") Long agencyId);
 }

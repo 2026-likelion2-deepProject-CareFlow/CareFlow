@@ -110,12 +110,6 @@ public class LmsConfirmation {
     // JPA 콜백
     // ─────────────────────────────────────────────
 
-    @PrePersist
-    private void prePersist() {
-        this.confirmedAt = LocalDateTime.now();
-        this.updatedAt   = LocalDateTime.now();
-    }
-
     @PreUpdate
     private void preUpdate() {
         this.updatedAt = LocalDateTime.now();
