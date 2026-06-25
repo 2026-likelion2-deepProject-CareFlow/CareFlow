@@ -21,7 +21,11 @@ import com.careflow.part.domain.entity.RepairPart;
 import com.careflow.part.repository.RepairPartRepository;
 import com.careflow.region.entity.Regions;
 import com.careflow.report.domain.entity.WorkReport;
+import com.careflow.report.domain.entity.WorkReportPart;
+import com.careflow.report.domain.enums.DiagnosisResult;
 import com.careflow.report.domain.enums.PartImportance;
+import com.careflow.report.dto.RepairHistoryResponse;
+import com.careflow.report.dto.WorkReportDetailResponse;
 import com.careflow.report.repository.WorkReportRepository;
 import com.careflow.symptom.entity.Symptom;
 import com.careflow.user.entity.User;
@@ -104,12 +108,15 @@ class WorkReportServiceIntegrationTest {
                 .scheduledTime("14:00")
                 .build();
 
-        // 🎯 2. 도메인 메서드를 통해 실제 상태 전이 파이프라인 작동! (Reflection 꼼수 제거!)
         testAsRequest.assignAgency(agency);            // PENDING -> AGENCY_RECEIVED
         testAsRequest.processAssignment(agency);       // AGENCY_RECEIVED -> ASSIGNED
         testAsRequest.acceptAssignment();              // ASSIGNED -> ACCEPTED
-        testAsRequest.startWork();                     // ACCEPTED -> IN_PROGRESS! (우리가 원하는 상태 도달)
 
+        // 💡 추가된 부분: 기사가 출발하고 도착하는 과정 추가!
+        testAsRequest.depart();                        // ACCEPTED -> ENGINEER_DEPARTED
+        testAsRequest.arrive();                        // ENGINEER_DEPARTED -> ENGINEER_ARRIVED
+
+        testAsRequest.startWork();                     // ENGINEER_ARRIVED -> IN_PROGRESS!
         asRequestRepository.save(testAsRequest);
 
         // AsAssignment 세팅
@@ -199,5 +206,179 @@ class WorkReportServiceIntegrationTest {
         ReflectionTestUtils.setField(dto, "quantity", 1);
         ReflectionTestUtils.setField(dto, "appliedUnitPrice", 150000);
         return dto;
+    }
+
+    @Test
+    @DisplayName("성공: 가전 수리 이력 상세 조회 (최신순 정렬 및 조인 쿼리 검증)")
+    void getApplianceRepairHistory_Integration() throws Exception {
+        // Given: 기존 setUp()에서 만들어둔 testAsRequest와 testEngineer를 활용
+        // 1번 보고서 (과거 데이터)
+        WorkReport report1 = WorkReport.builder()
+                .asRequest(testAsRequest)
+                .engineer(testEngineer)
+                .diagnosisResult(com.careflow.report.domain.enums.DiagnosisResult.REPAIRED)
+                .workDurationMin(60)
+                .finalAmount(50000)
+                .memo("첫 번째 수리")
+                .build();
+        ReflectionTestUtils.setField(report1, "submittedAt", LocalDate.now().minusDays(10).atStartOfDay());
+        workReportRepository.save(report1);
+
+        // 2번 보고서 (최신 데이터)
+        // (주의: AsRequest는 Report와 1:1 관계이므로 새 AsRequest를 만들어야 합니다)
+        Symptom newSymptom = Symptom.builder()
+                .category(testAsRequest.getAppliance().getCategory())
+                .symptomCode("ERR-02")
+                .symptomName("소음 발생")
+                .build();
+        em.persist(newSymptom);
+
+        AsRequest request2 = AsRequest.builder()
+                .customer(testAsRequest.getCustomer())
+                .appliance(testAsRequest.getAppliance()) // 🎯 1번과 같은 가전제품!
+                .symptom(newSymptom)
+                .visitRegion(testAsRequest.getVisitRegion())
+                .visitAddressDetail("테스트 아파트 101호")
+                .scheduledDate(LocalDate.now())
+                .scheduledTime("15:00")
+                .build();
+        asRequestRepository.save(request2);
+
+        WorkReport report2 = WorkReport.builder()
+                .asRequest(request2)
+                .engineer(testEngineer)
+                .diagnosisResult(com.careflow.report.domain.enums.DiagnosisResult.PART_REPLACED)
+                .workDurationMin(120)
+                .finalAmount(150000)
+                .memo("두 번째 수리 (최신)")
+                .build();
+        ReflectionTestUtils.setField(report2, "submittedAt", LocalDate.now().atStartOfDay());
+        workReportRepository.save(report2);
+
+        // When: 고객 본인이 자기 가전의 수리 이력을 조회
+        Long customerId = testAsRequest.getCustomer().getId();
+        Long applianceId = testAsRequest.getAppliance().getId();
+        List<RepairHistoryResponse> history = workReportService.getApplianceRepairHistory(customerId, "CUSTOMER", applianceId);
+
+        // Then: 2건이 최신순(내림차순)으로 나와야 함
+        assertThat(history).hasSize(2);
+
+        // 0번째 인덱스가 가장 최근 수리인 '소음 발생'건 이어야 함
+        assertThat(history.get(0).getSymptomName()).isEqualTo("소음 발생");
+        assertThat(history.get(0).getFinalAmount()).isEqualTo(150000);
+
+        // 1번째 인덱스가 과거 수리인 '고장'건 이어야 함
+        assertThat(history.get(1).getSymptomName()).isEqualTo("고장");
+        assertThat(history.get(1).getFinalAmount()).isEqualTo(50000);
+    }
+
+    @Test
+    @DisplayName("실패: 다른 고객의 가전 수리 이력 조회 시도 (통합 환경 권한 방어)")
+    void getApplianceRepairHistory_Fail_NotOwner_Integration() throws Exception {
+        Long applianceId = testAsRequest.getAppliance().getId();
+        Long otherCustomerId = 9999L; // 가전 소유자가 아닌 임의의 다른 고객 ID
+
+        assertThatThrownBy(() -> workReportService.getApplianceRepairHistory(otherCustomerId, "CUSTOMER", applianceId))
+                .isInstanceOf(IllegalAccessException.class)
+                .hasMessageContaining("본인 소유의 가전제품 수리 이력만 조회할 수 있습니다.");
+    }
+
+    @Test
+    @DisplayName("성공: 통합 환경에서 고객이 본인의 작업 보고서를 상세 조회한다")
+    void getWorkReportDetail_Integration() throws Exception {
+        // Given: setUp()에서 세팅된 testAsRequest와 testEngineer를 활용해 보고서 저장
+        WorkReport report = WorkReport.builder()
+                .asRequest(testAsRequest)
+                .engineer(testEngineer)
+                .diagnosisResult(DiagnosisResult.REPAIRED)
+                .workDurationMin(90)
+                .finalAmount(100000)
+                .memo("꼼꼼하게 수리했습니다.")
+                .build();
+
+        // 부품 세팅
+        Constructor<RepairPart> partConstructor = RepairPart.class.getDeclaredConstructor();
+        partConstructor.setAccessible(true);
+        RepairPart repairPart = partConstructor.newInstance();
+        ReflectionTestUtils.setField(repairPart, "partCode", "COMP-DETAIL");
+        ReflectionTestUtils.setField(repairPart, "partName", "상세조회용 부품");
+        ReflectionTestUtils.setField(repairPart, "importance", PartImportance.NORMAL);
+        ReflectionTestUtils.setField(repairPart, "baseUnitPrice", 50000);
+        repairPartRepository.save(repairPart);
+
+        WorkReportPart reportPart = WorkReportPart.builder()
+                .repairPart(repairPart)
+                .quantity(2) // 수량 2개
+                .appliedUnitPrice(50000)
+                .build();
+        report.addPart(reportPart);
+
+        WorkReport savedReport = workReportRepository.save(report);
+
+        // 영속성 컨텍스트 비우기 (조회 시 DB에서 조인해서 가져오도록 강제)
+        em.flush();
+        em.clear();
+
+        // When: 고객이 조회
+        Long customerId = testAsRequest.getCustomer().getId();
+        WorkReportDetailResponse response = workReportService.getWorkReportDetail(customerId, "CUSTOMER", savedReport.getReportId());
+
+        // Then
+        assertThat(response.getReportId()).isEqualTo(savedReport.getReportId());
+        assertThat(response.getEngineerName()).isEqualTo("기사");
+        assertThat(response.getDiagnosisResult()).isEqualTo("REPAIRED");
+        assertThat(response.getFinalAmount()).isEqualTo(100000);
+        assertThat(response.getMemo()).isEqualTo("꼼꼼하게 수리했습니다.");
+
+        // 부품 리스트(FETCH JOIN) 검증
+        assertThat(response.getParts()).hasSize(1);
+        assertThat(response.getParts().get(0).getPartName()).isEqualTo("상세조회용 부품");
+        assertThat(response.getParts().get(0).getQuantity()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("성공: 통합 환경에서 고객이 작업 보고서를 승인한다")
+    void approveWorkReport_Integration() throws Exception {
+        // Given
+        WorkReport report = WorkReport.builder()
+                .asRequest(testAsRequest)
+                .engineer(testEngineer)
+                .diagnosisResult(DiagnosisResult.NORMAL)
+                .workDurationMin(30)
+                .finalAmount(30000)
+                .build();
+        WorkReport savedReport = workReportRepository.save(report);
+
+        // When
+        Long customerId = testAsRequest.getCustomer().getId();
+        workReportService.approveWorkReport(customerId, savedReport.getReportId());
+
+        em.flush();
+        em.clear();
+
+        // Then
+        WorkReport updatedReport = workReportRepository.findById(savedReport.getReportId()).orElseThrow();
+        assertThat(updatedReport.isCustomerApproved()).isTrue();
+        assertThat(updatedReport.getApprovedAt()).isNotNull();
+    }
+
+    @Test
+    @DisplayName("실패: 타인의 보고서를 승인하려고 하면 권한 예외 발생")
+    void approveWorkReport_Fail_NotOwner_Integration() throws Exception {
+        // Given
+        WorkReport report = WorkReport.builder()
+                .asRequest(testAsRequest)
+                .engineer(testEngineer)
+                .diagnosisResult(DiagnosisResult.NORMAL)
+                .workDurationMin(30)
+                .finalAmount(30000)
+                .build();
+        WorkReport savedReport = workReportRepository.save(report);
+
+        // When & Then
+        Long otherCustomerId = 9999L; // 가짜 ID
+        assertThatThrownBy(() -> workReportService.approveWorkReport(otherCustomerId, savedReport.getReportId()))
+                .isInstanceOf(IllegalAccessException.class)
+                .hasMessageContaining("본인의 A/S 보고서만 승인할 수 있습니다.");
     }
 }

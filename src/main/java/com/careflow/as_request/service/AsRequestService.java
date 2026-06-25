@@ -10,6 +10,7 @@ import com.careflow.as_request.entity.AsRequest;
 import com.careflow.as_request.repository.AsRequestRepository;
 import com.careflow.assignment.entity.AsAssignment;
 import com.careflow.assignment.repository.AsAssignmentRepository;
+import com.careflow.common.enums.AsStatus;
 import com.careflow.common.enums.AssignType;
 import com.careflow.common.enums.Role;
 import com.careflow.engineer.domain.entity.EngineerProfile;
@@ -247,6 +248,32 @@ public class AsRequestService {
             return LocalTime.parse(scheduledTime);
         } catch (DateTimeParseException e) {
             throw new IllegalArgumentException("방문 예약 시간 형식이 올바르지 않습니다. (올바른 형식: HH:MM)");
+        }
+    }
+
+    /**
+     * 기사의 작업 수행 상태 변경 (출발 -> 도착 -> 시작)
+     */
+    @Transactional
+    public void updateEngineerTaskStatus(Long engineerId, Long requestId, AsStatus newStatus) {
+        AsRequest asRequest = asRequestRepository.findById(requestId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 A/S 요청입니다."));
+
+        // 1. 해당 기사 본인에게 배정된 건이며 수락(ACCEPTED) 이상의 상태인지 철저한 검증
+        boolean isMyTask = asAssignmentRepository.findByAsRequest_Id(requestId).stream()
+                .anyMatch(a -> a.getEngineer().getId().equals(engineerId) &&
+                        !a.getStatus().equals("WAITING") && !a.getStatus().equals("REJECTED"));
+
+        if (!isMyTask) {
+            throw new IllegalStateException("본인에게 배정되어 진행 중인 작업만 상태를 변경할 수 있습니다.");
+        }
+
+        // 2. 새로운 상태에 따른 도메인 메서드 호출 (더티 체킹 업데이트)
+        switch (newStatus) {
+            case ENGINEER_DEPARTED -> asRequest.depart();
+            case ENGINEER_ARRIVED -> asRequest.arrive();
+            case IN_PROGRESS -> asRequest.startWork();
+            default -> throw new IllegalArgumentException("해당 API로는 출발/도착/작업시작 상태만 변경 가능합니다.");
         }
     }
 }

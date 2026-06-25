@@ -318,7 +318,7 @@ class AgencyAsRequestIntegrationTest {
 
     /**
      * 특정 상태 + 대행사의 AsRequest를 직접 저장하는 헬퍼.
-     * ASSIGNED 이상 상태는 processAssignment()로 전환.
+     * 변경된 상태 전이 파이프라인(출발 -> 도착 -> 시작)을 엄격하게 준수합니다.
      */
     private AsRequest saveRequest(AsStatus targetStatus, Agencies targetAgency, LocalDate date) {
         AsRequest req = AsRequest.builder()
@@ -332,14 +332,29 @@ class AgencyAsRequestIntegrationTest {
                 req.processAssignment(targetAgency);
                 req.acceptAssignment();
             }
+            case ENGINEER_DEPARTED -> {
+                req.processAssignment(targetAgency);
+                req.acceptAssignment();
+                req.depart();
+            }
+            case ENGINEER_ARRIVED -> {
+                req.processAssignment(targetAgency);
+                req.acceptAssignment();
+                req.depart();
+                req.arrive();
+            }
             case IN_PROGRESS -> {
                 req.processAssignment(targetAgency);
                 req.acceptAssignment();
+                req.depart(); // 💡 기사 출발
+                req.arrive(); // 💡 기사 도착
                 req.startWork();
             }
             case COMPLETED -> {
                 req.processAssignment(targetAgency);
                 req.acceptAssignment();
+                req.depart(); // 💡 기사 출발
+                req.arrive(); // 💡 기사 도착
                 req.startWork();
                 req.completeWork();
             }

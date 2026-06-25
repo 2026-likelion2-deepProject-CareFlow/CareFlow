@@ -155,7 +155,17 @@ public class EngineerProfileService {
         EngineerProfile profile = profileRepository.findByUser_Id(userId)
                 .orElseThrow(() -> new IllegalArgumentException("프로필 정보가 존재하지 않습니다."));
 
-        profile.updateBasicInfo(request.getIntroduction(), request.getProfileImageUrl());
+        SkillLevel newSkillLevel = profile.getSkillLevel();
+        if (request.getCareerStartedYear() != null) {
+            int currentYear = java.time.LocalDate.now().getYear();
+            if (request.getCareerStartedYear() > currentYear) {
+                throw new IllegalArgumentException("경력 시작 연도는 미래일 수 없습니다.");
+            }
+            newSkillLevel = calculateSkillLevel(request.getCareerStartedYear());
+        }
+
+        // 엔티티 업데이트 (더티 체킹)
+        profile.updateBasicInfo(request.getCareerStartedYear(), newSkillLevel, request.getIntroduction(), request.getProfileImageUrl());
 
         List<String> brandNames = expertBrandRepository.findByEngineer_Id(userId).stream()
                 .map(EngineerExpertBrand::getBrandName).toList();

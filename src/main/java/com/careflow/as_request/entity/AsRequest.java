@@ -148,13 +148,30 @@ public class AsRequest {
         this.updatedAt = LocalDateTime.now();
     }
 
-    public void startWork() {   // 기사용: 현장 도착 후 수리 시작 시 IN_PROGRESS 로 전환
+    public void depart() {   // 기사용: 현장으로 출발
         if (this.status != AsStatus.ACCEPTED) {
-            throw new IllegalStateException("배정을 수락한(ACCEPTED) 상태에서만 작업을 시작할 수 있습니다.");
+            throw new IllegalStateException("배정을 수락한(ACCEPTED) 상태에서만 출발 처리할 수 있습니다.");
+        }
+        this.status = AsStatus.ENGINEER_DEPARTED;
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    public void arrive() {   // 기사용: 현장 도착
+        if (this.status != AsStatus.ENGINEER_DEPARTED) {
+            throw new IllegalStateException("출발(ENGINEER_DEPARTED) 상태에서만 도착 처리할 수 있습니다.");
+        }
+        this.status = AsStatus.ENGINEER_ARRIVED;
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    public void startWork() {   // 기사용: 수리 시작 (수정됨)
+        if (this.status != AsStatus.ENGINEER_ARRIVED) {
+            throw new IllegalStateException("현장 도착(ENGINEER_ARRIVED) 완료 후 작업을 시작할 수 있습니다.");
         }
         this.status = AsStatus.IN_PROGRESS;
         this.updatedAt = LocalDateTime.now();
     }
+
 
     public void completeWork() {   // 기사용: 작업 완료 보고서 제출 시 상태를 COMPLETED로 변경
         if (this.status != AsStatus.IN_PROGRESS) {

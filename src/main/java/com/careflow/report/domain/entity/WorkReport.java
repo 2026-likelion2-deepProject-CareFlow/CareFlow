@@ -93,4 +93,13 @@ public class WorkReport {
         this.parts.add(part);
         part.assignReport(this);
     }
+
+    public void approveByCustomer() {   // 고객 승인 처리 메서드
+        if (this.customerApproved) {
+            throw new IllegalStateException("이미 승인된 보고서입니다.");
+        }
+        this.customerApproved = true;
+        this.approvedAt = LocalDateTime.now();
+        this.updatedAt = LocalDateTime.now();
+    }
 }

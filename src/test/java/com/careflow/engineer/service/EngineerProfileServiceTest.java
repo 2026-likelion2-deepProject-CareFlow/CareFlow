@@ -9,6 +9,7 @@ import com.careflow.engineer.domain.enums.SkillLevel;
 import com.careflow.engineer.dto.CreateProfileRequest;
 import com.careflow.engineer.dto.ProfileResponse;
 import com.careflow.appliance.repository.ApplianceCategoryRepository;
+import com.careflow.engineer.dto.UpdateProfileRequest;
 import com.careflow.engineer.repository.EngineerExpertBrandRepository;
 import com.careflow.engineer.repository.EngineerProfileRepository;
 import com.careflow.engineer.repository.EngineerServiceRegionRepository;
@@ -290,5 +291,42 @@ class EngineerProfileServiceTest {
         assertThat(response.getProfileImageUrl()).isEqualTo("http://new-image.com");
         assertThat(response.getExpertBrands()).containsExactly("다이슨");
         assertThat(response.getServiceRegionIds()).containsExactly(99);
+    }
+
+    @Test
+    @DisplayName("성공: 프로필 수정 시 경력 시작 연도를 변경하면 기술 등급이 재산정된다")
+    void updateProfile_RecalculateSkillLevel_Success() throws Exception {
+        // Given
+        User user = engineer(USER_ID);
+
+        // 💡 헬퍼 메서드 대신 직접 프로필을 초기화하고 완성 상태로 만듭니다.
+        EngineerProfile profile = EngineerProfile.createInitial(user);
+        ApplianceCategory category = category(10, 2);
+        // 기존 등급: 2020년 시작 -> BEGINNER 라고 가정
+        profile.completeProfile(category, 2020, SkillLevel.BEGINNER, "기존 소개글");
+
+        // 12년 전으로 경력 수정 -> 11년 이상이므로 ADVANCED가 되어야 함
+        int advancedYear = LocalDate.now().getYear() - 12;
+
+        Constructor<UpdateProfileRequest> constructor = UpdateProfileRequest.class.getDeclaredConstructor();
+        constructor.setAccessible(true);
+        UpdateProfileRequest request = constructor.newInstance();
+        ReflectionTestUtils.setField(request, "careerStartedYear", advancedYear); // 💡 연차 수정 요청
+        ReflectionTestUtils.setField(request, "introduction", "경력 수정 테스트");
+
+        given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
+        given(profileRepository.findByUser_Id(USER_ID)).willReturn(Optional.of(profile));
+
+        // updateProfile 내부에서 브랜드/지역 목록을 조회하므로 빈 리스트를 반환하도록 Mocking
+        given(expertBrandRepository.findByEngineer_Id(USER_ID)).willReturn(List.of());
+        given(serviceRegionRepository.findByEngineer_Id(USER_ID)).willReturn(List.of());
+
+        // When
+        ProfileResponse response = engineerProfileService.updateProfile(USER_ID, request);
+
+        // Then
+        assertThat(response.getCareerStartedYear()).isEqualTo(advancedYear);
+        assertThat(response.getSkillLevel()).isEqualTo(SkillLevel.ADVANCED.name()); // 🎯 등급 재산정 완벽 검증!
+        assertThat(response.getIntroduction()).isEqualTo("경력 수정 테스트");
     }
 }
