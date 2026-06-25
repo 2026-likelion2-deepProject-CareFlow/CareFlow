@@ -3,6 +3,10 @@ package com.careflow.agency.service;
 import com.careflow.account_requests.entity.AccountRequests;
 import com.careflow.account_requests.repository.AccountRequestsRepository;
 import com.careflow.agency.dto.request.AgencyCreateRequest;
+import com.careflow.agency.dto.request.AgencyFeeRateUpdateRequest;
+import com.careflow.agency.dto.request.AgencyProfileUpdateRequest;
+import com.careflow.agency.dto.response.AgencyFeeRateResponse;
+import com.careflow.agency.dto.response.AgencyProfileResponse;
 import com.careflow.agency.entity.Agencies;
 import com.careflow.agency.repository.AgenciesRepository;
 import com.careflow.common.enums.AccountRequestsRole;
@@ -110,5 +114,40 @@ public class AgenciesService {
     public Agencies findRepresentativeIdById(Long userId) {
 
         return agenciesRepository.findByRepresentativeById(userId).orElse(null);
+    }
+
+    // 대행사 프로필(상호명, 주소) 수정
+    @Transactional
+    public AgencyProfileResponse updateProfile(Long userId, AgencyProfileUpdateRequest request) {
+        // JWT userId 로 대행사 조회 — 존재하지 않으면 404
+        Agencies agencies = agenciesRepository.findByRepresentativeById(userId)
+                .orElseThrow(() -> new NoSuchElementException("해당 사용자의 대행사 정보를 찾을 수 없습니다."));
+
+        agencies.updateProfile(request.agencyName(), request.agencyAddress());
+        return AgencyProfileResponse.from(agencies);
+    }
+
+    // 대행사 수수료율 조회
+    @Transactional(readOnly = true)
+    public AgencyFeeRateResponse getFeeRate(Long userId) {
+        Agencies agencies = agenciesRepository.findByRepresentativeById(userId)
+                .orElseThrow(() -> new NoSuchElementException("해당 사용자의 대행사 정보를 찾을 수 없습니다."));
+
+        return AgencyFeeRateResponse.from(agencies);
+    }
+
+    // 대행사 수수료율 수정
+    @Transactional
+    public AgencyFeeRateResponse updateFeeRate(Long userId, AgencyFeeRateUpdateRequest request) {
+        // 수수료율 범위 검증: 0 이상 100 이하
+        if (request.agencyFeeRate() < 0 || request.agencyFeeRate() > 100) {
+            throw new IllegalArgumentException("수수료율은 0 이상 100 이하여야 합니다.");
+        }
+
+        Agencies agencies = agenciesRepository.findByRepresentativeById(userId)
+                .orElseThrow(() -> new NoSuchElementException("해당 사용자의 대행사 정보를 찾을 수 없습니다."));
+
+        agencies.updateFeeRate(request.agencyFeeRate());
+        return AgencyFeeRateResponse.from(agencies);
     }
 }
