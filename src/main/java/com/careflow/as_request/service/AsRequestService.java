@@ -5,6 +5,7 @@ import com.careflow.appliance.repository.ApplianceRepository;
 import com.careflow.as_request.dto.AsRequestCreateDto;
 import com.careflow.as_request.dto.AsRequestCreateResponseDto;
 import com.careflow.as_request.dto.AsRequestResponseDto;
+import com.careflow.assignment.dto.MatchReason;
 import com.careflow.as_request.entity.AsRequest;
 import com.careflow.as_request.repository.AsRequestRepository;
 import com.careflow.assignment.entity.AsAssignment;
@@ -83,22 +84,24 @@ public class AsRequestService {
         AsRequest persistedRequest = asRequestRepository.save(asRequest);
 
         // 3. assignType 에 따라 배정 로직 분기
-        AsAssignment assignment;
         if (dto.getAssignType() == AssignType.AUTO) {
-            assignment = processAutoAssignment(persistedRequest, appliance, dto);
+            AutoResult result = processAutoAssignment(persistedRequest, appliance, dto);
+            return new AsRequestCreateResponseDto(
+                    persistedRequest.getId(), result.assignment().getId(), result.matchReason());
         } else {
-            assignment = processManualAssignment(persistedRequest, dto);
+            AsAssignment assignment = processManualAssignment(persistedRequest, dto);
+            // MANUAL 배차는 고객이 직접 기사를 선택하므로 matchReason 없음
+            return new AsRequestCreateResponseDto(persistedRequest.getId(), assignment.getId(), null);
         }
-
-        return new AsRequestCreateResponseDto(persistedRequest.getId(), assignment.getId());
     }
 
     /**
      * AUTO 배정 로직
-     * 4가지 조건을 순차적으로 완화하며 기사를 탐색, 없으면 예외 반환
+     * 4가지 조건을 순차적으로 완화하며 기사를 탐색, 없으면 예외 반환.
+     * 매칭 성사 시 어떤 Fallback 조건으로 선택됐는지 사유를 함께 반환한다.
      */
-    private AsAssignment processAutoAssignment(AsRequest asRequest, Appliance appliance,
-                                               AsRequestCreateDto dto) {
+    private AutoResult processAutoAssignment(AsRequest asRequest, Appliance appliance,
+                                             AsRequestCreateDto dto) {
         LocalTime workTime = parseScheduledTime(dto.getScheduledTime());
         Integer categoryId = appliance.getCategory().getCategoryId();
         String brand = appliance.getBrand();
@@ -108,24 +111,28 @@ public class AsRequestService {
         List<EngineerProfile> candidates = engineerProfileRepository.findByAllConditions(
                 dto.getScheduledDate(), workTime, ScheduleStatus.AVAILABLE,
                 brand, categoryId, regionId);
+        String matchReason = MatchReason.FALLBACK_0;
 
         // Fallback 1: 브랜드 조건 완화
         if (candidates.isEmpty()) {
             candidates = engineerProfileRepository.findWithoutBrand(
                     dto.getScheduledDate(), workTime, ScheduleStatus.AVAILABLE,
                     categoryId, regionId);
+            matchReason = MatchReason.FALLBACK_1;
         }
 
         // Fallback 2: 브랜드 + 서비스 지역 조건 완화
         if (candidates.isEmpty()) {
             candidates = engineerProfileRepository.findWithoutBrandAndRegion(
                     dto.getScheduledDate(), workTime, ScheduleStatus.AVAILABLE, categoryId);
+            matchReason = MatchReason.FALLBACK_2;
         }
 
         // Fallback 3: 브랜드 + 지역 + 카테고리 조건 완화 (스케줄 조건만)
         if (candidates.isEmpty()) {
             candidates = engineerProfileRepository.findByScheduleOnly(
                     dto.getScheduledDate(), workTime, ScheduleStatus.AVAILABLE);
+            matchReason = MatchReason.FALLBACK_3;
         }
 
         // Fallback 4: 모든 조건 완화 후에도 기사 없음 → 일정 재협의 안내
@@ -141,8 +148,11 @@ public class AsRequestService {
         EngineerProfile selected = selectByCompositeScore(candidates);
         User engineer = selected.getUser();
 
-        return createAssignment(asRequest, engineer, dto.getAssignType());
+        return new AutoResult(createAssignment(asRequest, engineer, dto.getAssignType()), matchReason);
     }
+
+    /** 자동 배차 결과 — 생성된 배차 엔티티 + 매칭 성사 사유를 묶어 반환하기 위한 내부 레코드 */
+    private record AutoResult(AsAssignment assignment, String matchReason) {}
 
     /**
      * MANUAL 배정 로직

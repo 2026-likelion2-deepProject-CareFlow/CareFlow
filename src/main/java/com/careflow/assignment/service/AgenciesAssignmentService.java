@@ -1,6 +1,6 @@
 package com.careflow.assignment.service;
 
-import com.careflow.assignment.dto.AgencyAssignmentResponse;
+import com.careflow.assignment.dto.AssignmentResponse;
 import com.careflow.assignment.entity.AsAssignment;
 import com.careflow.assignment.repository.AsAssignmentRepository;
 import com.careflow.auth.security.CustomUserDetails;
@@ -28,7 +28,7 @@ public class AgenciesAssignmentService {
      * 3. 조회 결과를 DTO 리스트로 변환하여 반환 (빈 결과 허용 — 204 는 컨트롤러에서 처리)
      */
     @Transactional(readOnly = true)
-    public List<AgencyAssignmentResponse> getAssignmentsByAgency(CustomUserDetails userDetails) throws IllegalAccessException {
+    public List<AssignmentResponse> getAssignmentsByAgency(CustomUserDetails userDetails) throws IllegalAccessException {
 
         // 권한 검증 — AGENCY 관리자만 접근 허용
         if (!Role.AGENCY.name().equals(userDetails.getRole())) {
@@ -48,7 +48,7 @@ public class AgenciesAssignmentService {
         List<AsAssignment> assignments = asAssignmentRepository.findByAgency_Id(agencyId);
 
         return assignments.stream()
-                .map(AgencyAssignmentResponse::from)
+                .map(AssignmentResponse::from)
                 .toList();
     }
 }

@@ -5,7 +5,7 @@
 - 위 파일에서 agencies, users, as_assignments, as_requests, engineer_profiles, engineer_schedules, engineer_schedules_slots, engineer_expert_brands, engineer_service_regions 테이블 위주로 참조할것
 
 ## 2. API 엔드포인트 명세
-### [GET] /api/agencies/assignment - AgenciesAssignementController.getAgenciesAssignement()
+### [GET] /api/assignment - AgenciesAssignementController.getAgenciesAssignement()
 -- **설명**: 현재 로그인한 관리자와 같은 대행사 소속의 수리 기사들의 고객 A/S 배차 내역 조회
 - **API Parameter** :
   - @Authentication CustomUserDetails : 현재 로그인한 사용자가 일반 관리자 권한이 있는지(role=AGENCY), agencyId 값을 이용해 as_assignment 테이블에서 같은 대행사 소속의 수리 기사들에게 배차된 내역이 있는지 확인

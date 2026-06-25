@@ -5,7 +5,7 @@ import com.careflow.common.enums.AssignType;
 
 import java.time.LocalDateTime;
 
-public record AgencyAssignmentResponse(
+public record AssignmentResponse(
         Long assignmentId,
         Long requestId,
         Long engineerId,
@@ -18,8 +18,8 @@ public record AgencyAssignmentResponse(
         LocalDateTime rejectedAt,
         String rejectReason
 ) {
-    public static AgencyAssignmentResponse from(AsAssignment a) {
-        return new AgencyAssignmentResponse(
+    public static AssignmentResponse from(AsAssignment a) {
+        return new AssignmentResponse(
                 a.getId(),
                 a.getAsRequest().getId(),
                 a.getEngineer().getId(),

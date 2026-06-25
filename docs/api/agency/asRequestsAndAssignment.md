@@ -1,6 +1,5 @@
 # 🚀 API 생성 및 개발 요구사항 정의서
 
-
 ## 1. 데이터 모델 (Schema)
 - 메인 스키마 정의 파일 : `sql/CareFlow_v5.sql`
 - 위 파일에서 as_requests, agencies, users, appliance, engineer_profiles, engineer_schedules, engineer_schedules_slots, engineer_expert_brands, engineer_service_regions 테이블 위주로 참조할것 
