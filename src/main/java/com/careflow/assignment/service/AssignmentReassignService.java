@@ -19,14 +19,12 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.math.BigDecimal;
 import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
 import java.util.Comparator;
 import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Set;
-import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -65,7 +63,9 @@ public class AssignmentReassignService {
 
         // 3. assign_type 에 따라 분기
         if (asRequest.getAssignType() == AssignType.AUTO) {
-            return processAutoReassignment(asRequest);
+            // 재배차 제외 대상: 재배차 요청된 그 배차를 받은 기사 1명만 제외
+            Long excludeEngineerId = targetAssignment.getEngineer().getId();
+            return processAutoReassignment(asRequest, excludeEngineerId);
         } else {
             return processManualFailureNotification(asRequest);
         }
@@ -74,18 +74,17 @@ public class AssignmentReassignService {
     /**
      * AUTO 재배차.
      *
-     * 1. 해당 A/S 요청에 이전에 배차된 기사 ID 전부 수집 (excludeEngineerIds)
-     * 2. 기존 4단계 Fallback 로직 재현 — 단, 각 단계에서 excludeEngineerIds 제외
+     * 1. 재배차 요청 대상 배차(`assignmentId`)를 받은 기사 1명만 제외
+     *    - 해당 건에서 30분 무응답이거나 거부한 기사만 빠짐
+     *    - 동일 A/S 요청의 다른 배차 이력 기사는 제외 대상이 아님
+     * 2. 기존 4단계 Fallback 로직 재현 — 단, 해당 기사만 제외
      * 3. 복합 점수(평점 × 0.7 - 대기중 배차수 × 0.3)로 최적 기사 선택
      * 4. 새 AsAssignment 생성 (기존 배차는 이력으로 보존)
      */
-    private AssignmentReassignResponse processAutoReassignment(AsRequest asRequest) {
-        // 1. 이미 배차된 기사 ID 수집
-        Set<Long> excludeEngineerIds = asAssignmentRepository
-                .findByAsRequest_Id(asRequest.getId())
-                .stream()
-                .map(a -> a.getEngineer().getId())
-                .collect(Collectors.toSet());
+    private AssignmentReassignResponse processAutoReassignment(AsRequest asRequest,
+                                                               Long excludeEngineerId) {
+        // 재배차 요청 대상 배차를 받은 기사 1명만 제외 대상으로 설정
+        Set<Long> excludeEngineerIds = Set.of(excludeEngineerId);
 
         Appliance appliance = asRequest.getAppliance();
         Integer categoryId  = appliance.getCategory().getCategoryId();
