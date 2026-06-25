@@ -1,6 +1,8 @@
 package com.careflow.report.service;
 
+import com.careflow.appliance.entity.Appliance;
 import com.careflow.appliance.entity.HealthCertificate;
+import com.careflow.appliance.repository.ApplianceRepository;
 import com.careflow.appliance.repository.HealthCertificateRepository;
 import com.careflow.as_request.entity.AsRequest;
 import com.careflow.as_request.repository.AsRequestRepository;
@@ -13,6 +15,8 @@ import com.careflow.report.domain.entity.WorkReport;
 import com.careflow.report.domain.entity.WorkReportPart;
 import com.careflow.report.domain.enums.DiagnosisResult;
 import com.careflow.report.domain.enums.PartImportance;
+import com.careflow.report.dto.RepairHistoryResponse;
+import com.careflow.report.dto.WorkReportDetailResponse;
 import com.careflow.report.repository.WorkReportRepository;
 import com.careflow.user.entity.User;
 import com.careflow.user.repository.UserRepository;
@@ -21,6 +25,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.NoSuchElementException;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -32,6 +38,8 @@ public class WorkReportService {
     private final AsRequestRepository asRequestRepository;
     private final UserRepository userRepository;
     private final AsAssignmentRepository asAssignmentRepository;
+    private final ApplianceRepository applianceRepository;
+
 
     @Transactional
     public Long submitWorkReport(Long engineerId, CreateWorkReportRequest request) {
@@ -102,5 +110,63 @@ public class WorkReportService {
         certificate.calculateAndUpdateHealth(maxImportance, asRequest.getAppliance().getPurchaseDate());
 
         return savedReport.getReportId();
+    }
+
+    @Transactional(readOnly = true)
+    public List<RepairHistoryResponse> getApplianceRepairHistory(Long userId, String role, Long applianceId) throws IllegalAccessException {
+
+        Appliance appliance = applianceRepository.findById(applianceId)
+                .orElseThrow(() -> new NoSuchElementException("존재하지 않는 가전제품입니다."));
+
+        if ("CUSTOMER".equals(role) && !appliance.getUser().getId().equals(userId)) {
+            throw new IllegalAccessException("본인 소유의 가전제품 수리 이력만 조회할 수 있습니다.");
+        }
+
+        List<WorkReport> reports = workReportRepository.findByApplianceIdOrderBySubmittedAtDesc(applianceId);
+
+        return reports.stream()
+                .map(RepairHistoryResponse::new)
+                .collect(Collectors.toList());
+    }
+
+    /**
+     * 작업 완료 보고서 상세 조회 (고객 및 기사 공용)
+     */
+    @Transactional(readOnly = true)
+    public WorkReportDetailResponse getWorkReportDetail(Long userId, String role, Long reportId) throws IllegalAccessException {
+        WorkReport report = workReportRepository.findByIdWithParts(reportId)
+                .orElseThrow(() -> new NoSuchElementException("존재하지 않는 보고서입니다."));
+
+        // 권한 분리 방어 로직 (BOLA 방어)
+        if ("CUSTOMER".equals(role)) {
+            if (!report.getAsRequest().getCustomer().getId().equals(userId)) {
+                throw new IllegalAccessException("본인의 A/S 보고서만 조회할 수 있습니다.");
+            }
+        } else if ("ENGINEER".equals(role)) {
+            if (!report.getEngineer().getId().equals(userId)) {
+                throw new IllegalAccessException("본인이 작성한 보고서만 조회할 수 있습니다.");
+            }
+        } else {
+            throw new IllegalAccessException("보고서 조회 권한이 없습니다.");
+        }
+
+        return WorkReportDetailResponse.from(report);
+    }
+
+    /**
+     * 작업 완료 보고서 고객 승인 처리
+     */
+    @Transactional
+    public void approveWorkReport(Long customerId, Long reportId) throws IllegalAccessException {
+        WorkReport report = workReportRepository.findById(reportId)
+                .orElseThrow(() -> new NoSuchElementException("존재하지 않는 보고서입니다."));
+
+        // 철저한 권한 검증: 고객 본인인가?
+        if (!report.getAsRequest().getCustomer().getId().equals(customerId)) {
+            throw new IllegalAccessException("본인의 A/S 보고서만 승인할 수 있습니다.");
+        }
+
+        // 엔티티 도메인 메서드를 통한 상태 업데이트 (더티 체킹)
+        report.approveByCustomer();
     }
 }

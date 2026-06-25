@@ -9,6 +9,7 @@ import java.util.List;
 @Getter
 @NoArgsConstructor(access = AccessLevel.PROTECTED)
 public class UpdateProfileRequest {
+    private Integer careerStartedYear;
     private String introduction;
     private String profileImageUrl;
     private List<String> expertBrands;

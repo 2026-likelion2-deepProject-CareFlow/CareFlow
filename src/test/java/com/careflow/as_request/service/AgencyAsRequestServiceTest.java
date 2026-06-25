@@ -292,10 +292,30 @@ class AgencyAsRequestServiceTest {
                 .scheduledDate(LocalDate.of(2026, 7, 1)).scheduledTime("10:00").build();
         setId(r, "id", id);
 
-        // 상태 및 대행사 반영
-        if (status == AsStatus.ASSIGNED || status == AsStatus.ACCEPTED ||
-                status == AsStatus.IN_PROGRESS || status == AsStatus.COMPLETED) {
-            if (agency != null) r.processAssignment(agency);
+        if (agency != null) {
+            r.processAssignment(agency); // AGENCY_RECEIVED -> ASSIGNED
+
+            if (status == AsStatus.ACCEPTED || status == AsStatus.ENGINEER_DEPARTED ||
+                    status == AsStatus.ENGINEER_ARRIVED || status == AsStatus.IN_PROGRESS ||
+                    status == AsStatus.COMPLETED) {
+                r.acceptAssignment();
+            }
+            if (status == AsStatus.ENGINEER_DEPARTED || status == AsStatus.ENGINEER_ARRIVED ||
+                    status == AsStatus.IN_PROGRESS || status == AsStatus.COMPLETED) {
+                r.depart();   // 💡 추가: 기사 출발
+            }
+            if (status == AsStatus.ENGINEER_ARRIVED || status == AsStatus.IN_PROGRESS ||
+                    status == AsStatus.COMPLETED) {
+                r.arrive();   // 💡 추가: 기사 도착
+            }
+            if (status == AsStatus.IN_PROGRESS || status == AsStatus.COMPLETED) {
+                r.startWork(); // 💡 이제 에러 없이 작업 시작 가능!
+            }
+            if (status == AsStatus.COMPLETED) {
+                r.completeWork();
+            }
+        } else {
+            setId(r, "status", status); // agency가 없는 경우(PENDING 등) 리플렉션으로 강제 주입
         }
 
         return r;

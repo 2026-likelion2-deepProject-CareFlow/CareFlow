@@ -103,11 +103,12 @@ public class EngineerProfile {
         return this.category != null && this.careerStartedYear != null;
     }
 
-    public void completeLms() {
-        this.isLmsCompleted = true;
-    }
 
-    public void updateBasicInfo(String introduction, String profileImageUrl) {  // 데이터 수정
+    public void updateBasicInfo(Integer careerStartedYear, SkillLevel newSkillLevel, String introduction, String profileImageUrl) { // 프로필 수정
+        if (careerStartedYear != null && newSkillLevel != null) {
+            this.careerStartedYear = careerStartedYear;
+            this.skillLevel = newSkillLevel;
+        }
         if (introduction != null) {
             this.introduction = introduction;
         }

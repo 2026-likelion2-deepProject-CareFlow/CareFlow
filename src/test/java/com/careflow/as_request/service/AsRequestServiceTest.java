@@ -10,6 +10,7 @@ import com.careflow.as_request.entity.AsRequest;
 import com.careflow.as_request.repository.AsRequestRepository;
 import com.careflow.assignment.entity.AsAssignment;
 import com.careflow.assignment.repository.AsAssignmentRepository;
+import com.careflow.common.enums.AsStatus;
 import com.careflow.common.enums.Role;
 import com.careflow.appliance.entity.ApplianceCategory;
 import com.careflow.engineer.domain.entity.EngineerProfile;
@@ -382,5 +383,60 @@ class AsRequestServiceTest {
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessageContaining("수리 기사가 아닙니다");
         }
+    }
+
+
+    @Test
+    @DisplayName("성공: 기사가 자신의 배정 건을 순차적으로 상태 변경(출발->도착->시작) 한다")
+    void updateEngineerTaskStatus_Success() {
+        // Given
+        Long engineerId = 5L;
+        Long requestId = 10L;
+
+        AsRequest mockRequest = mock(AsRequest.class);
+        given(asRequestRepository.findById(requestId)).willReturn(Optional.of(mockRequest));
+
+        AsAssignment mockAssignment = mock(AsAssignment.class);
+        User mockEngineer = mock(User.class);
+        given(mockAssignment.getEngineer()).willReturn(mockEngineer);
+        given(mockEngineer.getId()).willReturn(engineerId);
+        given(mockAssignment.getStatus()).willReturn("ACCEPTED"); // 배정 수락됨
+
+        given(asAssignmentRepository.findByAsRequest_Id(requestId)).willReturn(List.of(mockAssignment));
+
+        // When
+        asRequestService.updateEngineerTaskStatus(engineerId, requestId, AsStatus.ENGINEER_DEPARTED);
+        asRequestService.updateEngineerTaskStatus(engineerId, requestId, AsStatus.ENGINEER_ARRIVED);
+        asRequestService.updateEngineerTaskStatus(engineerId, requestId, AsStatus.IN_PROGRESS);
+
+        // Then
+        verify(mockRequest).depart();
+        verify(mockRequest).arrive();
+        verify(mockRequest).startWork();
+    }
+
+    @Test
+    @DisplayName("실패: 타인의 배정 건 상태 변경 시도 시 예외 발생")
+    void updateEngineerTaskStatus_Fail_NotMyTask() {
+        // Given
+        Long myEngineerId = 5L;
+        Long otherEngineerId = 99L;
+        Long requestId = 10L;
+
+        AsRequest mockRequest = mock(AsRequest.class);
+        given(asRequestRepository.findById(requestId)).willReturn(Optional.of(mockRequest));
+
+        AsAssignment mockAssignment = mock(AsAssignment.class);
+        User otherEngineer = mock(User.class);
+        given(mockAssignment.getEngineer()).willReturn(otherEngineer);
+        given(otherEngineer.getId()).willReturn(otherEngineerId); // 배정자가 다름!
+        given(mockAssignment.getStatus()).willReturn("ACCEPTED");
+
+        given(asAssignmentRepository.findByAsRequest_Id(requestId)).willReturn(List.of(mockAssignment));
+
+        // When & Then
+        assertThatThrownBy(() -> asRequestService.updateEngineerTaskStatus(myEngineerId, requestId, AsStatus.ENGINEER_DEPARTED))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("본인에게 배정되어 진행 중인 작업만");
     }
 }
