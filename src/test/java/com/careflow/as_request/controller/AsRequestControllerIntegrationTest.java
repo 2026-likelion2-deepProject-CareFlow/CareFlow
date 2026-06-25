@@ -107,9 +107,10 @@ class AsRequestControllerIntegrationTest {
                 .email("engineer@test.com").passwordHash("hashed")
                 .name("테스트기사").phone("010-3333-4444").role(Role.ENGINEER).agency(agency).build());
 
-        // 6. 기사 프로필 (카테고리 설정 완료)
+        // 6. 기사 프로필 (카테고리 설정 완료, LMS 이수 완료)
         EngineerProfile profile = EngineerProfile.createInitial(engineer);
         profile.completeProfile(category, 2020, SkillLevel.INTERMEDIATE, "성실한 기사입니다");
+        profile.completeLms();
         engineerProfileRepository.save(profile);
 
         // 7. 기사 스케줄 + 시간 슬롯 (SCHEDULED_DATE 09:00~17:00 AVAILABLE)

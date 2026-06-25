@@ -21,7 +21,7 @@ public interface EngineerProfileRepository extends JpaRepository<EngineerProfile
 
     /**
      * AUTO 배정 - Fallback 0: 스케줄 + 브랜드 + 카테고리 + 서비스 지역 (4가지 조건 모두)
-     * avg_rating 내림차순으로 정렬
+     * LMS 교육 이수 완료 기사만 대상 (isLmsCompleted = true)
      */
     @Query("SELECT DISTINCT ep FROM EngineerProfile ep " +
            "JOIN ep.user u " +
@@ -32,6 +32,7 @@ public interface EngineerProfileRepository extends JpaRepository<EngineerProfile
            "WHERE es.workDate = :workDate " +
            "AND slot.startTime <= :workTime AND slot.endTime > :workTime " +
            "AND es.status = :availableStatus " +
+           "AND ep.isLmsCompleted = true " +
            "AND eb.brandName = :brand " +
            "AND ep.category.categoryId = :categoryId " +
            "AND esr.region.id = :regionId " +
@@ -47,6 +48,7 @@ public interface EngineerProfileRepository extends JpaRepository<EngineerProfile
 
     /**
      * AUTO 배정 - Fallback 1: 스케줄 + 카테고리 + 서비스 지역 (브랜드 조건 완화)
+     * LMS 교육 이수 완료 기사만 대상 (isLmsCompleted = true)
      */
     @Query("SELECT DISTINCT ep FROM EngineerProfile ep " +
            "JOIN ep.user u " +
@@ -56,6 +58,7 @@ public interface EngineerProfileRepository extends JpaRepository<EngineerProfile
            "WHERE es.workDate = :workDate " +
            "AND slot.startTime <= :workTime AND slot.endTime > :workTime " +
            "AND es.status = :availableStatus " +
+           "AND ep.isLmsCompleted = true " +
            "AND ep.category.categoryId = :categoryId " +
            "AND esr.region.id = :regionId " +
            "ORDER BY ep.profileId ASC")
@@ -69,6 +72,7 @@ public interface EngineerProfileRepository extends JpaRepository<EngineerProfile
 
     /**
      * AUTO 배정 - Fallback 2: 스케줄 + 카테고리 (브랜드 + 서비스 지역 조건 완화)
+     * LMS 교육 이수 완료 기사만 대상 (isLmsCompleted = true)
      */
     @Query("SELECT DISTINCT ep FROM EngineerProfile ep " +
            "JOIN ep.user u " +
@@ -77,6 +81,7 @@ public interface EngineerProfileRepository extends JpaRepository<EngineerProfile
            "WHERE es.workDate = :workDate " +
            "AND slot.startTime <= :workTime AND slot.endTime > :workTime " +
            "AND es.status = :availableStatus " +
+           "AND ep.isLmsCompleted = true " +
            "AND ep.category.categoryId = :categoryId " +
            "ORDER BY ep.profileId ASC")
     List<EngineerProfile> findWithoutBrandAndRegion(
@@ -88,6 +93,7 @@ public interface EngineerProfileRepository extends JpaRepository<EngineerProfile
 
     /**
      * AUTO 배정 - Fallback 3: 스케줄 조건만 (브랜드 + 지역 + 카테고리 조건 완화)
+     * LMS 교육 이수 완료 기사만 대상 (isLmsCompleted = true)
      */
     @Query("SELECT DISTINCT ep FROM EngineerProfile ep " +
            "JOIN ep.user u " +
@@ -96,6 +102,7 @@ public interface EngineerProfileRepository extends JpaRepository<EngineerProfile
            "WHERE es.workDate = :workDate " +
            "AND slot.startTime <= :workTime AND slot.endTime > :workTime " +
            "AND es.status = :availableStatus " +
+           "AND ep.isLmsCompleted = true " +
            "ORDER BY ep.profileId ASC")
     List<EngineerProfile> findByScheduleOnly(
             @Param("workDate") LocalDate workDate,
@@ -109,6 +116,7 @@ public interface EngineerProfileRepository extends JpaRepository<EngineerProfile
 
     /**
      * 재배차 Fallback 0: 스케줄 + 브랜드 + 카테고리 + 서비스 지역 (이전 배차 기사 제외)
+     * LMS 교육 이수 완료 기사만 대상 (isLmsCompleted = true)
      */
     @Query("SELECT DISTINCT ep FROM EngineerProfile ep " +
            "JOIN ep.user u " +
@@ -119,6 +127,7 @@ public interface EngineerProfileRepository extends JpaRepository<EngineerProfile
            "WHERE es.workDate = :workDate " +
            "AND slot.startTime <= :workTime AND slot.endTime > :workTime " +
            "AND es.status = :availableStatus " +
+           "AND ep.isLmsCompleted = true " +
            "AND eb.brandName = :brand " +
            "AND ep.category.categoryId = :categoryId " +
            "AND esr.region.id = :regionId " +
@@ -136,6 +145,7 @@ public interface EngineerProfileRepository extends JpaRepository<EngineerProfile
 
     /**
      * 재배차 Fallback 1: 스케줄 + 카테고리 + 서비스 지역 (브랜드 조건 완화, 이전 배차 기사 제외)
+     * LMS 교육 이수 완료 기사만 대상 (isLmsCompleted = true)
      */
     @Query("SELECT DISTINCT ep FROM EngineerProfile ep " +
            "JOIN ep.user u " +
@@ -145,6 +155,7 @@ public interface EngineerProfileRepository extends JpaRepository<EngineerProfile
            "WHERE es.workDate = :workDate " +
            "AND slot.startTime <= :workTime AND slot.endTime > :workTime " +
            "AND es.status = :availableStatus " +
+           "AND ep.isLmsCompleted = true " +
            "AND ep.category.categoryId = :categoryId " +
            "AND esr.region.id = :regionId " +
            "AND u.id NOT IN :excludeIds " +
@@ -160,6 +171,7 @@ public interface EngineerProfileRepository extends JpaRepository<EngineerProfile
 
     /**
      * 재배차 Fallback 2: 스케줄 + 카테고리 (브랜드 + 서비스 지역 조건 완화, 이전 배차 기사 제외)
+     * LMS 교육 이수 완료 기사만 대상 (isLmsCompleted = true)
      */
     @Query("SELECT DISTINCT ep FROM EngineerProfile ep " +
            "JOIN ep.user u " +
@@ -168,6 +180,7 @@ public interface EngineerProfileRepository extends JpaRepository<EngineerProfile
            "WHERE es.workDate = :workDate " +
            "AND slot.startTime <= :workTime AND slot.endTime > :workTime " +
            "AND es.status = :availableStatus " +
+           "AND ep.isLmsCompleted = true " +
            "AND ep.category.categoryId = :categoryId " +
            "AND u.id NOT IN :excludeIds " +
            "ORDER BY ep.profileId ASC")
@@ -181,6 +194,7 @@ public interface EngineerProfileRepository extends JpaRepository<EngineerProfile
 
     /**
      * 재배차 Fallback 3: 스케줄 조건만 (브랜드 + 지역 + 카테고리 조건 완화, 이전 배차 기사 제외)
+     * LMS 교육 이수 완료 기사만 대상 (isLmsCompleted = true)
      */
     @Query("SELECT DISTINCT ep FROM EngineerProfile ep " +
            "JOIN ep.user u " +
@@ -189,6 +203,7 @@ public interface EngineerProfileRepository extends JpaRepository<EngineerProfile
            "WHERE es.workDate = :workDate " +
            "AND slot.startTime <= :workTime AND slot.endTime > :workTime " +
            "AND es.status = :availableStatus " +
+           "AND ep.isLmsCompleted = true " +
            "AND u.id NOT IN :excludeIds " +
            "ORDER BY ep.profileId ASC")
     List<EngineerProfile> findByScheduleOnlyExcluding(
