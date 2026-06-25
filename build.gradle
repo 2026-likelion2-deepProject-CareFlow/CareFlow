@@ -42,6 +42,9 @@ dependencies {
 
 	// Source: https://mvnrepository.com/artifact/com.h2database/h2
 	testImplementation("com.h2database:h2:2.4.240")
+
+	// Quartz
+	implementation 'org.springframework.boot:spring-boot-starter-quartz'
 }
 
 tasks.named('test') {

@@ -115,4 +115,10 @@ public class EngineerProfile {
             this.profileImageUrl = profileImageUrl;
         }
     }
+
+    // LMS 교육 이수 시 실행 메서드
+    public void completeLms() {
+        this.isLmsCompleted = true;
+        this.updatedAt = LocalDateTime.now();
+    }
 }

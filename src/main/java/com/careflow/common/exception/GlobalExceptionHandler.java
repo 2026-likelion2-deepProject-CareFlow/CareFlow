@@ -55,9 +55,19 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleDataIntegrity(DataIntegrityViolationException e) {
         String msg = e.getMostSpecificCause().getMessage();
 
+        if (msg != null && msg.contains("uk_users_email")) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(ErrorResponse.of("이미 사용 중인 이메일입니다."));
+        }
+
         if (msg != null && msg.contains("uk_eng_schedule")) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
                     .body(ErrorResponse.of("해당 날짜에 이미 등록된 근무표가 존재합니다. (동시 요청 방어)"));
+        }
+
+        if (msg != null && msg.contains("uk_lms_confirm_year")) {
+            return ResponseEntity.status(HttpStatus.CONFLICT)
+                    .body(ErrorResponse.of("이미 이수한 콘텐츠입니다. (동시 요청 방어)"));
         }
 
         return ResponseEntity.status(HttpStatus.CONFLICT)
