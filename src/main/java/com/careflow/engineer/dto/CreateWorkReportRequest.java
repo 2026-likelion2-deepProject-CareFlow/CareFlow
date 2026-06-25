@@ -2,6 +2,8 @@ package com.careflow.engineer.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
+import jakarta.validation.constraints.PositiveOrZero;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -19,12 +21,16 @@ public class CreateWorkReportRequest {
     private String diagnosisResult;
 
     @NotNull(message = "작업 시간은 필수입니다.")
+    @PositiveOrZero(message = "작업 시간은 0 이상이어야 합니다.")
     private Integer workDurationMin;
 
     @NotNull(message = "최종 청구 금액은 필수입니다.")
+    @PositiveOrZero(message = "최종 청구 금액은 0 이상이어야 합니다.")
     private Integer finalAmount;
 
     private String memo;
+
+    private String imageUrls;
 
     private List<PartDto> parts;
 
@@ -35,6 +41,7 @@ public class CreateWorkReportRequest {
         private Long repairPartId;
 
         @NotNull(message = "수량은 필수입니다.")
+        @Positive(message = "수량은 1 이상이어야 합니다.")
         private Integer quantity;
 
         private Integer appliedUnitPrice;
