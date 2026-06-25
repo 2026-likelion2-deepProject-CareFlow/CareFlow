@@ -49,7 +49,7 @@ class WorkReportServiceTest {
     @Mock private AsAssignmentRepository asAssignmentRepository;
 
     @Test
-    @DisplayName("성공: 부품 교체 없음 -> A등급 95점으로 진단서 갱신")
+    @DisplayName("성공: 부품 교체 없음 -> 100점으로 진단서 갱신")
     void submitWorkReport_NoParts_Success() throws Exception {
         User engineer = mock(User.class);
         AsRequest asRequest = mock(AsRequest.class);
