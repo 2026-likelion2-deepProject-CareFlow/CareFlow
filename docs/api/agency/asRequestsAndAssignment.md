@@ -1,6 +1,5 @@
 # 🚀 API 생성 및 개발 요구사항 정의서
 
-
 ## 1. 데이터 모델 (Schema)
 - 메인 스키마 정의 파일 : `sql/CareFlow_v5.sql`
 - 위 파일에서 as_requests, agencies, users, appliance, engineer_profiles, engineer_schedules, engineer_schedules_slots, engineer_expert_brands, engineer_service_regions 테이블 위주로 참조할것 
@@ -45,10 +44,10 @@
 
 - 실패 시 HTTP $500$, 서버 내부에서 에러가 발생한 이유를 문자열로 작성 후 에러 메시지로 반환(e.getMessage())
 
-## 5. 예외 처리 (Error Handling) 및 제약 조건
+## 4. 예외 처리 (Error Handling) 및 제약 조건
 - 모든 에러 발생 시 공통 포맷(`{ "success": false, "message": "에러 내용" }`)으로 응답할 것.
 - API 요청 시 동작을 한 트랜잭션 안에서 수행하되, 로직 수행 도중 DB 에러가 발생하여 기능 수행이 도중에 중단될 경우 트랜잭션을 롤백하여 요청 수행 중 발생한 모든 DB 변경사항 롤백할것  
 
-## 6. 개발 및 출력 요구사항
+## 5. 개발 및 출력 요구사항
 - 컨트롤러, 서비스, 라우터 레이어를 명확히 분리하여 구현해 줘.
 - 작성된 API에 대해 기본적인 유닛 테스트(JUnit5 선호) 코드도 함께 생성해 줘.

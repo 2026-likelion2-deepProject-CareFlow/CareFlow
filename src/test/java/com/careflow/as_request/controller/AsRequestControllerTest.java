@@ -114,28 +114,32 @@ class AsRequestControllerTest {
         @DisplayName("성공(AUTO): 자동 배정 요청 — 201 Created, requestId + assignmentId 반환")
         void createAsRequest_auto_success() throws Exception {
             given(asRequestService.createAsRequest(eq(CUSTOMER_ID), any()))
-                    .willReturn(new AsRequestCreateResponseDto(10L, 20L));
+                    .willReturn(new AsRequestCreateResponseDto(10L, 20L,
+                            "스케줄, 브랜드, 카테고리, 서비스 지역 4가지 조건 모두 충족"));
 
             mockMvc.perform(post("/api/as-requests")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(validAutoDto)))
                     .andExpect(status().isCreated())
                     .andExpect(jsonPath("$.requestId").value(10))
-                    .andExpect(jsonPath("$.assignmentId").value(20));
+                    .andExpect(jsonPath("$.assignmentId").value(20))
+                    .andExpect(jsonPath("$.matchReason").value(
+                            "스케줄, 브랜드, 카테고리, 서비스 지역 4가지 조건 모두 충족"));
         }
 
         @Test
         @DisplayName("성공(MANUAL): 수동 배정 요청 — 201 Created, requestId + assignmentId 반환")
         void createAsRequest_manual_success() throws Exception {
             given(asRequestService.createAsRequest(eq(CUSTOMER_ID), any()))
-                    .willReturn(new AsRequestCreateResponseDto(11L, 21L));
+                    .willReturn(new AsRequestCreateResponseDto(11L, 21L, null));
 
             mockMvc.perform(post("/api/as-requests")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(validManualDto)))
                     .andExpect(status().isCreated())
                     .andExpect(jsonPath("$.requestId").value(11))
-                    .andExpect(jsonPath("$.assignmentId").value(21));
+                    .andExpect(jsonPath("$.assignmentId").value(21))
+                    .andExpect(jsonPath("$.matchReason").isEmpty());
         }
 
         @Test

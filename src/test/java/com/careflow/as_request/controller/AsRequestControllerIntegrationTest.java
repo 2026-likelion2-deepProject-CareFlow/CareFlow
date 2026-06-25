@@ -107,9 +107,10 @@ class AsRequestControllerIntegrationTest {
                 .email("engineer@test.com").passwordHash("hashed")
                 .name("테스트기사").phone("010-3333-4444").role(Role.ENGINEER).agency(agency).build());
 
-        // 6. 기사 프로필 (카테고리 설정 완료)
+        // 6. 기사 프로필 (카테고리 설정 완료, LMS 이수 완료)
         EngineerProfile profile = EngineerProfile.createInitial(engineer);
         profile.completeProfile(category, 2020, SkillLevel.INTERMEDIATE, "성실한 기사입니다");
+        profile.completeLms();
         engineerProfileRepository.save(profile);
 
         // 7. 기사 스케줄 + 시간 슬롯 (SCHEDULED_DATE 09:00~17:00 AVAILABLE)
@@ -157,6 +158,9 @@ class AsRequestControllerIntegrationTest {
                     .andExpect(status().isCreated())
                     .andExpect(jsonPath("$.requestId").isNumber())
                     .andExpect(jsonPath("$.assignmentId").isNumber())
+                    // 모든 조건 충족(Fallback 0)으로 매칭 — 사유 문자열 확인
+                    .andExpect(jsonPath("$.matchReason").value(
+                            "스케줄, 브랜드, 카테고리, 서비스 지역 4가지 조건 모두 충족"))
                     .andReturn().getResponse().getContentAsString();
 
             // DB 검증: as_requests 저장 및 상태 ASSIGNED 전환
@@ -188,7 +192,10 @@ class AsRequestControllerIntegrationTest {
                             .header("Authorization", "Bearer " + customerToken)
                             .contentType(MediaType.APPLICATION_JSON).content(body))
                     .andExpect(status().isCreated())
-                    .andExpect(jsonPath("$.assignmentId").isNumber());
+                    .andExpect(jsonPath("$.assignmentId").isNumber())
+                    // LG 브랜드 → Fallback 0 실패, 서비스 지역은 일치하므로 Fallback 1 으로 매칭
+                    .andExpect(jsonPath("$.matchReason").value(
+                            "스케줄, 카테고리, 서비스 지역 조건 충족 (브랜드 조건 완화 적용)"));
         }
 
         @Test
@@ -220,7 +227,9 @@ class AsRequestControllerIntegrationTest {
                             .contentType(MediaType.APPLICATION_JSON).content(body))
                     .andExpect(status().isCreated())
                     .andExpect(jsonPath("$.requestId").isNumber())
-                    .andExpect(jsonPath("$.assignmentId").isNumber());
+                    .andExpect(jsonPath("$.assignmentId").isNumber())
+                    // MANUAL 배차 — matchReason 없음(null → JSON 직렬화 시 필드 포함되지 않음)
+                    .andExpect(jsonPath("$.matchReason").isEmpty());
 
             // 지정한 기사로 배정됐는지 확인
             assertThat(asAssignmentRepository.findAll().get(0).getEngineer().getId())
