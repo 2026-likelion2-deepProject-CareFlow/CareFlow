@@ -180,4 +180,12 @@ public class AsRequest {
         this.status = AsStatus.COMPLETED;
         this.updatedAt = LocalDateTime.now();
     }
+
+    public void markPaid() {   // 고객용: 결제 완료 시 COMPLETED → PAID 전환
+        if (this.status != AsStatus.COMPLETED) {
+            throw new IllegalStateException("작업이 완료된(COMPLETED) 상태에서만 결제 처리가 가능합니다. (현재 상태: " + this.status + ")");
+        }
+        this.status = AsStatus.PAID;
+        this.updatedAt = LocalDateTime.now();
+    }
 }
