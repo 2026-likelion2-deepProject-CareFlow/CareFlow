@@ -21,12 +21,14 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
 import java.util.NoSuchElementException;
+import java.util.UUID;
 
 @Service
 @RequiredArgsConstructor
 public class AuthService {
 
     private static final String REFRESH_KEY_PREFIX = "refresh:token:";
+    private static final String OAUTH2_EXCHANGE_PREFIX = "oauth2:exchange:";
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
@@ -127,6 +129,53 @@ public class AuthService {
                             .build();
                     return userRepository.save(newUser);
                 });
+    }
+
+    /**
+     * OAuth2 로그인 성공 후 1회용 교환 코드 발급
+     * - UUID 코드를 생성하고 "oauth2:exchange:{code}" 키로 access|refresh 를 Redis에 30초 TTL로 저장
+     * - URL에 토큰을 직접 노출하지 않기 위한 Authorization Code Exchange 패턴
+     */
+    @Transactional
+    public String issueOAuth2ExchangeCode(User user) {
+        TokenResponse tokenResponse = issueTokenResponse(user);
+
+        String code = UUID.randomUUID().toString();
+        // JWT는 '.' 구분자만 사용하므로 '|' 로 두 토큰을 안전하게 연결
+        String value = tokenResponse.getAccessToken() + "|" + tokenResponse.getRefreshToken();
+
+        redisTemplate.opsForValue().set(
+                OAUTH2_EXCHANGE_PREFIX + code,
+                value,
+                Duration.ofSeconds(30)
+        );
+
+        return code;
+    }
+
+    /**
+     * OAuth2 1회용 코드 교환
+     * - Redis에서 코드 조회 후 즉시 삭제하여 1회용 보장
+     * - 코드가 없거나 TTL 만료 시 IllegalArgumentException
+     */
+    public TokenResponse exchangeOAuth2Code(String code) {
+        String key = OAUTH2_EXCHANGE_PREFIX + code;
+        String value = redisTemplate.opsForValue().get(key);
+
+        if (value == null) {
+            throw new IllegalArgumentException("유효하지 않거나 만료된 코드입니다.");
+        }
+
+        // 1회용 보장: 조회 즉시 삭제
+        redisTemplate.delete(key);
+
+        String[] parts = value.split("\\|", 2);
+        return TokenResponse.builder()
+                .accessToken(parts[0])
+                .refreshToken(parts[1])
+                .tokenType("Bearer")
+                .expiresIn(jwtProvider.getAccessTokenExpiration())
+                .build();
     }
 
     /**

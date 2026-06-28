@@ -1,6 +1,5 @@
 package com.careflow.auth.security;
 
-import com.careflow.auth.dto.TokenResponse;
 import com.careflow.auth.service.AuthService;
 import com.careflow.user.entity.User;
 import jakarta.servlet.http.HttpServletRequest;
@@ -30,11 +29,11 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
         CustomOAuth2User customOAuth2User = (CustomOAuth2User) authentication.getPrincipal();
         User user = customOAuth2User.getUser();
 
-        TokenResponse tokenResponse = authService.issueTokenResponse(user);
+        // URL에 토큰을 직접 노출하지 않고, 1회용 코드만 쿼리 파라미터로 전달
+        String code = authService.issueOAuth2ExchangeCode(user);
 
         String targetUrl = UriComponentsBuilder.fromUriString(redirectUri)
-                .queryParam("accessToken", tokenResponse.getAccessToken())
-                .queryParam("refreshToken", tokenResponse.getRefreshToken())
+                .queryParam("code", code)
                 .build()
                 .toUriString();
 
