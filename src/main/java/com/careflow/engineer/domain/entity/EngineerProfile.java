@@ -130,4 +130,10 @@ public class EngineerProfile {
         this.isLmsCompleted = true;
         this.updatedAt = LocalDateTime.now();
     }
+
+    // 리뷰 저장 후 역정규화 필드 갱신 — 호출 전 새 평균/총 건수를 계산해서 넘길 것
+    public void updateRating(BigDecimal newAvgRating, int newTotalReviews) {
+        this.avgRating = newAvgRating;
+        this.totalReviews = newTotalReviews;
+    }
 }
