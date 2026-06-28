@@ -5,6 +5,7 @@ import com.careflow.appliance.repository.ApplianceRepository;
 import com.careflow.as_request.dto.AsRequestCreateDto;
 import com.careflow.as_request.dto.AsRequestCreateResponseDto;
 import com.careflow.as_request.dto.AsRequestResponseDto;
+import com.careflow.as_request.dto.CustomerAsRequestDetailResponse;
 import com.careflow.assignment.dto.MatchReason;
 import com.careflow.as_request.entity.AsRequest;
 import com.careflow.as_request.repository.AsRequestRepository;
@@ -30,6 +31,7 @@ import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
 import java.util.Comparator;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.stream.Collectors;
 
 @Service
@@ -195,6 +197,34 @@ public class AsRequestService {
         );
 
         return asAssignmentRepository.save(assignment);
+    }
+
+    /**
+     * 고객용: A/S 요청 단건 상세 조회
+     * 1. appliance 포함 JOIN FETCH 단건 조회 (findDetailById 재사용)
+     * 2. 본인 소유 검증
+     * 3. REJECTED가 아닌 배정에서 기사 정보 추출 (없으면 null — 아직 배정 전 상태)
+     */
+    @Transactional(readOnly = true)
+    public CustomerAsRequestDetailResponse getMyAsRequestDetail(Long customerId, Long requestId)
+            throws IllegalAccessException {
+
+        AsRequest asRequest = asRequestRepository.findDetailById(requestId)
+                .orElseThrow(() -> new NoSuchElementException("존재하지 않는 A/S 요청입니다."));
+
+        // 본인 요청인지 검증
+        if (!asRequest.getCustomer().getId().equals(customerId)) {
+            throw new IllegalAccessException("본인의 A/S 요청만 조회할 수 있습니다.");
+        }
+
+        // 배정된 기사 조회 — REJECTED가 아닌 첫 번째 배정의 기사 반환 (없으면 null)
+        User engineer = asAssignmentRepository.findByAsRequest_Id(requestId).stream()
+                .filter(a -> !a.getStatus().equals("REJECTED"))
+                .findFirst()
+                .map(AsAssignment::getEngineer)
+                .orElse(null);
+
+        return CustomerAsRequestDetailResponse.from(asRequest, engineer);
     }
 
     public List<AsRequestResponseDto> getMyAsRequests(Long customerId) {
