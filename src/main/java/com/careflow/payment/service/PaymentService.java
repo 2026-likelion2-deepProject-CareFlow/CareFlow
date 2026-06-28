@@ -3,7 +3,6 @@ package com.careflow.payment.service;
 import com.careflow.as_request.entity.AsRequest;
 import com.careflow.as_request.repository.AsRequestRepository;
 import com.careflow.common.enums.AsStatus;
-import com.careflow.payment.dto.PaymentRequest;
 import com.careflow.payment.dto.PaymentResponse;
 import com.careflow.payment.entity.Payment;
 import com.careflow.payment.repository.PaymentRepository;
@@ -40,7 +39,7 @@ public class PaymentService {
      * 7. as_requests.status → PAID
      */
     @Transactional
-    public PaymentResponse processPayment(Long customerId, Long requestId, PaymentRequest dto)
+    public PaymentResponse processPayment(Long customerId, Long requestId)
             throws IllegalAccessException {
 
         // 1. A/S 요청 조회
