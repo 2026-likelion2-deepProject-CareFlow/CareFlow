@@ -26,48 +26,45 @@ public class ApplianceController {
 
     /**
      * 가전제품 등록 API
-     * TODO: @RequestParam Long userId → 추후 @AuthenticationPrincipal로 대체 예정
      */
     @PostMapping
     public ResponseEntity<ApplianceResponse> registerAppliance(
-            @RequestParam Long userId,
+            @AuthenticationPrincipal CustomUserDetails userDetails,
             @Valid @RequestBody ApplianceCreateRequest request) {
 
-        ApplianceResponse response = applianceService.registerAppliance(userId, request);
+        ApplianceResponse response = applianceService.registerAppliance(userDetails.getUserId(), request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     /**
      * 내 가전제품 목록 조회 API (논리 삭제 제외)
-     * TODO: @RequestParam Long userId → 추후 @AuthenticationPrincipal로 대체 예정
      */
     @GetMapping("/me")
-    public ResponseEntity<List<ApplianceResponse>> getMyAppliances(@RequestParam Long userId) {
-        return ResponseEntity.ok(applianceService.getMyAppliances(userId));
+    public ResponseEntity<List<ApplianceResponse>> getMyAppliances(
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        return ResponseEntity.ok(applianceService.getMyAppliances(userDetails.getUserId()));
     }
 
     /**
      * 가전제품 상세 조회 API
-     * TODO: @RequestParam Long userId → 추후 @AuthenticationPrincipal로 대체 예정
      */
     @GetMapping("/{applianceId}")
     public ResponseEntity<ApplianceResponse> getApplianceDetail(
-            @RequestParam Long userId,
+            @AuthenticationPrincipal CustomUserDetails userDetails,
             @PathVariable Long applianceId) throws IllegalAccessException {
 
-        return ResponseEntity.ok(applianceService.getApplianceDetail(userId, applianceId));
+        return ResponseEntity.ok(applianceService.getApplianceDetail(userDetails.getUserId(), applianceId));
     }
 
     /**
      * 가전제품 논리 삭제 API
-     * TODO: @RequestParam Long userId → 추후 @AuthenticationPrincipal로 대체 예정
      */
     @DeleteMapping("/{applianceId}")
     public ResponseEntity<Void> deleteAppliance(
-            @RequestParam Long userId,
+            @AuthenticationPrincipal CustomUserDetails userDetails,
             @PathVariable Long applianceId) throws IllegalAccessException {
 
-        applianceService.deleteAppliance(userId, applianceId);
+        applianceService.deleteAppliance(userDetails.getUserId(), applianceId);
         return ResponseEntity.noContent().build();
     }
 
