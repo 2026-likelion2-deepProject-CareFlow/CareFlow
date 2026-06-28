@@ -3,10 +3,11 @@ package com.careflow.payment.service;
 import com.careflow.as_request.entity.AsRequest;
 import com.careflow.as_request.repository.AsRequestRepository;
 import com.careflow.common.enums.AsStatus;
-import com.careflow.payment.dto.PaymentRequest;
 import com.careflow.payment.dto.PaymentResponse;
 import com.careflow.payment.entity.Payment;
 import com.careflow.payment.repository.PaymentRepository;
+import com.careflow.report.domain.entity.WorkReport;
+import com.careflow.report.repository.WorkReportRepository;
 import com.careflow.user.entity.User;
 import com.careflow.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -23,6 +24,7 @@ public class PaymentService {
     private final PaymentRepository paymentRepository;
     private final AsRequestRepository asRequestRepository;
     private final UserRepository userRepository;
+    private final WorkReportRepository workReportRepository;
 
     /**
      * 고객 결제 처리 (Phase 1: MOCK — PG 호출 없이 즉시 SUCCESS)
@@ -30,13 +32,14 @@ public class PaymentService {
      * 처리 순서:
      * 1. A/S 요청 조회 및 본인 소유 검증
      * 2. COMPLETED 상태 여부 확인 (결제 가능한 선행 상태)
-     * 3. 중복 결제 방지
-     * 4. Payment row 생성 (status=READY)
-     * 5. 즉시 SUCCESS 전환 (pg_provider=MOCK, paid_at=NOW())
-     * 6. as_requests.status → PAID
+     * 3. 작업 완료 보고서 조회 및 고객 승인 여부 확인 (C-21, C-22)
+     * 4. 중복 결제 방지
+     * 5. Payment row 생성 (status=READY) — 금액은 work_reports.final_amount 사용
+     * 6. 즉시 SUCCESS 전환 (pg_provider=MOCK, paid_at=NOW())
+     * 7. as_requests.status → PAID
      */
     @Transactional
-    public PaymentResponse processPayment(Long customerId, Long requestId, PaymentRequest dto)
+    public PaymentResponse processPayment(Long customerId, Long requestId)
             throws IllegalAccessException {
 
         // 1. A/S 요청 조회
@@ -54,21 +57,33 @@ public class PaymentService {
                     "작업이 완료된(COMPLETED) 상태에서만 결제할 수 있습니다. (현재 상태: " + asRequest.getStatus() + ")");
         }
 
-        // 3. 중복 결제 방지
+        // 3. 작업 완료 보고서 조회 (C-21: 보고서가 있어야 결제 가능)
+        WorkReport workReport = workReportRepository.findByAsRequest_Id(requestId)
+                .orElseThrow(() -> new NoSuchElementException("작업 완료 보고서가 존재하지 않습니다."));
+
+        // 고객 승인 여부 확인 (C-22: customer_approved=true 인 보고서만 결제 허용)
+        if (!workReport.isCustomerApproved()) {
+            throw new IllegalStateException("고객 승인이 완료된 보고서만 결제할 수 있습니다.");
+        }
+
+        // 4. 중복 결제 방지
         if (paymentRepository.existsByAsRequest_Id(requestId)) {
             throw new IllegalStateException("이미 결제가 완료된 요청입니다.");
         }
 
-        // 4. 고객 엔티티 조회 (Payment FK 세팅용)
+        // 5. 고객 엔티티 조회 (Payment FK 세팅용)
         User customer = userRepository.findById(customerId)
                 .orElseThrow(() -> new NoSuchElementException("존재하지 않는 사용자입니다."));
 
-        // 5. Payment row 생성 (READY) 및 즉시 SUCCESS 전환
-        Payment payment = Payment.create(asRequest, customer, dto.amount());
+        // 결제 금액은 dto가 아닌 work_reports.final_amount 기준으로 확정 (C-22)
+        int finalAmount = workReport.getFinalAmount();
+
+        // 6. Payment row 생성 (READY) 및 즉시 SUCCESS 전환
+        Payment payment = Payment.create(asRequest, customer, finalAmount);
         paymentRepository.save(payment);
         payment.markSuccess();  // MOCK: PG 호출 없이 바로 SUCCESS
 
-        // 6. A/S 요청 상태 COMPLETED → PAID
+        // 7. A/S 요청 상태 COMPLETED → PAID
         asRequest.markPaid();
 
         return new PaymentResponse(
