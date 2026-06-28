@@ -1,5 +1,7 @@
 package com.careflow.as_status_log.service;
 
+import com.careflow.as_request.entity.AsRequest;
+import com.careflow.as_request.repository.AsRequestRepository;
 import com.careflow.as_status_log.dto.AsStatusLogListResponse;
 import com.careflow.as_status_log.dto.AsStatusLogSummaryResponse;
 import com.careflow.as_status_log.entity.AsStatusLog;
@@ -23,6 +25,7 @@ public class AgencyAsStatusLogService {
 
     private final AsStatusLogRepository asStatusLogRepository;
     private final UserRepository userRepository;
+    private final AsRequestRepository asRequestRepository;
 
     /**
      * 소속 대행사 A/S 상태 변경 이력 목록 조회 (최신순).
@@ -65,6 +68,28 @@ public class AgencyAsStatusLogService {
                 countMap.getOrDefault("IN_PROGRESS", 0L),
                 countMap.getOrDefault("COMPLETED", 0L)
         );
+    }
+
+    /**
+     * 고객용: 본인 A/S 요청의 상태 변경 이력 조회 (시간 오름차순)
+     * 1. A/S 요청 존재 여부 확인
+     * 2. 본인 소유 검증
+     * 3. 해당 request_id의 상태 변경 이력 반환
+     */
+    @Transactional(readOnly = true)
+    public AsStatusLogListResponse getCustomerStatusLogs(Long customerId, Long requestId)
+            throws IllegalAccessException {
+
+        AsRequest asRequest = asRequestRepository.findById(requestId)
+                .orElseThrow(() -> new NoSuchElementException("존재하지 않는 A/S 요청입니다."));
+
+        // 본인 요청인지 검증
+        if (!asRequest.getCustomer().getId().equals(customerId)) {
+            throw new IllegalAccessException("본인의 A/S 요청의 이력만 조회할 수 있습니다.");
+        }
+
+        List<AsStatusLog> logs = asStatusLogRepository.findByRequestIdWithDetails(requestId);
+        return AsStatusLogListResponse.of(logs);
     }
 
     /**

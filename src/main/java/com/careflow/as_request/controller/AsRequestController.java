@@ -6,6 +6,7 @@ import com.careflow.as_request.dto.AgencyDashboardSummaryResponse;
 import com.careflow.as_request.dto.AsRequestCreateDto;
 import com.careflow.as_request.dto.AsRequestCreateResponseDto;
 import com.careflow.as_request.dto.AsRequestResponseDto;
+import com.careflow.as_request.dto.CustomerAsRequestDetailResponse;
 import com.careflow.as_request.service.AgencyAsRequestService;
 import com.careflow.as_request.service.AsRequestService;
 import com.careflow.auth.security.CustomUserDetails;
@@ -41,6 +42,22 @@ public class AsRequestController {
         AsRequestCreateResponseDto response =
                 asRequestService.createAsRequest(userDetails.getUserId(), dto);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    /**
+     * 고객용: A/S 요청 단건 상세 조회 API
+     * - 본인 요청이 아닌 경우 401 반환
+     * - 존재하지 않는 requestId → 404 반환
+     * - 배정 전 상태이면 engineerName, engineerPhone은 null로 반환
+     */
+    @GetMapping("/{requestId}")
+    public ResponseEntity<CustomerAsRequestDetailResponse> getMyAsRequestDetail(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long requestId) throws IllegalAccessException {
+
+        CustomerAsRequestDetailResponse response =
+                asRequestService.getMyAsRequestDetail(userDetails.getUserId(), requestId);
+        return ResponseEntity.ok(response);
     }
 
     /**
