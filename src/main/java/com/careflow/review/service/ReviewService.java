@@ -7,6 +7,7 @@ import com.careflow.engineer.domain.entity.EngineerProfile;
 import com.careflow.engineer.repository.EngineerProfileRepository;
 import com.careflow.report.domain.entity.WorkReport;
 import com.careflow.report.repository.WorkReportRepository;
+import com.careflow.review.dto.EngineerReviewResponse;
 import com.careflow.review.dto.ReviewCreateRequest;
 import com.careflow.review.dto.ReviewResponse;
 import com.careflow.review.entity.Review;
@@ -19,7 +20,9 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.stream.Collectors;
 
 @Service
 @RequiredArgsConstructor
@@ -99,5 +102,20 @@ public class ReviewService {
                 review.getContent(),
                 review.getCreatedAt()
         );
+    }
+
+    /**
+     * 수리기사(ENGINEER)용: 본인에게 달린 리뷰 목록 조회
+     */
+    @Transactional(readOnly = true)
+    public List<EngineerReviewResponse> getEngineerReviews(Long engineerId) {
+        // Repository에 이미 만들어둔 메서드를 활용!
+        List<Review> reviews = reviewRepository.findByEngineer_Id(engineerId);
+
+        return reviews.stream()
+                // 최신 리뷰가 위로 오도록 정렬
+                .sorted((r1, r2) -> r2.getCreatedAt().compareTo(r1.getCreatedAt()))
+                .map(EngineerReviewResponse::from)
+                .collect(Collectors.toList());
     }
 }

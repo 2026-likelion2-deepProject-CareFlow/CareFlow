@@ -133,8 +133,8 @@ public class ApplianceService {
         int axis2 = HealthScoreCalculator.calculateUsagePeriodScore(appliance.getPurchaseDate(), cert.getUpdatedAt());
 
         int axis3 = 25;
+        PartImportance maxImportance = null;
         if (!reports.isEmpty() && !reports.get(0).getParts().isEmpty()) {
-            PartImportance maxImportance = null;
             for (WorkReportPart part : reports.get(0).getParts()) {
                 PartImportance currentImportance = part.getRepairPart().getImportance();
                 if (maxImportance == null || currentImportance.getSeverity() < maxImportance.getSeverity()) {
@@ -147,7 +147,12 @@ public class ApplianceService {
         LocalDateTime prevRepairedAt = reports.size() > 1 ? reports.get(1).getSubmittedAt() : null;
         int axis4 = HealthScoreCalculator.calculateLastRepairedScore(prevRepairedAt, cert.getUpdatedAt());
 
-        // 5. 응답 DTO 조립
+        // 🌟 Condition 텍스트 추출
+        String cond1 = getRepairCountCondition(cert.getRepairCount());
+        String cond2 = getUsagePeriodCondition(appliance.getPurchaseDate(), cert.getUpdatedAt());
+        String cond3 = getPartImportanceCondition(maxImportance);
+        String cond4 = getLastRepairedCondition(prevRepairedAt, cert.getUpdatedAt());
+
         return HealthCertificateResponse.builder()
                 .certId(cert.getCertId())
                 .applianceId(appliance.getId())
@@ -156,11 +161,46 @@ public class ApplianceService {
                 .isCertified(cert.isCertified())
                 .issuedAt(cert.getIssuedAt())
                 .updatedAt(cert.getUpdatedAt())
-                .repairCountScore(axis1)         // 역추산된 1축
-                .usagePeriodScore(axis2)         // 역추산된 2축
-                .partImportanceScore(axis3)      // 역추산된 3축
-                .lastRepairedScore(axis4)        // 역추산된 4축
+                .repairCountScore(axis1)
+                .usagePeriodScore(axis2)
+                .partImportanceScore(axis3)
+                .lastRepairedScore(axis4)
+                // 🌟 추가된 필드 매핑
+                .repairCountCondition(cond1)
+                .usagePeriodCondition(cond2)
+                .partImportanceCondition(cond3)
+                .lastRepairedCondition(cond4)
                 .build();
     }
 
+    // --- 건강진단서 프론트 라벨 변환 헬퍼 ---
+    private String getRepairCountCondition(int count) {
+        if (count == 0) return "수리 이력 없음";
+        if (count >= 4) return "4회 이상";
+        return count + "회";
+    }
+
+    private String getUsagePeriodCondition(LocalDate purchaseDate, LocalDateTime asOf) {
+        if (purchaseDate == null) return "알 수 없음";
+        long years = ChronoUnit.YEARS.between(purchaseDate, asOf.toLocalDate());
+        if (years < 1) return "1년 미만";
+        if (years < 3) return "1년 이상 ~ 3년 미만";
+        if (years < 5) return "3년 이상 ~ 5년 미만";
+        if (years < 8) return "5년 이상 ~ 8년 미만";
+        return "8년 이상";
+    }
+
+    private String getPartImportanceCondition(PartImportance importance) {
+        if (importance == null) return "부품 교체 없음";
+        return importance.name() + " 부품 교체";
+    }
+
+    private String getLastRepairedCondition(LocalDateTime lastRepaired, LocalDateTime asOf) {
+        if (lastRepaired == null) return "수리 이력 없음";
+        long months = ChronoUnit.MONTHS.between(lastRepaired, asOf);
+        if (months >= 24) return "2년 이전";
+        if (months >= 12) return "1년 이상 ~ 2년 미만";
+        if (months >= 6) return "6개월 이상 ~ 1년 미만";
+        return "6개월 이내";
+    }
 }

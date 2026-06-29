@@ -14,15 +14,23 @@
 ## 2. API 엔드포인트 명세
 - 이미 URI 로 매핑된 API 가 존재할 시 아래의 요구사항대로 코드를 변경할 것
 
-### [POST] /api/engineers/me/reports - WorkReportController
-- **설명**: 수리 기사가 **본인에게 배정된** A/S 작업 완료 후 작업 완료 보고서를 제출한다. (로그인을 통한 JWT 인증 필요, `role=ENGINEER`) 제출 시 교체 부품 내역을 함께 영속화하고, 대상 가전의 제품 건강 진단서 갱신을 트리거한다.
+### [POST] /api/engineers/me/reports - WorkReportController.submitReport
+- **설명**: 수리 기사가 본인에게 배정된 A/S 작업 완료 후 작업 완료 보고서를 제출한다. 제출 시 교체 부품 내역 영속화, 진단서 갱신, 상태 로그(AsStatusLog) 기록 및 SSE 완료 알림 이벤트 발행이 함께 이루어진다.
 - **Request Body**:
     - `@Valid @RequestBody CreateWorkReportRequest request` 형태로 매개변수로서 요청 데이터 받음
     - 필수 필드 : `requestId`(Long), `diagnosisResult`(String, `DiagnosisResult` enum 값), `workDurationMin`(Integer, 0 이상), `finalAmount`(Integer, 0 이상)
     - 선택 필드 : `memo`(String), `imageUrls`(String, JSON), `parts`(List)
     - `parts[]` 각 항목 : `repairPartId`(Long, 필수), `quantity`(Integer, 1 이상 필수), `appliedUnitPrice`(Integer, 선택 — 미입력 시 `repair_parts.base_unit_price` 로 fallback)
 - **Response (201 Created)**:
-    - `ResponseEntity` body 에 생성된 `WorkReport` Entity 의 `reportId` 값 적재 후 201 응답 반환
+    - `ResponseEntity` body 에 "작업 완료 보고서가 제출되고, 제품 건강 진단서가 갱신되었습니다. (Report ID: {reportId})" 형식의 문자열과 201 응답 반환
+
+### [GET] /api/engineers/me/reports/{reportId} - WorkReportController.getReportDetail
+- **설명**: 작업 완료 보고서 상세 조회 (고객/기사 공용)
+- **Response (200 OK)**: `WorkReportDetailResponse`
+
+### [PATCH] /api/engineers/me/reports/{reportId}/approve - WorkReportController.approveReport
+- **설명**: 작업 완료 보고서 고객 승인
+- **Response (200 OK)**: "작업 보고서가 성공적으로 승인되었습니다. 결제 단계로 이동합니다." 형식의 문자열
 
 ## 3. 상세 처리 로직 (Pipeline)
 1. **검증(Validation) 단계**
@@ -38,6 +46,7 @@
         - 선행 전이는 배정 수락(`acceptAssignment()`: ASSIGNED→ACCEPTED), 작업 시작(`startWork()`: ACCEPTED→IN_PROGRESS)을 통해 이루어지며, 각 전이는 직전 상태를 가드로 검증한다.
     - **보고서·부품 내역 영속화** : `work_reports` 및 `work_report_parts` 테이블에 **Cascade** 적용하여 동시 저장한다. 부품 단가는 `applied_unit_price` 에 스냅샷 저장(요청에 없으면 `repair_parts.base_unit_price` 사용).
     - **건강 진단서 갱신 트리거** : 교체된 부품들 중 `repair_parts.importance` 기준 가장 심각한(severity 최상위) 등급을 추출하여(부품 교체가 없으면 `null`), 대상 가전의 진단서 갱신 도메인 메서드(`HealthCertificate.calculateAndUpdateHealth()`)를 호출한다. **상세 산정 로직은 `healthCertificate.md` 참조.**
+    - **(✨ 신규) 상태 변경 로그 기록** : as_status_logs 테이블에 from_status(IN_PROGRESS), to_status(COMPLETED), memo(작업 완료 안내) 기록.
 3. **응답(Response) 단계**
     - 보고서 제출 및 진단서 갱신 성공 시 HTTP `201`, 생성된 `WorkReport` 의 `reportId` 값을 포함하여 반환
     - 실패 시 아래 공통 에러 포맷으로 응답
