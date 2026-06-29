@@ -5,6 +5,7 @@ import com.careflow.appliance.entity.Appliance;
 import com.careflow.common.enums.AssignType;
 import com.careflow.common.enums.AsStatus;
 import com.careflow.region.entity.Regions;
+import com.careflow.report.domain.entity.WorkReport;
 import com.careflow.symptom.entity.Symptom;
 import com.careflow.user.entity.User;
 import jakarta.persistence.*;
@@ -88,6 +89,9 @@ public class AsRequest {
 
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
+
+    @OneToOne(mappedBy ="asRequest", fetch=FetchType.LAZY)
+    private WorkReport workReport;
 
     @Builder
     public AsRequest(User customer, Appliance appliance, Symptom symptom, String symptomDesc,

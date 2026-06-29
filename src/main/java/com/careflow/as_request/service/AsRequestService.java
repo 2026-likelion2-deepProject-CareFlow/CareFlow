@@ -236,6 +236,7 @@ public class AsRequestService {
         return CustomerAsRequestDetailResponse.from(asRequest, engineer);
     }
 
+    @Transactional(readOnly = true)
     public List<AsRequestResponseDto> getMyAsRequests(Long customerId) {
         return asRequestRepository.findByCustomer_IdOrderByIdDesc(customerId)
                 .stream()
