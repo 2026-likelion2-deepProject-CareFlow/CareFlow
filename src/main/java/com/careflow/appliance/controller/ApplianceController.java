@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/appliances")
+@RequestMapping("/api/customers/{customerId}/appliances")
 @RequiredArgsConstructor
 public class ApplianceController {
 
@@ -26,57 +26,60 @@ public class ApplianceController {
 
     /**
      * 가전제품 등록 API
-     * TODO: @RequestParam Long userId → 추후 @AuthenticationPrincipal로 대체 예정
+     * customerId는 경로에서 받지만 실제 인증은 JWT(@AuthenticationPrincipal)로 처리
      */
     @PostMapping
     public ResponseEntity<ApplianceResponse> registerAppliance(
-            @RequestParam Long userId,
+            @PathVariable Long customerId,
+            @AuthenticationPrincipal CustomUserDetails userDetails,
             @Valid @RequestBody ApplianceCreateRequest request) {
 
-        ApplianceResponse response = applianceService.registerAppliance(userId, request);
+        ApplianceResponse response = applianceService.registerAppliance(userDetails.getUserId(), request);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
 
     /**
-     * 내 가전제품 목록 조회 API (논리 삭제 제외)
-     * TODO: @RequestParam Long userId → 추후 @AuthenticationPrincipal로 대체 예정
+     * 고객 가전제품 목록 조회 API (논리 삭제 제외)
      */
-    @GetMapping("/me")
-    public ResponseEntity<List<ApplianceResponse>> getMyAppliances(@RequestParam Long userId) {
-        return ResponseEntity.ok(applianceService.getMyAppliances(userId));
+    @GetMapping
+    public ResponseEntity<List<ApplianceResponse>> getMyAppliances(
+            @PathVariable Long customerId,
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        return ResponseEntity.ok(applianceService.getMyAppliances(userDetails.getUserId()));
     }
 
     /**
      * 가전제품 상세 조회 API
-     * TODO: @RequestParam Long userId → 추후 @AuthenticationPrincipal로 대체 예정
      */
     @GetMapping("/{applianceId}")
     public ResponseEntity<ApplianceResponse> getApplianceDetail(
-            @RequestParam Long userId,
-            @PathVariable Long applianceId) throws IllegalAccessException {
+            @PathVariable Long customerId,
+            @PathVariable Long applianceId,
+            @AuthenticationPrincipal CustomUserDetails userDetails) throws IllegalAccessException {
 
-        return ResponseEntity.ok(applianceService.getApplianceDetail(userId, applianceId));
+        return ResponseEntity.ok(applianceService.getApplianceDetail(userDetails.getUserId(), applianceId));
     }
 
     /**
      * 가전제품 논리 삭제 API
-     * TODO: @RequestParam Long userId → 추후 @AuthenticationPrincipal로 대체 예정
      */
     @DeleteMapping("/{applianceId}")
     public ResponseEntity<Void> deleteAppliance(
-            @RequestParam Long userId,
-            @PathVariable Long applianceId) throws IllegalAccessException {
+            @PathVariable Long customerId,
+            @PathVariable Long applianceId,
+            @AuthenticationPrincipal CustomUserDetails userDetails) throws IllegalAccessException {
 
-        applianceService.deleteAppliance(userId, applianceId);
+        applianceService.deleteAppliance(userDetails.getUserId(), applianceId);
         return ResponseEntity.noContent().build();
     }
 
     /**
-     * 가전제품 이전 수리 이력 타임라인 조회 API (E-10)
+     * 가전제품 이전 수리 이력 타임라인 조회 API
      * 고객의 가전 상세 화면 및 수리기사의 작업 상세 화면에서 공통 사용
      */
     @GetMapping("/{applianceId}/repair-history")
     public ResponseEntity<List<RepairHistoryResponse>> getRepairHistory(
+            @PathVariable Long customerId,
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @PathVariable Long applianceId) throws IllegalAccessException {
 
@@ -90,10 +93,11 @@ public class ApplianceController {
     }
 
     /**
-     * 가전제품 건강 진단서 상세 조회 API (C-24)
+     * 가전제품 건강 진단서 상세 조회 API
      */
     @GetMapping("/{applianceId}/health-certificate")
     public ResponseEntity<HealthCertificateResponse> getHealthCertificate(
+            @PathVariable Long customerId,
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @PathVariable Long applianceId) throws IllegalAccessException {
 

@@ -17,7 +17,7 @@ public class RegionController {
 
     private final RegionService regionService;
 
-    @GetMapping("/region")
+    @GetMapping
     public ResponseEntity<Regions> getRegion(@RequestBody RegionRequest request) {
 
         Regions regions = regionService.findByName(request.name());

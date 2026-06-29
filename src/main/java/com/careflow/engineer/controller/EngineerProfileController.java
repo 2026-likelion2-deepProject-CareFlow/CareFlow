@@ -15,27 +15,30 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/engineers/me/profile")
+@RequestMapping("/api/engineer/profile")
 @RequiredArgsConstructor
 public class EngineerProfileController {
     private final EngineerProfileService profileService;
 
-    @PutMapping
-    public ResponseEntity<ProfileResponse> completeProfile(@AuthenticationPrincipal CustomUserDetails userDetails, @RequestBody @Valid CreateProfileRequest request){   // 기사 프로필 생성
+    // 기사 프로필 최초 생성 (계정 생성 후 초기 정보 입력)
+    @PostMapping
+    public ResponseEntity<ProfileResponse> completeProfile(@AuthenticationPrincipal CustomUserDetails userDetails, @RequestBody @Valid CreateProfileRequest request){
         ProfileResponse response = profileService.completeProfile(userDetails.getUserId(), request);
         return ResponseEntity.ok(response);
     }
 
+    // 기사 프로필 상세 조회
     @GetMapping
-    public ResponseEntity<ProfileResponse> getProfile(@AuthenticationPrincipal CustomUserDetails userDetails) { // 프로필 상세 조회
+    public ResponseEntity<ProfileResponse> getProfile(@AuthenticationPrincipal CustomUserDetails userDetails) {
         ProfileResponse response = profileService.getProfile(userDetails.getUserId());
         return ResponseEntity.ok(response);
     }
 
-    @PatchMapping
+    // 기사 프로필 수정
+    @PutMapping
     public ResponseEntity<ProfileResponse> updateProfile(
             @AuthenticationPrincipal CustomUserDetails userDetails,
-            @RequestBody UpdateProfileRequest request) {    // 프로필 수정
+            @RequestBody UpdateProfileRequest request) {
         ProfileResponse response = profileService.updateProfile(userDetails.getUserId(), request);
         return ResponseEntity.ok(response);
     }

@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/engineers/me/schedules")
+@RequestMapping("/api/engineer/my-schedule")
 @RequiredArgsConstructor
 public class EngineerScheduleController {
     private final EngineerScheduleService scheduleService;

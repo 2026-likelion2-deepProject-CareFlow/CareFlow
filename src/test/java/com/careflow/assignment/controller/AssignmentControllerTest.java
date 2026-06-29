@@ -97,7 +97,7 @@ class AssignmentControllerTest {
             given(agenciesAssignmentService.getAssignmentsByAgency(any()))
                     .willReturn(List.of(sampleResponse()));
 
-            mockMvc.perform(get("/api/assignment")
+            mockMvc.perform(get("/api/agency/as-assignments")
                             .with(user(agencyUser())))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$[0].assignmentId").value(1L))
@@ -111,7 +111,7 @@ class AssignmentControllerTest {
             given(agenciesAssignmentService.getAssignmentsByAgency(any()))
                     .willReturn(List.of());
 
-            mockMvc.perform(get("/api/assignment")
+            mockMvc.perform(get("/api/agency/as-assignments")
                             .with(user(agencyUser())))
                     .andExpect(status().isNoContent());
         }
@@ -122,7 +122,7 @@ class AssignmentControllerTest {
             given(agenciesAssignmentService.getAssignmentsByAgency(any()))
                     .willThrow(new IllegalAccessException("대행사 관리자 권한이 없습니다."));
 
-            mockMvc.perform(get("/api/assignment")
+            mockMvc.perform(get("/api/agency/as-assignments")
                             .with(user(customerUser())))
                     .andExpect(status().isUnauthorized());
         }
@@ -130,7 +130,7 @@ class AssignmentControllerTest {
         @Test
         @DisplayName("실패: 비인증 요청 — 401 Unauthorized 반환")
         void getAssignment_unauthenticated_401() throws Exception {
-            mockMvc.perform(get("/api/assignment"))
+            mockMvc.perform(get("/api/agency/as-assignments"))
                     .andExpect(status().isUnauthorized());
         }
 
@@ -140,7 +140,7 @@ class AssignmentControllerTest {
             given(agenciesAssignmentService.getAssignmentsByAgency(any()))
                     .willThrow(new IllegalStateException("소속 대행사 정보가 없습니다."));
 
-            mockMvc.perform(get("/api/assignment")
+            mockMvc.perform(get("/api/agency/as-assignments")
                             .with(user(agencyUser())))
                     .andExpect(status().isForbidden());
         }
@@ -173,7 +173,7 @@ class AssignmentControllerTest {
         void getDetail_success_200() throws Exception {
             given(assignmentDetailService.getDetail(any(), any())).willReturn(sampleDetail());
 
-            mockMvc.perform(get("/api/assignment/detail/1")
+            mockMvc.perform(get("/api/agency/as-assignments/1/detail")
                             .with(user(agencyUser())))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.assignmentId").value(1L))
@@ -190,7 +190,7 @@ class AssignmentControllerTest {
             given(assignmentDetailService.getDetail(any(), any()))
                     .willThrow(new NoSuchElementException("해당 배차 내역을 찾을 수 없습니다."));
 
-            mockMvc.perform(get("/api/assignment/detail/999")
+            mockMvc.perform(get("/api/agency/as-assignments/999/detail")
                             .with(user(agencyUser())))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.success").value(false));
@@ -202,7 +202,7 @@ class AssignmentControllerTest {
             given(assignmentDetailService.getDetail(any(), any()))
                     .willThrow(new IllegalAccessException("대행사 관리자 권한이 없습니다."));
 
-            mockMvc.perform(get("/api/assignment/detail/1")
+            mockMvc.perform(get("/api/agency/as-assignments/1/detail")
                             .with(user(customerUser())))
                     .andExpect(status().isUnauthorized())
                     .andExpect(jsonPath("$.success").value(false));
@@ -211,7 +211,7 @@ class AssignmentControllerTest {
         @Test
         @DisplayName("실패: 인증 토큰 없음 — 401 Unauthorized 반환")
         void getDetail_unauthenticated_401() throws Exception {
-            mockMvc.perform(get("/api/assignment/detail/1"))
+            mockMvc.perform(get("/api/agency/as-assignments/1/detail"))
                     .andExpect(status().isUnauthorized());
         }
     }
@@ -239,7 +239,7 @@ class AssignmentControllerTest {
             given(assignmentFilterService.search(any(), any(), any()))
                     .willReturn(List.of(sampleFilterResponse()));
 
-            mockMvc.perform(get("/api/assignment/search")
+            mockMvc.perform(get("/api/agency/as-assignments/search")
                             .param("date", "2026-07-01")
                             .param("status", "WAITING")
                             .with(user(agencyUser())))
@@ -257,7 +257,7 @@ class AssignmentControllerTest {
             given(assignmentFilterService.search(any(), any(), any()))
                     .willReturn(List.of(sampleFilterResponse()));
 
-            mockMvc.perform(get("/api/assignment/search")
+            mockMvc.perform(get("/api/agency/as-assignments/search")
                             .with(user(agencyUser())))
                     .andExpect(status().isOk());
         }
@@ -268,7 +268,7 @@ class AssignmentControllerTest {
             given(assignmentFilterService.search(any(), any(), any()))
                     .willReturn(List.of());
 
-            mockMvc.perform(get("/api/assignment/search")
+            mockMvc.perform(get("/api/agency/as-assignments/search")
                             .param("date", "2026-07-01")
                             .with(user(agencyUser())))
                     .andExpect(status().isNoContent());
@@ -280,7 +280,7 @@ class AssignmentControllerTest {
             given(assignmentFilterService.search(any(), any(), any()))
                     .willThrow(new IllegalArgumentException("유효하지 않은 배차 상태입니다."));
 
-            mockMvc.perform(get("/api/assignment/search")
+            mockMvc.perform(get("/api/agency/as-assignments/search")
                             .param("status", "INVALID_STATUS")
                             .with(user(agencyUser())))
                     .andExpect(status().isBadRequest())
@@ -293,7 +293,7 @@ class AssignmentControllerTest {
             given(assignmentFilterService.search(any(), any(), any()))
                     .willThrow(new IllegalAccessException("대행사 관리자 권한이 없습니다."));
 
-            mockMvc.perform(get("/api/assignment/search")
+            mockMvc.perform(get("/api/agency/as-assignments/search")
                             .with(user(customerUser())))
                     .andExpect(status().isUnauthorized());
         }
@@ -301,7 +301,7 @@ class AssignmentControllerTest {
         @Test
         @DisplayName("실패: 인증 토큰 없음 → 401 Unauthorized")
         void search_noToken_401() throws Exception {
-            mockMvc.perform(get("/api/assignment/search"))
+            mockMvc.perform(get("/api/agency/as-assignments/search"))
                     .andExpect(status().isUnauthorized());
         }
     }
@@ -320,7 +320,7 @@ class AssignmentControllerTest {
                     .willReturn(AssignmentReassignResponse.reassigned(99L,
                             "스케줄, 브랜드, 카테고리, 서비스 지역 4가지 조건 모두 충족"));
 
-            mockMvc.perform(post("/api/assignment/1/reassign")
+            mockMvc.perform(post("/api/agency/as-assignments/1/reassign")
                             .with(user(agencyUser())))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.result").value("REASSIGNED"))
@@ -337,7 +337,7 @@ class AssignmentControllerTest {
             given(assignmentReassignService.reassign(any(), any()))
                     .willReturn(AssignmentReassignResponse.manualNotified(55L));
 
-            mockMvc.perform(post("/api/assignment/1/reassign")
+            mockMvc.perform(post("/api/agency/as-assignments/1/reassign")
                             .with(user(agencyUser())))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.result").value("MANUAL_NOTIFIED"))
@@ -351,7 +351,7 @@ class AssignmentControllerTest {
             given(assignmentReassignService.reassign(any(), any()))
                     .willThrow(new NoSuchElementException("해당 배차 내역을 찾을 수 없습니다."));
 
-            mockMvc.perform(post("/api/assignment/999/reassign")
+            mockMvc.perform(post("/api/agency/as-assignments/999/reassign")
                             .with(user(agencyUser())))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.success").value(false));
@@ -363,7 +363,7 @@ class AssignmentControllerTest {
             given(assignmentReassignService.reassign(any(), any()))
                     .willThrow(new IllegalStateException("재배차 가능한 수리 기사가 없습니다."));
 
-            mockMvc.perform(post("/api/assignment/1/reassign")
+            mockMvc.perform(post("/api/agency/as-assignments/1/reassign")
                             .with(user(agencyUser())))
                     .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.success").value(false));
@@ -375,7 +375,7 @@ class AssignmentControllerTest {
             given(assignmentReassignService.reassign(any(), any()))
                     .willThrow(new IllegalAccessException("대행사 관리자 권한이 없습니다."));
 
-            mockMvc.perform(post("/api/assignment/1/reassign")
+            mockMvc.perform(post("/api/agency/as-assignments/1/reassign")
                             .with(user(customerUser())))
                     .andExpect(status().isUnauthorized());
         }
@@ -383,7 +383,7 @@ class AssignmentControllerTest {
         @Test
         @DisplayName("실패: 인증 토큰 없음 → 401 Unauthorized")
         void reassign_noToken_401() throws Exception {
-            mockMvc.perform(post("/api/assignment/1/reassign"))
+            mockMvc.perform(post("/api/agency/as-assignments/1/reassign"))
                     .andExpect(status().isUnauthorized());
         }
     }

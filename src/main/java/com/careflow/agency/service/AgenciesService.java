@@ -116,6 +116,14 @@ public class AgenciesService {
         return agenciesRepository.findByRepresentativeById(userId).orElse(null);
     }
 
+    // 대행사 내 정보 조회 (설정 페이지용)
+    @Transactional(readOnly = true)
+    public AgencyProfileResponse getProfile(Long userId) {
+        Agencies agencies = agenciesRepository.findByRepresentativeById(userId)
+                .orElseThrow(() -> new NoSuchElementException("해당 사용자의 대행사 정보를 찾을 수 없습니다."));
+        return AgencyProfileResponse.from(agencies);
+    }
+
     // 대행사 프로필(상호명, 주소) 수정
     @Transactional
     public AgencyProfileResponse updateProfile(Long userId, AgencyProfileUpdateRequest request) {

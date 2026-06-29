@@ -19,7 +19,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/assignment")
+@RequestMapping("/api/agency/as-assignments")
 @RequiredArgsConstructor
 public class AssignmentController {
 
@@ -55,7 +55,7 @@ public class AssignmentController {
      * - assignmentId 미존재 → 404 Not Found
      * - 성공 → 200 OK + AssignmentDetailResponse
      */
-    @GetMapping("/detail/{assignmentId}")
+    @GetMapping("/{assignmentId}/detail")
     public ResponseEntity<AssignmentDetailResponse> getAssignmentDetail(
             @PathVariable Long assignmentId,
             @AuthenticationPrincipal CustomUserDetails userDetails) throws IllegalAccessException {

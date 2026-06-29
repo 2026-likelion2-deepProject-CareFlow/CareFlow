@@ -222,7 +222,7 @@ class AsRequestControllerTest {
         void cancelAsRequest_success() throws Exception {
             doNothing().when(asRequestService).cancelAsRequest(anyLong(), anyLong(), any());
 
-            mockMvc.perform(patch("/api/as-requests/1/cancel"))
+            mockMvc.perform(put("/api/as-requests/1/cancel"))
                     .andExpect(status().isOk());
         }
 
@@ -232,7 +232,7 @@ class AsRequestControllerTest {
             doThrow(new IllegalStateException("기사 배정이 진행된 요청은 취소할 수 없습니다."))
                     .when(asRequestService).cancelAsRequest(anyLong(), anyLong(), any());
 
-            mockMvc.perform(patch("/api/as-requests/1/cancel"))
+            mockMvc.perform(put("/api/as-requests/1/cancel"))
                     .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.success").value(false));
         }
@@ -243,7 +243,7 @@ class AsRequestControllerTest {
             doThrow(new IllegalArgumentException("존재하지 않는 A/S 요청입니다."))
                     .when(asRequestService).cancelAsRequest(anyLong(), anyLong(), any());
 
-            mockMvc.perform(patch("/api/as-requests/999/cancel"))
+            mockMvc.perform(put("/api/as-requests/999/cancel"))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.success").value(false));
         }

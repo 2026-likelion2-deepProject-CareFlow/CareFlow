@@ -3,15 +3,19 @@ package com.careflow.agency.controller;
 import com.careflow.agency.dto.request.AgencyEngineerProfileUpdateRequest;
 import com.careflow.agency.dto.response.AgencyEngineerDetailResponse;
 import com.careflow.agency.dto.response.AgencyEngineerSummaryResponse;
+import com.careflow.agency.dto.response.EngineerRankResponse;
 import com.careflow.agency.service.AgencyEngineerService;
+import com.careflow.as_request.dto.EngineerTaskScheduleResponse;
 import com.careflow.auth.security.CustomUserDetails;
 import com.careflow.engineer.dto.ScheduleResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 
 /**
@@ -21,12 +25,29 @@ import java.util.List;
  * 서비스 레이어에서 소속 대행사 일치 여부를 추가 검증한다.
  */
 @RestController
-@RequestMapping("/api/agencies/me/engineers")
+@RequestMapping("/api/agency/engineers")
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('AGENCY')")
 public class AgencyEngineerController {
 
     private final AgencyEngineerService agencyEngineerService;
+
+    /**
+     * 대행사 소속 기사 수리 완료 실적 TOP 3 조회
+     * GET /api/agency/engineers/top3
+     *
+     * 대행사 대시보드에서 우수 기사를 표시하기 위한 API.
+     * as_requests.status = COMPLETED 기준으로 집계하여 건수 내림차순 상위 3명을 반환한다.
+     * 소속 기사 수가 3명 미만이면 실제 인원 수만큼만 반환하며, 없으면 빈 배열을 반환한다.
+     */
+    @GetMapping("/top3")
+    public ResponseEntity<List<EngineerRankResponse>> getTop3Engineers(
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+
+        List<EngineerRankResponse> response =
+                agencyEngineerService.getTop3Engineers(userDetails.getUserId());
+        return ResponseEntity.ok(response);
+    }
 
     /**
      * 소속 기사 목록 조회
@@ -45,12 +66,12 @@ public class AgencyEngineerController {
 
     /**
      * 소속 기사 단건 상세 조회
-     * GET /api/agencies/me/engineers/{engineerUserId}
+     * GET /api/agency/engineers/{engineerUserId}/profile
      *
      * 경력 정보 / 기술 등급 / 전문 브랜드 / 평점 등 상세 정보 반환
      * 타 대행사 소속 기사 접근 시 401 반환
      */
-    @GetMapping("/{engineerUserId}")
+    @GetMapping("/{engineerUserId}/profile")
     public ResponseEntity<AgencyEngineerDetailResponse> getAgencyEngineerDetail(
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @PathVariable Long engineerUserId) throws IllegalAccessException {
@@ -62,12 +83,12 @@ public class AgencyEngineerController {
 
     /**
      * 소속 기사 프로필 수정 (대행사 관리자 권한)
-     * PATCH /api/agencies/me/engineers/{engineerUserId}/profile
+     * PUT /api/agency/engineers/{engineerUserId}/profile
      *
      * 수정 가능 항목: 전문 가전 카테고리(1개), 전문 브랜드 목록, 활동 지역 목록
      * null로 전달된 필드는 기존값 유지
      */
-    @PatchMapping("/{engineerUserId}/profile")
+    @PutMapping("/{engineerUserId}/profile")
     public ResponseEntity<AgencyEngineerDetailResponse> updateAgencyEngineerProfile(
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @PathVariable Long engineerUserId,
@@ -80,8 +101,28 @@ public class AgencyEngineerController {
     }
 
     /**
+     * 소속 기사 A/S 작업 일정 조회
+     * GET /api/agency/engineers/{engineerUserId}/schedule?date=2026-06-01
+     *
+     * 특정 날짜 배정된 작업 목록(고객·제품·방문주소 포함) 반환
+     * REJECTED 건 제외, 타 대행사 소속 기사 조회 시 403
+     */
+    @GetMapping("/{engineerUserId}/schedule")
+    public ResponseEntity<List<EngineerTaskScheduleResponse>> getAgencyEngineerTaskSchedule(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long engineerUserId,
+            @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date)
+            throws IllegalAccessException {
+
+        List<EngineerTaskScheduleResponse> response =
+                agencyEngineerService.getAgencyEngineerTaskSchedule(
+                        userDetails.getUserId(), engineerUserId, date);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
      * 소속 기사 월간 근무표 조회
-     * GET /api/agencies/me/engineers/{engineerUserId}/schedules?year=2026&month=6
+     * GET /api/agency/engineers/{engineerUserId}/schedules?year=2026&month=6
      *
      * 배차 가용 여부 판단을 위해 기사의 월간 근무 일정 전체 반환
      * 등록된 근무표가 없으면 빈 배열 반환

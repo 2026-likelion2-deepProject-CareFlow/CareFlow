@@ -87,7 +87,7 @@ class AgencySettingsControllerIntegrationTest {
         void updateProfile_success_200() throws Exception {
             AgencyProfileUpdateRequest req = new AgencyProfileUpdateRequest("수정된대행사", "서울특별시 서초구 서초대로 99");
 
-            mockMvc.perform(patch("/api/agencies/profile")
+            mockMvc.perform(put("/api/agency/me")
                             .header("Authorization", "Bearer " + accessToken)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(req)))
@@ -107,7 +107,7 @@ class AgencySettingsControllerIntegrationTest {
             // 요청에 기존 주소를 그대로 전달하면 기존 값이 유지됨
             AgencyProfileUpdateRequest req = new AgencyProfileUpdateRequest("이름만바꾼대행사", "서울특별시 강남구 테헤란로 1");
 
-            mockMvc.perform(patch("/api/agencies/profile")
+            mockMvc.perform(put("/api/agency/me")
                             .header("Authorization", "Bearer " + accessToken)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(req)))
@@ -125,7 +125,7 @@ class AgencySettingsControllerIntegrationTest {
             String unknownToken = jwtProvider.generateAccessToken(9999L, "ghost@test.com", "AGENCY");
             AgencyProfileUpdateRequest req = new AgencyProfileUpdateRequest("수정된대행사", "서울 서초구");
 
-            mockMvc.perform(patch("/api/agencies/profile")
+            mockMvc.perform(put("/api/agency/me")
                             .header("Authorization", "Bearer " + unknownToken)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(req)))

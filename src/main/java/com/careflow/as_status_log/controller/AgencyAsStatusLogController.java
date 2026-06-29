@@ -1,7 +1,6 @@
 package com.careflow.as_status_log.controller;
 
 import com.careflow.as_status_log.dto.AsStatusLogListResponse;
-import com.careflow.as_status_log.dto.AsStatusLogSummaryResponse;
 import com.careflow.as_status_log.service.AgencyAsStatusLogService;
 import com.careflow.auth.security.CustomUserDetails;
 import lombok.RequiredArgsConstructor;
@@ -30,15 +29,4 @@ public class AgencyAsStatusLogController {
         return ResponseEntity.ok(response);
     }
 
-    /**
-     * 소속 대행사 A/S to_status 기준 상태별 집계
-     * - 집계 대상: WAITING / ENGINEER_DEPARTED / ENGINEER_ARRIVED / IN_PROGRESS / COMPLETED
-     */
-    @GetMapping("/agency/status-summary")
-    public ResponseEntity<AsStatusLogSummaryResponse> getStatusSummary(
-            @AuthenticationPrincipal CustomUserDetails userDetails) throws IllegalAccessException {
-
-        AsStatusLogSummaryResponse response = agencyAsStatusLogService.getStatusSummary(userDetails);
-        return ResponseEntity.ok(response);
-    }
 }

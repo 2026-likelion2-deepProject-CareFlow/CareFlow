@@ -3,6 +3,11 @@ package com.careflow.agency.service;
 import com.careflow.agency.dto.request.AgencyEngineerProfileUpdateRequest;
 import com.careflow.agency.dto.response.AgencyEngineerDetailResponse;
 import com.careflow.agency.dto.response.AgencyEngineerSummaryResponse;
+import com.careflow.agency.dto.response.EngineerRankResponse;
+import com.careflow.as_request.dto.EngineerTaskScheduleResponse;
+import com.careflow.assignment.dto.EngineerCompletedCount;
+import com.careflow.assignment.repository.AsAssignmentRepository;
+import com.careflow.common.enums.AsStatus;
 import com.careflow.appliance.entity.ApplianceCategory;
 import com.careflow.appliance.repository.ApplianceCategoryRepository;
 import com.careflow.engineer.domain.entity.EngineerExpertBrand;
@@ -20,6 +25,7 @@ import com.careflow.region.repository.RegionRepository;
 import com.careflow.user.entity.User;
 import com.careflow.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -27,6 +33,7 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.concurrent.atomic.AtomicInteger;
 
 @Service
 @RequiredArgsConstructor
@@ -40,6 +47,7 @@ public class AgencyEngineerService {
     private final EngineerScheduleRepository engineerScheduleRepository;
     private final ApplianceCategoryRepository categoryRepository;
     private final RegionRepository regionRepository;
+    private final AsAssignmentRepository asAssignmentRepository;
 
     /**
      * 소속 기사 목록 조회
@@ -170,6 +178,57 @@ public class AgencyEngineerService {
                 .findByUser_IdAndWorkDateBetweenOrderByWorkDateAsc(engineerUserId, startDate, endDate)
                 .stream()
                 .map(ScheduleResponse::from)
+                .toList();
+    }
+
+    /**
+     * 소속 기사 특정 날짜 A/S 작업 일정 조회
+     * - 해당 날짜 배정된 작업(고객·제품·방문주소 포함) 반환
+     * - REJECTED 건 제외, 타 대행사 기사 조회 시 IllegalAccessException 발생
+     */
+    public List<EngineerTaskScheduleResponse> getAgencyEngineerTaskSchedule(
+            Long agencyUserId, Long engineerUserId, LocalDate date) throws IllegalAccessException {
+
+        User agencyUser = findUserById(agencyUserId);
+        Long agencyId = getAgencyId(agencyUser);
+
+        // 대상 기사 존재 여부 및 소속 검증
+        User engineerUser = userRepository.findById(engineerUserId)
+                .orElseThrow(() -> new NoSuchElementException("해당 기사 정보가 존재하지 않습니다."));
+
+        if (engineerUser.getAgency() == null || !engineerUser.getAgency().getId().equals(agencyId)) {
+            throw new IllegalAccessException("소속 대행사의 기사만 조회할 수 있습니다.");
+        }
+
+        return asAssignmentRepository.findTaskSchedule(engineerUserId, date)
+                .stream()
+                .map(EngineerTaskScheduleResponse::from)
+                .toList();
+    }
+
+    /**
+     * 대행사 소속 기사 수리 완료 실적 TOP 3 조회.
+     * as_requests.status = COMPLETED 기준으로 기사별 건수를 집계해 내림차순 상위 3명을 반환한다.
+     * 소속 기사가 3명 미만이면 실제 인원 수만큼만 반환한다(빈 리스트도 정상 응답).
+     */
+    public List<EngineerRankResponse> getTop3Engineers(Long agencyUserId) {
+        // 소속 대행사 식별
+        User agencyUser = findUserById(agencyUserId);
+        Long agencyId = getAgencyId(agencyUser);
+
+        // COMPLETED 건수 기준 내림차순 상위 3명 집계
+        List<EngineerCompletedCount> results = asAssignmentRepository
+                .findTopByCompletedCount(agencyId, AsStatus.COMPLETED, PageRequest.of(0, 3));
+
+        // 순위 부여 후 DTO 변환
+        AtomicInteger rankCounter = new AtomicInteger(1);
+        return results.stream()
+                .map(r -> EngineerRankResponse.builder()
+                        .rank(rankCounter.getAndIncrement())
+                        .engineerUserId(r.getEngineerUserId())
+                        .name(r.getEngineerName())
+                        .completedCount(r.getCompletedCount())
+                        .build())
                 .toList();
     }
 

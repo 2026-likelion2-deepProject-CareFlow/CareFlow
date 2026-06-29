@@ -3,10 +3,18 @@ package com.careflow.agency.service;
 import com.careflow.agency.dto.request.AgencyEngineerProfileUpdateRequest;
 import com.careflow.agency.dto.response.AgencyEngineerDetailResponse;
 import com.careflow.agency.dto.response.AgencyEngineerSummaryResponse;
+import com.careflow.agency.dto.response.EngineerRankResponse;
 import com.careflow.agency.entity.Agencies;
 import com.careflow.agency.repository.AgenciesRepository;
+import com.careflow.appliance.entity.Appliance;
 import com.careflow.appliance.entity.ApplianceCategory;
 import com.careflow.appliance.repository.ApplianceCategoryRepository;
+import com.careflow.appliance.repository.ApplianceRepository;
+import com.careflow.as_request.entity.AsRequest;
+import com.careflow.as_request.repository.AsRequestRepository;
+import com.careflow.assignment.entity.AsAssignment;
+import com.careflow.assignment.repository.AsAssignmentRepository;
+import com.careflow.common.enums.AssignType;
 import com.careflow.common.enums.Role;
 import com.careflow.engineer.domain.entity.EngineerExpertBrand;
 import com.careflow.engineer.domain.entity.EngineerProfile;
@@ -21,6 +29,8 @@ import com.careflow.engineer.repository.EngineerScheduleRepository;
 import com.careflow.engineer.repository.EngineerServiceRegionRepository;
 import com.careflow.region.entity.Regions;
 import com.careflow.region.repository.RegionRepository;
+import com.careflow.symptom.entity.Symptom;
+import com.careflow.symptom.repository.SymptomRepository;
 import com.careflow.user.entity.User;
 import com.careflow.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -65,6 +75,10 @@ class AgencyEngineerServiceIntegrationTest {
     @Autowired private EngineerScheduleRepository engineerScheduleRepository;
     @Autowired private ApplianceCategoryRepository categoryRepository;
     @Autowired private RegionRepository regionRepository;
+    @Autowired private ApplianceRepository applianceRepository;
+    @Autowired private SymptomRepository symptomRepository;
+    @Autowired private AsRequestRepository asRequestRepository;
+    @Autowired private AsAssignmentRepository asAssignmentRepository;
 
     // 공통 픽스처 (각 테스트 전 @BeforeEach 에서 H2에 실제 INSERT)
     private Agencies agency;
@@ -506,6 +520,223 @@ class AgencyEngineerServiceIntegrationTest {
                     agencyUser.getId(), 99999L, 2026, 6))
                     .isInstanceOf(NoSuchElementException.class)
                     .hasMessage("해당 기사 정보가 존재하지 않습니다.");
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  5. 수리 완료 실적 TOP 3 기사 조회
+    // ══════════════════════════════════════════════════════════════
+    @Nested
+    @DisplayName("수리 완료 실적 TOP 3 조회 - getTop3Engineers")
+    class GetTop3Engineers {
+
+        @Test
+        @DisplayName("TC-I-01: 성공: 기사 4명 중 COMPLETED 건수 상위 3명 내림차순 반환")
+        void success_returns_top3_desc() {
+            // Given — 기사 4명 생성 (A=5건, B=3건, C=7건, D=1건)
+            User engineerA = saveEngineerUser("a@test.com", "기사A");
+            User engineerB = saveEngineerUser("b@test.com", "기사B");
+            User engineerC = saveEngineerUser("c@test.com", "기사C");
+            User engineerD = saveEngineerUser("d@test.com", "기사D");
+
+            createCompletedAssignments(engineerA, 5);
+            createCompletedAssignments(engineerB, 3);
+            createCompletedAssignments(engineerC, 7);
+            createCompletedAssignments(engineerD, 1);
+
+            // When
+            List<EngineerRankResponse> result =
+                    agencyEngineerService.getTop3Engineers(agencyUser.getId());
+
+            // Then — 상위 3명, C(7)→A(5)→B(3) 순서, D(1) 제외
+            assertThat(result).hasSize(3);
+            assertThat(result.get(0).getRank()).isEqualTo(1);
+            assertThat(result.get(0).getName()).isEqualTo("기사C");
+            assertThat(result.get(0).getCompletedCount()).isEqualTo(7);
+            assertThat(result.get(1).getName()).isEqualTo("기사A");
+            assertThat(result.get(1).getCompletedCount()).isEqualTo(5);
+            assertThat(result.get(2).getRank()).isEqualTo(3);
+            assertThat(result.get(2).getName()).isEqualTo("기사B");
+            assertThat(result.get(2).getCompletedCount()).isEqualTo(3);
+            // D는 결과에 없음
+            assertThat(result).extracting(EngineerRankResponse::getName)
+                    .doesNotContain("기사D");
+        }
+
+        @Test
+        @DisplayName("TC-I-02: 성공: COMPLETED 배차 없을 때 — 빈 리스트 반환")
+        void success_emptyList_whenNoCompleted() {
+            // Given — COMPLETED 배차 없음
+            // When
+            List<EngineerRankResponse> result =
+                    agencyEngineerService.getTop3Engineers(agencyUser.getId());
+            // Then
+            assertThat(result).isEmpty();
+        }
+
+        @Test
+        @DisplayName("TC-I-03: 성공: 타 대행사 기사의 COMPLETED 건은 집계 제외")
+        void success_excludes_other_agency_assignments() {
+            // Given — 내 대행사 기사 3건, 타 대행사 기사 10건
+            Agencies otherAgency = agencyRepository.save(
+                    Agencies.create("타대행사", "000-11-22222", "부산시", 3.0));
+            User myEngineer = saveEngineerUser("mine@test.com", "내기사");
+            User otherEngineer = userRepository.save(User.builder()
+                    .email("other@top3.com").passwordHash("hashed")
+                    .name("타대행사기사").phone("010-8888-8888")
+                    .role(Role.ENGINEER).agency(otherAgency).build());
+
+            createCompletedAssignments(myEngineer, 3);
+            createCompletedAssignmentsForAgency(otherEngineer, otherAgency, 10);
+
+            // When
+            List<EngineerRankResponse> result =
+                    agencyEngineerService.getTop3Engineers(agencyUser.getId());
+
+            // Then — 내 대행사 기사 1건만, 타 대행사 기사는 미포함
+            assertThat(result).hasSize(1);
+            assertThat(result.get(0).getName()).isEqualTo("내기사");
+            assertThat(result.get(0).getCompletedCount()).isEqualTo(3);
+        }
+
+        @Test
+        @DisplayName("TC-I-04: 성공: COMPLETED 외 상태(PENDING 등)는 집계 제외")
+        void success_excludes_non_completed_requests() {
+            // Given — 기사에게 COMPLETED 2건 + PENDING 상태 as_request 로 만들어진 배차 5건
+            User engineer = saveEngineerUser("partial@test.com", "혼합기사");
+
+            createCompletedAssignments(engineer, 2);
+            createPendingAssignments(engineer, 5); // PENDING 상태 as_request
+
+            // When
+            List<EngineerRankResponse> result =
+                    agencyEngineerService.getTop3Engineers(agencyUser.getId());
+
+            // Then — completedCount = 2 (PENDING 배차는 카운트 안 됨)
+            assertThat(result).hasSize(1);
+            assertThat(result.get(0).getCompletedCount()).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("TC-I-05: 실패: 소속 대행사 없는 유저 ID — NoSuchElementException")
+        void fail_noAgency_throwsException() {
+            // Given — agency 없는 유저
+            User noAgencyUser = userRepository.save(User.builder()
+                    .email("noagency@top3.com").passwordHash("hashed")
+                    .name("무소속").phone("010-0000-9999")
+                    .role(Role.AGENCY).build());
+
+            // When & Then
+            assertThatThrownBy(() -> agencyEngineerService.getTop3Engineers(noAgencyUser.getId()))
+                    .isInstanceOf(NoSuchElementException.class)
+                    .hasMessage("소속 대행사 정보가 없습니다.");
+        }
+
+        // 테스트용 헬퍼: 내 대행사 소속 기사 유저 생성
+        private User saveEngineerUser(String email, String name) {
+            return userRepository.save(User.builder()
+                    .email(email).passwordHash("hashed")
+                    .name(name).phone("010-1111-0000")
+                    .role(Role.ENGINEER).agency(agency).build());
+        }
+
+        // 내 대행사 기준 COMPLETED 배차 N건 생성
+        private void createCompletedAssignments(User engineer, int count) {
+            createCompletedAssignmentsForAgency(engineer, agency, count);
+        }
+
+        // 지정 대행사 기준 COMPLETED 배차 N건 생성
+        private void createCompletedAssignmentsForAgency(User engineer, Agencies targetAgency, int count) {
+            User customer = getOrCreateCustomer();
+            Appliance appliance = getOrCreateAppliance(customer);
+            Symptom symptom = getOrCreateSymptom();
+            Regions region = getOrCreateRegion();
+
+            for (int i = 0; i < count; i++) {
+                AsRequest req = AsRequest.builder()
+                        .customer(customer)
+                        .appliance(appliance)
+                        .symptom(symptom)
+                        .visitRegion(region)
+                        .visitAddressDetail("테스트 주소 " + i)
+                        .scheduledDate(LocalDate.now())
+                        .scheduledTime("10:00")
+                        .build();
+                req.processAssignment(targetAgency); // ASSIGNED
+                // 직접 상태를 COMPLETED로 변경하기 위해 acceptAssignment → depart → arrive → startWork → completeWork
+                req.acceptAssignment();
+                req.depart();
+                req.arrive();
+                req.startWork();
+                req.completeWork();
+                AsRequest saved = asRequestRepository.save(req);
+
+                asAssignmentRepository.save(AsAssignment.create(
+                        saved, engineer, targetAgency, AssignType.MANUAL));
+            }
+        }
+
+        // PENDING 상태 as_request 를 통한 배차 N건 생성
+        private void createPendingAssignments(User engineer, int count) {
+            User customer = getOrCreateCustomer();
+            Appliance appliance = getOrCreateAppliance(customer);
+            Symptom symptom = getOrCreateSymptom();
+            Regions region = getOrCreateRegion();
+
+            for (int i = 0; i < count; i++) {
+                AsRequest req = asRequestRepository.save(AsRequest.builder()
+                        .customer(customer)
+                        .appliance(appliance)
+                        .symptom(symptom)
+                        .visitRegion(region)
+                        .visitAddressDetail("대기 주소 " + i)
+                        .scheduledDate(LocalDate.now())
+                        .scheduledTime("14:00")
+                        .build());
+                // PENDING 상태인 채로 배차 생성
+                asAssignmentRepository.save(AsAssignment.create(
+                        req, engineer, agency, AssignType.MANUAL));
+            }
+        }
+
+        private User customerCache = null;
+        private User getOrCreateCustomer() {
+            if (customerCache == null) {
+                customerCache = userRepository.save(User.builder()
+                        .email("customer@top3.com").passwordHash("hashed")
+                        .name("테스트고객").phone("010-2222-2222")
+                        .role(Role.CUSTOMER).build());
+            }
+            return customerCache;
+        }
+
+        private Appliance applianceCache = null;
+        private Appliance getOrCreateAppliance(User customer) {
+            if (applianceCache == null) {
+                applianceCache = applianceRepository.save(Appliance.create(
+                        customer, leafCategory, "삼성", "테스트모델", null, null, null, null));
+            }
+            return applianceCache;
+        }
+
+        private Symptom symptomCache = null;
+        private Symptom getOrCreateSymptom() {
+            if (symptomCache == null) {
+                symptomCache = symptomRepository.save(Symptom.builder()
+                        .category(leafCategory)
+                        .symptomCode("TEST_FAIL")
+                        .symptomName("테스트 증상")
+                        .build());
+            }
+            return symptomCache;
+        }
+
+        private Regions regionCache = null;
+        private Regions getOrCreateRegion() {
+            if (regionCache == null) {
+                regionCache = district; // @BeforeEach에서 생성한 district 재사용
+            }
+            return regionCache;
         }
     }
 

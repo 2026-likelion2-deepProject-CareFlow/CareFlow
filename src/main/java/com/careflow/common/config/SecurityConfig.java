@@ -51,6 +51,8 @@ public class SecurityConfig {
                         // JWT payload의 role 클레임이 "AGENCY" 문자열로 저장되므로 ROLE_ 접두사 없이 매칭
                         .requestMatchers("/api/agencies/profile").hasAuthority("AGENCY")
                         .requestMatchers("/api/agencies/fee-rate").hasAuthority("AGENCY")
+                        // 대행사 프로필 수정 (리팩토링된 경로)
+                        .requestMatchers("/api/agency/me").hasAuthority("AGENCY")
                         .anyRequest().authenticated()
                 )
                 .oauth2Login(oauth2 -> oauth2

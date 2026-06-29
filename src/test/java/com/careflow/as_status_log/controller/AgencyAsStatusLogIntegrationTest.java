@@ -195,7 +195,7 @@ class AgencyAsStatusLogIntegrationTest {
             saveLog(req, agencyManager, "WAITING", "COMPLETED", null);
             saveLog(req, agencyManager, "WAITING", "COMPLETED", null);
 
-            mockMvc.perform(get("/api/as-status-logs/agency/status-summary")
+            mockMvc.perform(get("/api/agency/work-requests/stats")
                             .header("Authorization", "Bearer " + agencyToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.waitingCount").value(2))
@@ -208,7 +208,7 @@ class AgencyAsStatusLogIntegrationTest {
         @Test
         @DisplayName("성공: 이력 없으면 모든 count = 0")
         void success_noLogs_allZero() throws Exception {
-            mockMvc.perform(get("/api/as-status-logs/agency/status-summary")
+            mockMvc.perform(get("/api/agency/work-requests/stats")
                             .header("Authorization", "Bearer " + agencyToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.waitingCount").value(0))
@@ -234,7 +234,7 @@ class AgencyAsStatusLogIntegrationTest {
                 saveLog(otherReq, otherManager, null, "COMPLETED", null);
             }
 
-            mockMvc.perform(get("/api/as-status-logs/agency/status-summary")
+            mockMvc.perform(get("/api/agency/work-requests/stats")
                             .header("Authorization", "Bearer " + agencyToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.waitingCount").value(1))
@@ -244,7 +244,7 @@ class AgencyAsStatusLogIntegrationTest {
         @Test
         @DisplayName("실패: AGENCY 이외 권한(CUSTOMER)으로 호출 — 401")
         void fail_notAgency_401() throws Exception {
-            mockMvc.perform(get("/api/as-status-logs/agency/status-summary")
+            mockMvc.perform(get("/api/agency/work-requests/stats")
                             .header("Authorization", "Bearer " + customerToken))
                     .andExpect(status().isUnauthorized());
         }

@@ -1,10 +1,15 @@
 package com.careflow.assignment.repository;
 
 import com.careflow.assignment.entity.AsAssignment;
+import com.careflow.assignment.dto.EngineerCompletedCount;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+
+import org.springframework.data.jpa.repository.Modifying;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.util.List;
@@ -31,6 +36,43 @@ public interface AsAssignmentRepository extends JpaRepository<AsAssignment, Long
            "JOIN FETCH a.engineer " +
            "WHERE a.id = :id")
     Optional<AsAssignment> findDetailById(@Param("id") Long id);
+
+    // 대행사 소속 기사들의 수리 완료(COMPLETED) 건수 집계 — 내림차순 상위 N건
+    // as_requests.status = COMPLETED 기준으로 집계하며, Pageable 로 상위 3건만 반환
+    @Query("SELECT a.engineer.id AS engineerUserId, " +
+           "a.engineer.name AS engineerName, " +
+           "COUNT(a) AS completedCount " +
+           "FROM AsAssignment a " +
+           "JOIN a.asRequest r " +
+           "WHERE a.agency.id = :agencyId " +
+           "AND r.status = :status " +
+           "GROUP BY a.engineer.id, a.engineer.name " +
+           "ORDER BY COUNT(a) DESC")
+    List<EngineerCompletedCount> findTopByCompletedCount(
+            @Param("agencyId") Long agencyId,
+            @Param("status") com.careflow.common.enums.AsStatus status,
+            Pageable pageable);
+
+    // 테스트 픽스처용 status 강제 업데이트 (도메인 메서드 없는 상태 세팅)
+    @Modifying
+    @Transactional
+    @Query("UPDATE AsAssignment a SET a.status = :status WHERE a.id = :id")
+    void updateStatus(@Param("id") Long id, @Param("status") String status);
+
+    // 기사의 특정 날짜 작업 일정 조회 — REJECTED 건 제외, N+1 방지용 JOIN FETCH
+    @Query("SELECT a FROM AsAssignment a " +
+           "JOIN FETCH a.asRequest r " +
+           "JOIN FETCH r.customer " +
+           "JOIN FETCH r.appliance " +
+           "JOIN FETCH r.symptom " +
+           "JOIN FETCH r.visitRegion " +
+           "WHERE a.engineer.id = :engineerUserId " +
+           "AND r.scheduledDate = :date " +
+           "AND a.status <> 'REJECTED' " +
+           "ORDER BY r.scheduledTime ASC")
+    List<AsAssignment> findTaskSchedule(
+            @Param("engineerUserId") Long engineerUserId,
+            @Param("date") LocalDate date);
 
     // 날짜·상태 동적 필터 조회 — 두 파라미터 모두 null 허용 (null = 해당 조건 미적용)
     // JOIN FETCH 로 as_requests·symptom·engineer 를 한 번에 로딩해 N+1 방지

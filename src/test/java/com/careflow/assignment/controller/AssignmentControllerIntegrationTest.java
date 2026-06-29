@@ -154,7 +154,7 @@ class AssignmentControllerIntegrationTest {
         @Test
         @DisplayName("성공(기본): 부가 데이터 없을 때 → 200 OK, 핵심 필드 검증")
         void getDetail_minimal_200() throws Exception {
-            mockMvc.perform(get("/api/assignment/detail/" + assignment.getId())
+            mockMvc.perform(get("/api/agency/as-assignments/" + assignment.getId() + "/detail")
                             .header("Authorization", "Bearer " + agencyToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.assignmentId").value(assignment.getId()))
@@ -181,7 +181,7 @@ class AssignmentControllerIntegrationTest {
         void getDetail_withAvgRepairCost_200() throws Exception {
             saveExpectedRepairCost(symptom, category, 150000);
 
-            mockMvc.perform(get("/api/assignment/detail/" + assignment.getId())
+            mockMvc.perform(get("/api/agency/as-assignments/" + assignment.getId() + "/detail")
                             .header("Authorization", "Bearer " + agencyToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.avgRepairCost").value(150000));
@@ -200,7 +200,7 @@ class AssignmentControllerIntegrationTest {
                     .asRequest(asRequest).changedBy(engineer)
                     .fromStatus("WAITING").toStatus("ENGINEER_DEPARTED").memo("출발").build());
 
-            mockMvc.perform(get("/api/assignment/detail/" + assignment.getId())
+            mockMvc.perform(get("/api/agency/as-assignments/" + assignment.getId() + "/detail")
                             .header("Authorization", "Bearer " + agencyToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.statusLogs.length()").value(2))
@@ -224,7 +224,7 @@ class AssignmentControllerIntegrationTest {
                     .diagnosisResult(DiagnosisResult.REPAIRED)
                     .workDurationMin(60).finalAmount(80000).memo("냉매 보충 완료").build());
 
-            mockMvc.perform(get("/api/assignment/detail/" + assignment.getId())
+            mockMvc.perform(get("/api/agency/as-assignments/" + assignment.getId() + "/detail")
                             .header("Authorization", "Bearer " + agencyToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.previousWorkReports.length()").value(1))
@@ -244,7 +244,7 @@ class AssignmentControllerIntegrationTest {
             profile.completeProfile(category, 2020, SkillLevel.INTERMEDIATE, "성실한 기사입니다");
             engineerProfileRepository.save(profile);
 
-            mockMvc.perform(get("/api/assignment/detail/" + assignment.getId())
+            mockMvc.perform(get("/api/agency/as-assignments/" + assignment.getId() + "/detail")
                             .header("Authorization", "Bearer " + agencyToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.engineerProfile.skillLevel").value("INTERMEDIATE"))
@@ -264,7 +264,7 @@ class AssignmentControllerIntegrationTest {
             profile.completeProfile(category, 2018, SkillLevel.ADVANCED, "전문가 기사");
             engineerProfileRepository.save(profile);
 
-            mockMvc.perform(get("/api/assignment/detail/" + assignment.getId())
+            mockMvc.perform(get("/api/agency/as-assignments/" + assignment.getId() + "/detail")
                             .header("Authorization", "Bearer " + agencyToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.avgRepairCost").value(120000))
@@ -277,7 +277,7 @@ class AssignmentControllerIntegrationTest {
         @Test
         @DisplayName("실패: 존재하지 않는 assignmentId → 404 Not Found + 에러 포맷 검증")
         void getDetail_notFound_404() throws Exception {
-            mockMvc.perform(get("/api/assignment/detail/99999")
+            mockMvc.perform(get("/api/agency/as-assignments/99999/detail")
                             .header("Authorization", "Bearer " + agencyToken))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.success").value(false))
@@ -287,7 +287,7 @@ class AssignmentControllerIntegrationTest {
         @Test
         @DisplayName("실패: CUSTOMER 권한 토큰 → 401 Unauthorized + 에러 포맷 검증")
         void getDetail_customerRole_401() throws Exception {
-            mockMvc.perform(get("/api/assignment/detail/" + assignment.getId())
+            mockMvc.perform(get("/api/agency/as-assignments/" + assignment.getId() + "/detail")
                             .header("Authorization", "Bearer " + customerToken))
                     .andExpect(status().isUnauthorized())
                     .andExpect(jsonPath("$.success").value(false));
@@ -296,7 +296,7 @@ class AssignmentControllerIntegrationTest {
         @Test
         @DisplayName("실패: 인증 토큰 없음 → 401 Unauthorized")
         void getDetail_noToken_401() throws Exception {
-            mockMvc.perform(get("/api/assignment/detail/" + assignment.getId()))
+            mockMvc.perform(get("/api/agency/as-assignments/" + assignment.getId() + "/detail"))
                     .andExpect(status().isUnauthorized());
         }
     }
@@ -316,7 +316,7 @@ class AssignmentControllerIntegrationTest {
             AsRequest req2 = saveAsRequest(LocalDate.of(2026, 7, 1));
             asAssignmentRepository.save(AsAssignment.create(req2, engineer, agency, AssignType.MANUAL));
 
-            mockMvc.perform(get("/api/assignment/search")
+            mockMvc.perform(get("/api/agency/as-assignments/search")
                             .param("date", "2026-07-01")
                             .header("Authorization", "Bearer " + agencyToken))
                     .andExpect(status().isOk())
@@ -330,7 +330,7 @@ class AssignmentControllerIntegrationTest {
         @DisplayName("성공: 날짜+상태 필터 (date 명시, status=WAITING) → WAITING 배차만 반환")
         void search_statusOnly_200() throws Exception {
             // date 미입력 시 오늘 날짜가 기본값이므로, 2026-07-01 데이터를 보려면 날짜 명시 필요
-            mockMvc.perform(get("/api/assignment/search")
+            mockMvc.perform(get("/api/agency/as-assignments/search")
                             .param("date", "2026-07-01")
                             .param("status", "WAITING")
                             .header("Authorization", "Bearer " + agencyToken))
@@ -349,7 +349,7 @@ class AssignmentControllerIntegrationTest {
             asAssignmentRepository.save(AsAssignment.create(otherDate, engineer, agency, AssignType.MANUAL));
 
             // 2026-07-01 + WAITING → 2건 (기본 setup 1건 + sameDate 1건)
-            mockMvc.perform(get("/api/assignment/search")
+            mockMvc.perform(get("/api/agency/as-assignments/search")
                             .param("date", "2026-07-01")
                             .param("status", "WAITING")
                             .header("Authorization", "Bearer " + agencyToken))
@@ -361,7 +361,7 @@ class AssignmentControllerIntegrationTest {
         @DisplayName("성공: 파라미터 없음 → date 기본값 오늘, 결과 없으면 204 반환")
         void search_noParams_defaultToday_204() throws Exception {
             // BeforeEach 의 배차는 2026-07-01 날짜 → 오늘 날짜(테스트 실행일)와 다르므로 결과 없음
-            mockMvc.perform(get("/api/assignment/search")
+            mockMvc.perform(get("/api/agency/as-assignments/search")
                             .header("Authorization", "Bearer " + agencyToken))
                     .andExpect(status().isNoContent());
         }
@@ -381,7 +381,7 @@ class AssignmentControllerIntegrationTest {
             asAssignmentRepository.save(AsAssignment.create(otherReq, otherEngineer, otherAgency, AssignType.MANUAL));
 
             // 현재 대행사 관리자로 조회 → 본 대행사 1건만 반환
-            mockMvc.perform(get("/api/assignment/search")
+            mockMvc.perform(get("/api/agency/as-assignments/search")
                             .param("date", "2026-07-01")
                             .header("Authorization", "Bearer " + agencyToken))
                     .andExpect(status().isOk())
@@ -397,7 +397,7 @@ class AssignmentControllerIntegrationTest {
             asAssignmentRepository.save(AsAssignment.create(secondReq, engineer, agency, AssignType.MANUAL));
 
             // date=2026-07-01, status=WAITING → 2건 반환 (순서 보장)
-            mockMvc.perform(get("/api/assignment/search")
+            mockMvc.perform(get("/api/agency/as-assignments/search")
                             .param("date", "2026-07-01")
                             .param("status", "WAITING")
                             .header("Authorization", "Bearer " + agencyToken))
@@ -410,7 +410,7 @@ class AssignmentControllerIntegrationTest {
         @Test
         @DisplayName("실패: 허용되지 않는 status 값 → 400 Bad Request")
         void search_invalidStatus_400() throws Exception {
-            mockMvc.perform(get("/api/assignment/search")
+            mockMvc.perform(get("/api/agency/as-assignments/search")
                             .param("status", "UNKNOWN_STATUS")
                             .header("Authorization", "Bearer " + agencyToken))
                     .andExpect(status().isBadRequest())
@@ -422,7 +422,7 @@ class AssignmentControllerIntegrationTest {
         @Test
         @DisplayName("실패: CUSTOMER 권한 토큰 → 401 Unauthorized")
         void search_customerRole_401() throws Exception {
-            mockMvc.perform(get("/api/assignment/search")
+            mockMvc.perform(get("/api/agency/as-assignments/search")
                             .header("Authorization", "Bearer " + customerToken))
                     .andExpect(status().isUnauthorized());
         }
@@ -430,7 +430,7 @@ class AssignmentControllerIntegrationTest {
         @Test
         @DisplayName("실패: 인증 토큰 없음 → 401 Unauthorized")
         void search_noToken_401() throws Exception {
-            mockMvc.perform(get("/api/assignment/search"))
+            mockMvc.perform(get("/api/agency/as-assignments/search"))
                     .andExpect(status().isUnauthorized());
         }
     }
@@ -462,7 +462,7 @@ class AssignmentControllerIntegrationTest {
         @DisplayName("성공: MANUAL 배차 건 → 재배차 없음, 고객 알림 저장 후 MANUAL_NOTIFIED 반환")
         void reassign_manual_notified_200() throws Exception {
             // BeforeEach 의 assignment 는 assignType=MANUAL (AsRequest 현재 MVP 고정값)
-            mockMvc.perform(post("/api/assignment/" + assignment.getId() + "/reassign")
+            mockMvc.perform(post("/api/agency/as-assignments/" + assignment.getId() + "/reassign")
                             .header("Authorization", "Bearer " + agencyToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.result").value("MANUAL_NOTIFIED"))
@@ -486,10 +486,10 @@ class AssignmentControllerIntegrationTest {
         @DisplayName("성공: MANUAL 재배차 반복 요청 시 알림이 누적 저장됨")
         void reassign_manual_twice_bothNotified_200() throws Exception {
             // 2회 재배차 요청
-            mockMvc.perform(post("/api/assignment/" + assignment.getId() + "/reassign")
+            mockMvc.perform(post("/api/agency/as-assignments/" + assignment.getId() + "/reassign")
                             .header("Authorization", "Bearer " + agencyToken))
                     .andExpect(status().isOk());
-            mockMvc.perform(post("/api/assignment/" + assignment.getId() + "/reassign")
+            mockMvc.perform(post("/api/agency/as-assignments/" + assignment.getId() + "/reassign")
                             .header("Authorization", "Bearer " + agencyToken))
                     .andExpect(status().isOk());
 
@@ -501,7 +501,7 @@ class AssignmentControllerIntegrationTest {
         @Test
         @DisplayName("실패: 존재하지 않는 assignmentId → 404 Not Found")
         void reassign_notFound_404() throws Exception {
-            mockMvc.perform(post("/api/assignment/99999/reassign")
+            mockMvc.perform(post("/api/agency/as-assignments/99999/reassign")
                             .header("Authorization", "Bearer " + agencyToken))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.success").value(false))
@@ -511,7 +511,7 @@ class AssignmentControllerIntegrationTest {
         @Test
         @DisplayName("실패: CUSTOMER 권한 토큰 → 401 Unauthorized")
         void reassign_customerRole_401() throws Exception {
-            mockMvc.perform(post("/api/assignment/" + assignment.getId() + "/reassign")
+            mockMvc.perform(post("/api/agency/as-assignments/" + assignment.getId() + "/reassign")
                             .header("Authorization", "Bearer " + customerToken))
                     .andExpect(status().isUnauthorized());
         }
@@ -519,7 +519,7 @@ class AssignmentControllerIntegrationTest {
         @Test
         @DisplayName("실패: 인증 토큰 없음 → 401 Unauthorized")
         void reassign_noToken_401() throws Exception {
-            mockMvc.perform(post("/api/assignment/" + assignment.getId() + "/reassign"))
+            mockMvc.perform(post("/api/agency/as-assignments/" + assignment.getId() + "/reassign"))
                     .andExpect(status().isUnauthorized());
         }
     }
