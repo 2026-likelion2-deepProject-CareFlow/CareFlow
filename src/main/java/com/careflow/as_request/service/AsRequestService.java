@@ -5,16 +5,21 @@ import com.careflow.appliance.repository.ApplianceRepository;
 import com.careflow.as_request.dto.AsRequestCreateDto;
 import com.careflow.as_request.dto.AsRequestCreateResponseDto;
 import com.careflow.as_request.dto.AsRequestResponseDto;
+import com.careflow.as_request.dto.CustomerAsRequestDetailResponse;
+import com.careflow.as_status_log.entity.AsStatusLog;
+import com.careflow.as_status_log.repository.AsStatusLogRepository;
 import com.careflow.assignment.dto.MatchReason;
 import com.careflow.as_request.entity.AsRequest;
 import com.careflow.as_request.repository.AsRequestRepository;
 import com.careflow.assignment.entity.AsAssignment;
 import com.careflow.assignment.repository.AsAssignmentRepository;
+import com.careflow.common.enums.AsStatus;
 import com.careflow.common.enums.AssignType;
 import com.careflow.common.enums.Role;
 import com.careflow.engineer.domain.entity.EngineerProfile;
 import com.careflow.engineer.domain.enums.ScheduleStatus;
 import com.careflow.engineer.repository.EngineerProfileRepository;
+import com.careflow.notification.service.NotificationService;
 import com.careflow.region.entity.Regions;
 import com.careflow.region.repository.RegionRepository;
 import com.careflow.symptom.entity.Symptom;
@@ -24,11 +29,15 @@ import com.careflow.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.context.ApplicationEventPublisher;
+import com.careflow.notification.event.AsStatusNotificationEvent;
+
 
 import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
 import java.util.Comparator;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.stream.Collectors;
 
 @Service
@@ -43,6 +52,9 @@ public class AsRequestService {
     private final RegionRepository regionRepository;
     private final SymptomRepository symptomRepository;
     private final EngineerProfileRepository engineerProfileRepository;
+    private final AsStatusLogRepository asStatusLogRepository;
+    private final NotificationService notificationService;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * 고객 A/S 접수 및 수리 기사 배정
@@ -196,6 +208,34 @@ public class AsRequestService {
         return asAssignmentRepository.save(assignment);
     }
 
+    /**
+     * 고객용: A/S 요청 단건 상세 조회
+     * 1. appliance 포함 JOIN FETCH 단건 조회 (findDetailById 재사용)
+     * 2. 본인 소유 검증
+     * 3. REJECTED가 아닌 배정에서 기사 정보 추출 (없으면 null — 아직 배정 전 상태)
+     */
+    @Transactional(readOnly = true)
+    public CustomerAsRequestDetailResponse getMyAsRequestDetail(Long customerId, Long requestId)
+            throws IllegalAccessException {
+
+        AsRequest asRequest = asRequestRepository.findDetailById(requestId)
+                .orElseThrow(() -> new NoSuchElementException("존재하지 않는 A/S 요청입니다."));
+
+        // 본인 요청인지 검증
+        if (!asRequest.getCustomer().getId().equals(customerId)) {
+            throw new IllegalAccessException("본인의 A/S 요청만 조회할 수 있습니다.");
+        }
+
+        // 배정된 기사 조회 — REJECTED가 아닌 첫 번째 배정의 기사 반환 (없으면 null)
+        User engineer = asAssignmentRepository.findByAsRequest_Id(requestId).stream()
+                .filter(a -> !a.getStatus().equals("REJECTED"))
+                .findFirst()
+                .map(AsAssignment::getEngineer)
+                .orElse(null);
+
+        return CustomerAsRequestDetailResponse.from(asRequest, engineer);
+    }
+
     public List<AsRequestResponseDto> getMyAsRequests(Long customerId) {
         return asRequestRepository.findByCustomer_IdOrderByIdDesc(customerId)
                 .stream()
@@ -247,6 +287,74 @@ public class AsRequestService {
             return LocalTime.parse(scheduledTime);
         } catch (DateTimeParseException e) {
             throw new IllegalArgumentException("방문 예약 시간 형식이 올바르지 않습니다. (올바른 형식: HH:MM)");
+        }
+    }
+
+    /**
+     * 기사의 작업 수행 상태 변경 (출발 -> 도착 -> 시작)
+     */
+    @Transactional
+    public void updateEngineerTaskStatus(Long engineerId, Long requestId, AsStatus newStatus) {
+        AsRequest asRequest = asRequestRepository.findById(requestId)
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 A/S 요청입니다."));
+
+        // 1. 해당 기사 본인에게 배정된 건이며 수락(ACCEPTED) 이상의 상태인지 철저한 검증
+        boolean isMyTask = asAssignmentRepository.findByAsRequest_Id(requestId).stream()
+                .anyMatch(a -> a.getEngineer().getId().equals(engineerId) &&
+                        !a.getStatus().equals("WAITING") && !a.getStatus().equals("REJECTED"));
+
+        if (!isMyTask) {
+            throw new IllegalStateException("본인에게 배정되어 진행 중인 작업만 상태를 변경할 수 있습니다.");
+        }
+
+        User engineer = userRepository.findById(engineerId).orElseThrow();
+        String oldStatusStr = asRequest.getStatus().name();
+
+        // 2. 도메인 메서드로 상태 변경 (더티 체킹)
+        String actionMemo = "";
+        switch (newStatus) {
+            case ENGINEER_DEPARTED -> {
+                asRequest.depart();
+                actionMemo = engineer.getName() + " 기사님이 고객님 댁으로 출발했습니다.";
+            }
+            case ENGINEER_ARRIVED -> {
+                asRequest.arrive();
+                actionMemo = engineer.getName() + " 기사님이 현장에 도착했습니다.";
+            }
+            case IN_PROGRESS -> {
+                asRequest.startWork();
+                actionMemo = engineer.getName() + " 기사님이 수리 작업을 시작했습니다.";
+            }
+            default -> throw new IllegalArgumentException("해당 API로는 출발/도착/작업시작 상태만 변경 가능합니다.");
+        }
+
+        // 🌟 3. 상태 변경 로그(AsStatusLog) 기록
+        AsStatusLog statusLog = AsStatusLog.builder()
+                .asRequest(asRequest)
+                .changedBy(engineer)
+                .fromStatus(oldStatusStr)
+                .toStatus(newStatus.name())
+                .memo(actionMemo)
+                .build();
+        asStatusLogRepository.save(statusLog);
+
+        // 🌟 4. SSE 실시간 알림 발송 (고객 & 대행사)
+        sendRealTimeNotification(asRequest, actionMemo);
+    }
+
+    /**
+     * 알림 발송 공통 헬퍼 메서드
+     */
+    private void sendRealTimeNotification(AsRequest asRequest, String message) {
+        String title = "A/S 진행 상태 업데이트";
+        String applianceInfo = asRequest.getAppliance().getBrand() + " " + asRequest.getAppliance().getModelName();
+        String body = "[" + applianceInfo + "] " + message;
+
+        // 직접 전송이 아닌 "이벤트 발행"
+        eventPublisher.publishEvent(new AsStatusNotificationEvent(asRequest.getCustomer(), title, body));
+
+        if (asRequest.getAgency() != null && asRequest.getAgency().getRepresentativeId() != null) {
+            eventPublisher.publishEvent(new AsStatusNotificationEvent(asRequest.getAgency().getRepresentativeId(), title, body));
         }
     }
 }

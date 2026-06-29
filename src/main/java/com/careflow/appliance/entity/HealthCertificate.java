@@ -1,6 +1,7 @@
 package com.careflow.appliance.entity;
 
 import com.careflow.report.domain.enums.PartImportance; // 🎯 도메인 의존성 해결(Nit)은 추후 common 이동 시 일괄 처리
+import com.careflow.report.domain.policy.HealthScoreCalculator;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Builder;
@@ -80,10 +81,13 @@ public class HealthCertificate {
             this.criticalPartsReplaced += 1;
         }
 
-        int axis1 = calculateRepairCountScore(this.repairCount);
-        int axis2 = calculateUsagePeriodScore(purchaseDate);
-        int axis3 = calculatePartImportanceScore(maxImportance);
-        int axis4 = calculateLastRepairedScore(this.lastRepairedAt);
+        LocalDateTime now = LocalDateTime.now(); // 기준 시점
+
+        // 💡 단일화된 계산기 호출
+        int axis1 = HealthScoreCalculator.calculateRepairCountScore(this.repairCount);
+        int axis2 = HealthScoreCalculator.calculateUsagePeriodScore(purchaseDate, now);
+        int axis3 = HealthScoreCalculator.calculatePartImportanceScore(maxImportance);
+        int axis4 = HealthScoreCalculator.calculateLastRepairedScore(this.lastRepairedAt, now);
 
         this.score = axis1 + axis2 + axis3 + axis4;
 
@@ -94,43 +98,6 @@ public class HealthCertificate {
         else this.grade = "E";
 
         this.isCertified = (this.score >= 75 && (this.grade.equals("A") || this.grade.equals("B")));
-        this.lastRepairedAt = LocalDateTime.now();
-    }
-
-    private int calculateRepairCountScore(int count) {
-        if (count <= 1) return 25;
-        if (count == 2) return 20;
-        if (count == 3) return 15;
-        if (count == 4) return 8;
-        return 0;
-    }
-
-    private int calculateUsagePeriodScore(LocalDate purchaseDate) {
-        if (purchaseDate == null) return 25;
-        long years = ChronoUnit.YEARS.between(purchaseDate, LocalDate.now());
-        if (years < 1) return 25;
-        if (years < 3) return 20;
-        if (years < 5) return 15;
-        if (years < 8) return 8;
-        return 0;
-    }
-
-    private int calculatePartImportanceScore(PartImportance importance) {
-        if (importance == null) return 25;
-        return switch (importance) {
-            case MINOR -> 20;
-            case NORMAL -> 15;
-            case MAJOR -> 8;
-            case CRITICAL -> 0;
-        };
-    }
-
-    private int calculateLastRepairedScore(LocalDateTime lastRepaired) {
-        if (lastRepaired == null) return 25;
-        long months = ChronoUnit.MONTHS.between(lastRepaired, LocalDateTime.now());
-        if (months >= 24) return 20;
-        if (months >= 12) return 15;
-        if (months >= 6) return 8;
-        return 0;
+        this.lastRepairedAt = now; // 갱신
     }
 }

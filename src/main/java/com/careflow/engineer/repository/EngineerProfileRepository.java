@@ -225,7 +225,7 @@ public interface EngineerProfileRepository extends JpaRepository<EngineerProfile
     @Query("""
     SELECT ep FROM EngineerProfile ep
     JOIN FETCH ep.user
-    WHERE ep.user.agency = :agencyId
+    WHERE ep.user.agency.id = :agencyId
     """)
     List<EngineerProfile> findByAgencyId(@Param("agencyId") Long agencyId);
 }

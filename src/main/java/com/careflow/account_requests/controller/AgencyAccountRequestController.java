@@ -1,7 +1,7 @@
 package com.careflow.account_requests.controller;
 
+import com.careflow.account_requests.dto.AccountRequestListResponse;
 import com.careflow.account_requests.dto.AccountRequestReject;
-import com.careflow.account_requests.entity.AccountRequests;
 import com.careflow.account_requests.service.AccountRequestsService;
 import com.careflow.account_requests.service.AgencyAccountRequestService;
 import com.careflow.agency.entity.Agencies;
@@ -14,7 +14,6 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.List;
 
 @RestController
 @RequestMapping("/api/account-requests")
@@ -27,22 +26,24 @@ public class AgencyAccountRequestController {
 
     // 대행사 계정 생성 요청 목록 조회
     @GetMapping("/agencylist")
-    public ResponseEntity<List<AccountRequests>> requestlist(
+    public ResponseEntity<AccountRequestListResponse> requestlist(
             @AuthenticationPrincipal CustomUserDetails userDetails
     ) {
         // CareFlow 관리자 계정으로 로그인 시
         if (userDetails.getRole().equals("ADMIN")) {
             // account_requests 테이블에서 agency_id 컬럼을 기준으로 대행사 테이블과 조인 후 approval_status 컬럼의 상태가 PENDING 인 경우만 account_requests 테이블에서 조회
-            List<AccountRequests> superAccountRequest = accountRequestsService.findRequestByPendingAgencies();
-            return ResponseEntity.ok(superAccountRequest);
+            AccountRequestListResponse response = AccountRequestListResponse.of(
+                    accountRequestsService.findRequestByPendingAgencies());
+            return ResponseEntity.ok(response);
         } else {
             Long userId = userDetails.getUserId();
             Agencies agencies = agenciesService.findRepresentativeIdById(userId);
 
             // 슈퍼 계정인 경우
             if (agencies != null) {
-                List<AccountRequests> managerAccountRequest = accountRequestsService.findRequestByAgencyIdAndApproved(agencies.getId());
-                return ResponseEntity.ok(managerAccountRequest);
+                AccountRequestListResponse response = AccountRequestListResponse.of(
+                        accountRequestsService.findRequestByAgencyIdAndApproved(agencies.getId()));
+                return ResponseEntity.ok(response);
             } else {
                 // 일반 관리자 계정인 경우 UnAuthorized 에러 반환(요청 권한없음)
                 return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();

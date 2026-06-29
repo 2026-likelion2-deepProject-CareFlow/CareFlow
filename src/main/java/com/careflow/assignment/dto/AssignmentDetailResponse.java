@@ -1,7 +1,7 @@
 package com.careflow.assignment.dto;
 
 import com.careflow.assignment.entity.AsAssignment;
-import com.careflow.assignment.entity.AsStatusLog;
+import com.careflow.as_status_log.entity.AsStatusLog;
 import com.careflow.engineer.domain.entity.EngineerProfile;
 import com.careflow.report.domain.entity.WorkReport;
 

@@ -2,6 +2,7 @@ package com.careflow.as_request.controller;
 
 import com.careflow.as_request.dto.AsRequestCreateDto;
 import com.careflow.as_request.dto.AsRequestCreateResponseDto;
+import com.careflow.as_request.service.AgencyAsRequestService;
 import com.careflow.as_request.service.AsRequestService;
 import com.careflow.auth.security.CustomOAuth2UserService;
 import com.careflow.auth.security.CustomUserDetails;
@@ -48,6 +49,8 @@ class AsRequestControllerTest {
     @MockitoBean
     private AsRequestService asRequestService;
     @MockitoBean
+    private AgencyAsRequestService agencyAsRequestService;
+    @MockitoBean
     private JwtProvider jwtProvider;
     @MockitoBean
     private JpaMetamodelMappingContext jpaMetamodelMappingContext;
@@ -64,7 +67,7 @@ class AsRequestControllerTest {
     @BeforeEach
     void setUpAuth() {
         CustomUserDetails userDetails = new CustomUserDetails(
-                CUSTOMER_ID, "customer@test.com", "pw", "CUSTOMER");
+                CUSTOMER_ID, "customer@test.com", "pw", "CUSTOMER", null);
         UsernamePasswordAuthenticationToken auth =
                 new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
         SecurityContextHolder.getContext().setAuthentication(auth);

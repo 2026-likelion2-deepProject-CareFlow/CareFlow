@@ -103,7 +103,12 @@ public class EngineerProfile {
         return this.category != null && this.careerStartedYear != null;
     }
 
-    public void updateBasicInfo(String introduction, String profileImageUrl) {  // 데이터 수정
+
+    public void updateBasicInfo(Integer careerStartedYear, SkillLevel newSkillLevel, String introduction, String profileImageUrl) { // 프로필 수정
+        if (careerStartedYear != null && newSkillLevel != null) {
+            this.careerStartedYear = careerStartedYear;
+            this.skillLevel = newSkillLevel;
+        }
         if (introduction != null) {
             this.introduction = introduction;
         }
@@ -112,9 +117,23 @@ public class EngineerProfile {
         }
     }
 
+    // 대행사 관리자가 기사의 전문 카테고리를 수정할 때 사용
+    public void updateCategory(ApplianceCategory category) {
+        if (category == null) {
+            throw new IllegalArgumentException("카테고리 정보가 필요합니다.");
+        }
+        this.category = category;
+    }
+
     // LMS 교육 이수 시 실행 메서드
     public void completeLms() {
         this.isLmsCompleted = true;
         this.updatedAt = LocalDateTime.now();
+    }
+
+    // 리뷰 저장 후 역정규화 필드 갱신 — 호출 전 새 평균/총 건수를 계산해서 넘길 것
+    public void updateRating(BigDecimal newAvgRating, int newTotalReviews) {
+        this.avgRating = newAvgRating;
+        this.totalReviews = newTotalReviews;
     }
 }

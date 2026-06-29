@@ -139,4 +139,32 @@ class EngineerProfileServiceIntegrationTest {
         ReflectionTestUtils.setField(req, "serviceRegionIds", regions);
         return req;
     }
+
+    // =========================================================================
+    // 💡 추가된 [프로필 경력 연도 수정 -> 등급 재산정] 통합 테스트
+    // =========================================================================
+
+    @Test
+    @DisplayName("성공: 통합 환경에서 프로필 경력 연도 수정 시 등급이 재산정되어 DB에 반영된다")
+    void updateProfile_RecalculateSkillLevel_Integration() throws Exception {
+        // Given: 기존 프로필 세팅 (최초 가입 시 1년차 BEGINNER로 세팅되었다고 가정)
+        EngineerProfile profile = EngineerProfile.createInitial(testUser);
+        int currentYear = LocalDate.now().getYear();
+        profile.completeProfile(testCategory, currentYear, SkillLevel.BEGINNER, "신입입니다");
+        profileRepository.save(profile);
+
+        // When: 8년 전(중급, INTERMEDIATE)으로 경력을 수정하는 요청 발생
+        int intermediateYear = currentYear - 8;
+        Constructor<UpdateProfileRequest> constructor = UpdateProfileRequest.class.getDeclaredConstructor();
+        constructor.setAccessible(true);
+        UpdateProfileRequest updateReq = constructor.newInstance();
+        ReflectionTestUtils.setField(updateReq, "careerStartedYear", intermediateYear);
+
+        engineerProfileService.updateProfile(testUser.getId(), updateReq);
+
+        // Then: DB에서 다시 조회했을 때 연도와 등급이 모두 완벽하게 바뀌어 있어야 함
+        EngineerProfile updatedProfile = profileRepository.findByUser_Id(testUser.getId()).orElseThrow();
+        assertThat(updatedProfile.getCareerStartedYear()).isEqualTo(intermediateYear);
+        assertThat(updatedProfile.getSkillLevel()).isEqualTo(SkillLevel.INTERMEDIATE);
+    }
 }

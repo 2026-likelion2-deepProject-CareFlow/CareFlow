@@ -31,12 +31,13 @@ public class JwtProvider {
         this.key = Keys.hmacShaKeyFor(secretKeyString.getBytes(StandardCharsets.UTF_8));
     }
 
-    public String generateAccessToken(Long userId, String email, String role) {
+    public String generateAccessToken(Long userId, String email, String role, Long agencyId) {
         Date now = new Date();
         return Jwts.builder()
                 .subject(String.valueOf(userId))
                 .claim("email", email)
                 .claim("role", role)
+                .claim("agencyId", agencyId)
                 .issuedAt(now)
                 .expiration(new Date(now.getTime() + accessTokenExpiration))
                 .signWith(key)
@@ -65,6 +66,7 @@ public class JwtProvider {
     public Long getUserId(String token) { return Long.parseLong(getClaims(token).getSubject()); }
     public String getEmail(String token) { return getClaims(token).get("email", String.class); }
     public String getRole(String token) { return getClaims(token).get("role", String.class); }
+    public Long getAgencyId(String token) { return getClaims(token).get("agencyId", Long.class); }
     public long getAccessTokenExpiration() { return accessTokenExpiration; }
     public long getRefreshTokenExpiration() { return refreshTokenExpiration; }
 }
