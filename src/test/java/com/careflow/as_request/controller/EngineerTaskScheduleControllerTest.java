@@ -54,7 +54,7 @@ class EngineerTaskScheduleControllerTest {
     @BeforeEach
     void setUpAuth() {
         CustomUserDetails userDetails = new CustomUserDetails(
-                ENGINEER_USER_ID, "engineer@test.com", "pw", "ENGINEER");
+                ENGINEER_USER_ID, "engineer@test.com", "pw", "ENGINEER", null);
         UsernamePasswordAuthenticationToken auth =
                 new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
         SecurityContextHolder.getContext().setAuthentication(auth);

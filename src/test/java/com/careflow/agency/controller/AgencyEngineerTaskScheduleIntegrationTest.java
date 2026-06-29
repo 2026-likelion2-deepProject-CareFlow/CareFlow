@@ -85,7 +85,7 @@ class AgencyEngineerTaskScheduleIntegrationTest {
                 .name("대행사관리자").phone("010-1111-2222").role(Role.AGENCY).agency(agency).build());
 
         agencyToken = jwtProvider.generateAccessToken(
-                agencyManager.getId(), agencyManager.getEmail(), "AGENCY");
+                agencyManager.getId(), agencyManager.getEmail(), "AGENCY", agency.getId());
 
         customer = userRepository.save(User.builder()
                 .email("customer@agencytest.com").passwordHash("hashed")
