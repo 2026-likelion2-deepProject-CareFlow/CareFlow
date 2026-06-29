@@ -82,20 +82,5 @@ public class AsRequestController {
         return ResponseEntity.ok().build();
     }
 
-    /**
-     * 대행사용: A/S 요청 단건 상세 조회
-     * - 본인 소속 대행사의 요청만 조회 가능
-     * - role != AGENCY 또는 타 대행사 요청 접근 → 401
-     * - requestId 미존재 → 404
-     */
-    @GetMapping("/{requestId}")
-    public ResponseEntity<AgencyAsRequestDetailResponse> getAgencyAsRequestDetail(
-            @PathVariable Long requestId,
-            @AuthenticationPrincipal CustomUserDetails userDetails) throws IllegalAccessException {
-
-        AgencyAsRequestDetailResponse response =
-                agencyAsRequestService.getAsRequestDetail(userDetails, requestId);
-
-        return ResponseEntity.ok(response);
-    }
+    // 대행사용 단건 상세 조회는 AgencyController /api/agency/work-requests/{requestId}/detail 로 이관됨
 }

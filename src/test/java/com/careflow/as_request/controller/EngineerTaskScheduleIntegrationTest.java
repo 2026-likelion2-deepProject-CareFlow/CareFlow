@@ -88,7 +88,7 @@ class EngineerTaskScheduleIntegrationTest {
                 .name("테스트기사").phone("010-3333-4444").role(Role.ENGINEER).agency(agency).build());
 
         engineerToken = jwtProvider.generateAccessToken(
-                engineer.getId(), engineer.getEmail(), "ENGINEER");
+                engineer.getId(), engineer.getEmail(), "ENGINEER", agency.getId());
 
         appliance = applianceRepository.save(Appliance.create(
                 customer, category, "삼성", "비스포크 냉장고",
