@@ -6,9 +6,12 @@ import com.careflow.appliance.repository.ApplianceRepository;
 import com.careflow.appliance.repository.HealthCertificateRepository;
 import com.careflow.as_request.entity.AsRequest;
 import com.careflow.as_request.repository.AsRequestRepository;
+import com.careflow.as_status_log.entity.AsStatusLog;
+import com.careflow.as_status_log.repository.AsStatusLogRepository;
 import com.careflow.assignment.entity.AsAssignment;
 import com.careflow.assignment.repository.AsAssignmentRepository;
 import com.careflow.engineer.dto.CreateWorkReportRequest;
+import com.careflow.notification.service.NotificationService;
 import com.careflow.part.domain.entity.RepairPart;
 import com.careflow.part.repository.RepairPartRepository;
 import com.careflow.report.domain.entity.WorkReport;
@@ -23,6 +26,8 @@ import com.careflow.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.context.ApplicationEventPublisher;
+import com.careflow.notification.event.AsStatusNotificationEvent;
 
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -39,7 +44,9 @@ public class WorkReportService {
     private final UserRepository userRepository;
     private final AsAssignmentRepository asAssignmentRepository;
     private final ApplianceRepository applianceRepository;
-
+    private final AsStatusLogRepository asStatusLogRepository;
+    private final NotificationService notificationService;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
     public Long submitWorkReport(Long engineerId, CreateWorkReportRequest request) {
@@ -62,6 +69,9 @@ public class WorkReportService {
             throw new IllegalStateException("해당 A/S 건에 대해 이미 제출된 보고서가 존재합니다.");
         }
 
+        String oldStatusStr = asRequest.getStatus().name();
+
+        // 1. 상태 변경 (IN_PROGRESS -> COMPLETED)
         asRequest.completeWork();
 
         WorkReport report = WorkReport.builder()
@@ -108,6 +118,28 @@ public class WorkReportService {
                 ));
 
         certificate.calculateAndUpdateHealth(maxImportance, asRequest.getAppliance().getPurchaseDate());
+
+        // 🌟 2. 상태 변경 로그 기록 (COMPLETED)
+        String actionMemo = engineer.getName() + " 기사님이 작업을 완료하고 보고서를 제출했습니다.";
+        AsStatusLog statusLog = AsStatusLog.builder()
+                .asRequest(asRequest)
+                .changedBy(engineer)
+                .fromStatus(oldStatusStr)
+                .toStatus("COMPLETED")
+                .memo(actionMemo)
+                .build();
+        asStatusLogRepository.save(statusLog);
+
+
+        // 🌟 3. SSE 알림 '이벤트 발행'
+        String title = "A/S 수리 완료 및 보고서 도착";
+        String applianceInfo = asRequest.getAppliance().getBrand() + " " + asRequest.getAppliance().getModelName();
+        String body = "[" + applianceInfo + "] " + actionMemo;
+
+        eventPublisher.publishEvent(new AsStatusNotificationEvent(asRequest.getCustomer(), title, body));
+        if (asRequest.getAgency() != null && asRequest.getAgency().getRepresentativeId() != null) {
+            eventPublisher.publishEvent(new AsStatusNotificationEvent(asRequest.getAgency().getRepresentativeId(), title, body));
+        }
 
         return savedReport.getReportId();
     }

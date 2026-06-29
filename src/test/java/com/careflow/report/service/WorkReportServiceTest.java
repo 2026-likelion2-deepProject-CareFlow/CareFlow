@@ -6,9 +6,11 @@ import com.careflow.appliance.repository.ApplianceRepository;
 import com.careflow.appliance.repository.HealthCertificateRepository;
 import com.careflow.as_request.entity.AsRequest;
 import com.careflow.as_request.repository.AsRequestRepository;
+import com.careflow.as_status_log.repository.AsStatusLogRepository;
 import com.careflow.assignment.entity.AsAssignment;
 import com.careflow.assignment.repository.AsAssignmentRepository;
 import com.careflow.engineer.dto.CreateWorkReportRequest;
+import com.careflow.notification.service.NotificationService;
 import com.careflow.part.repository.RepairPartRepository;
 import com.careflow.report.domain.entity.WorkReport;
 import com.careflow.report.dto.RepairHistoryResponse;
@@ -25,6 +27,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings; // 🎯 추가
 import org.mockito.quality.Strictness;            // 🎯 추가
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.lang.reflect.Constructor;
@@ -35,9 +38,9 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
-import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT) // 🎯 추가: Mockito의 불필요한 Stubbing 깐깐한 검사 무시
@@ -53,16 +56,29 @@ class WorkReportServiceTest {
     @Mock private UserRepository userRepository;
     @Mock private AsAssignmentRepository asAssignmentRepository;
     @Mock private ApplianceRepository applianceRepository;
-
+    @Mock private AsStatusLogRepository asStatusLogRepository;
+    @Mock private NotificationService notificationService;
+    @Mock private ApplicationEventPublisher eventPublisher;
 
     @Test
-    @DisplayName("성공: 부품 교체 없음 -> 100점으로 진단서 갱신")
+    @DisplayName("성공: 부품 교체 없음 -> 100점으로 진단서 갱신 및 SSE 이벤트 발행")
     void submitWorkReport_NoParts_Success() throws Exception {
         User engineer = mock(User.class);
+        given(engineer.getName()).willReturn("김기사"); // 이름 모킹 추가
+
         AsRequest asRequest = mock(AsRequest.class);
         Appliance appliance = mock(Appliance.class);
         HealthCertificate certificate = mock(HealthCertificate.class);
         WorkReport savedReport = mock(WorkReport.class);
+        User customer = mock(User.class);
+
+        // 🌟 NPE 방지: 필수 객체들 완벽 모킹
+        given(asRequest.getStatus()).willReturn(com.careflow.common.enums.AsStatus.IN_PROGRESS);
+        given(asRequest.getAppliance()).willReturn(appliance);
+        given(asRequest.getCustomer()).willReturn(customer);
+        given(appliance.getBrand()).willReturn("삼성");
+        given(appliance.getModelName()).willReturn("세탁기");
+
         AsAssignment assignment = validAssignment();
 
         given(userRepository.findById(1L)).willReturn(Optional.of(engineer));
@@ -70,21 +86,24 @@ class WorkReportServiceTest {
         given(asRequest.getId()).willReturn(100L);
         given(workReportRepository.existsByAsRequest_Id(100L)).willReturn(false);
         given(asAssignmentRepository.findByAsRequest_Id(100L)).willReturn(List.of(assignment));
-
-        given(asRequest.getAppliance()).willReturn(appliance);
         given(appliance.getId()).willReturn(200L);
         given(healthCertificateRepository.findByAppliance_Id(200L)).willReturn(Optional.of(certificate));
-
         given(savedReport.getReportId()).willReturn(999L);
         given(workReportRepository.save(any(WorkReport.class))).willReturn(savedReport);
 
         CreateWorkReportRequest request = createReportRequest("REPAIRED", null);
 
+        // When
         Long reportId = workReportService.submitWorkReport(1L, request);
 
+        // Then
         assertThat(reportId).isEqualTo(999L);
         verify(asRequest).completeWork();
         verify(certificate).calculateAndUpdateHealth(null, null);
+
+        // 🌟 수정됨: 상태 로그 저장 및 이벤트 발행 로직 검증
+        verify(asStatusLogRepository, times(1)).save(any());
+        verify(eventPublisher, atLeastOnce()).publishEvent(any(com.careflow.notification.event.AsStatusNotificationEvent.class));
     }
 
     @Test
