@@ -1,16 +1,12 @@
 package com.careflow.assignment.controller;
 
-import com.careflow.assignment.dto.AssignmentDetailResponse;
-import com.careflow.assignment.dto.AssignmentFilterResponse;
-import com.careflow.assignment.dto.AssignmentReassignResponse;
-import com.careflow.assignment.dto.AssignmentResponse;
-import com.careflow.assignment.service.AgenciesAssignmentService;
-import com.careflow.assignment.service.AssignmentDetailService;
-import com.careflow.assignment.service.AssignmentFilterService;
-import com.careflow.assignment.service.AssignmentReassignService;
+import com.careflow.assignment.dto.*;
+import com.careflow.assignment.service.*;
 import com.careflow.auth.security.CustomUserDetails;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
@@ -27,6 +23,11 @@ public class AssignmentController {
     private final AssignmentDetailService assignmentDetailService;
     private final AssignmentFilterService assignmentFilterService;
     private final AssignmentReassignService assignmentReassignService;
+    private final AssignmentInProgressService assignmentInProgressService;
+    private final AssignmentCompletedService assignmentCompletedService;
+    private final AssignmentChangeEngineerService assignmentChangeEngineerService;
+    private final AssignmentScheduleService assignmentScheduleService;
+    private final AssignmentCancelService assignmentCancelService;
 
     /**
      * [GET] /api/agencies/assignment
@@ -90,6 +91,91 @@ public class AssignmentController {
         }
 
         return ResponseEntity.ok(result);
+    }
+
+    /**
+     * [GET] /api/agency/as-assignments/in-progress
+     * 진행 중(ACCEPTED) 배정 목록 조회. as_status_logs 포함.
+     * - role != AGENCY → 401
+     * - 결과 없음 → 204 No Content
+     */
+    @GetMapping("/in-progress")
+    public ResponseEntity<List<AssignmentInProgressResponse>> getInProgress(
+            @AuthenticationPrincipal CustomUserDetails userDetails) throws IllegalAccessException {
+
+        List<AssignmentInProgressResponse> result = assignmentInProgressService.getInProgress(userDetails);
+        if (result.isEmpty()) {
+            return ResponseEntity.noContent().build();
+        }
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * [GET] /api/agency/as-assignments/completed
+     * 완료(COMPLETED) 배정 목록 조회. work_reports + reviews 포함.
+     * - role != AGENCY → 401
+     * - 결과 없음 → 204 No Content
+     */
+    @GetMapping("/completed")
+    public ResponseEntity<List<AssignmentCompletedResponse>> getCompleted(
+            @AuthenticationPrincipal CustomUserDetails userDetails) throws IllegalAccessException {
+
+        List<AssignmentCompletedResponse> result = assignmentCompletedService.getCompleted(userDetails);
+        if (result.isEmpty()) {
+            return ResponseEntity.noContent().build();
+        }
+        return ResponseEntity.ok(result);
+    }
+
+    /**
+     * [POST] /api/agency/as-assignments/change
+     * WAITING 상태 배정의 기사를 변경. 기존 배정 REJECTED + 새 배정 WAITING 생성.
+     * - role != AGENCY → 401
+     * - assignmentId or newEngineerId 미존재 → 404
+     * - 배정 status != WAITING → 400
+     */
+    @PostMapping("/change")
+    public ResponseEntity<AssignmentChangeEngineerResponse> changeEngineer(
+            @Valid @RequestBody AssignmentChangeEngineerRequest request,
+            @AuthenticationPrincipal CustomUserDetails userDetails) throws IllegalAccessException {
+
+        AssignmentChangeEngineerResponse response =
+                assignmentChangeEngineerService.changeEngineer(request, userDetails);
+        return ResponseEntity.status(HttpStatus.CREATED).body(response);
+    }
+
+    /**
+     * [PUT] /api/agency/as-assignments/{assignmentId}/schedule
+     * 배정된 A/S 방문 일정(날짜·시간) 변경.
+     * - role != AGENCY → 401
+     * - assignmentId 미존재 → 404
+     * - 배정 status = REJECTED or COMPLETED → 400
+     */
+    @PutMapping("/{assignmentId}/schedule")
+    public ResponseEntity<AssignmentScheduleResponse> updateSchedule(
+            @PathVariable Long assignmentId,
+            @Valid @RequestBody AssignmentScheduleRequest request,
+            @AuthenticationPrincipal CustomUserDetails userDetails) throws IllegalAccessException {
+
+        AssignmentScheduleResponse response =
+                assignmentScheduleService.updateSchedule(assignmentId, request, userDetails);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * [DELETE] /api/agency/as-assignments/{assignmentId}
+     * 배정 취소. 배정 REJECTED + A/S 요청 AGENCY_RECEIVED(재배정 대기)로 변경.
+     * - role != AGENCY → 401
+     * - assignmentId 미존재 → 404
+     * - 배정 status = REJECTED or COMPLETED → 400
+     */
+    @DeleteMapping("/{assignmentId}")
+    public ResponseEntity<AssignmentCancelResponse> cancelAssignment(
+            @PathVariable Long assignmentId,
+            @AuthenticationPrincipal CustomUserDetails userDetails) throws IllegalAccessException {
+
+        AssignmentCancelResponse response = assignmentCancelService.cancel(assignmentId, userDetails);
+        return ResponseEntity.ok(response);
     }
 
     /**

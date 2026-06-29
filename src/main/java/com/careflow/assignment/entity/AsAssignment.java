@@ -88,4 +88,13 @@ public class AsAssignment {
                 .assignMethod(assignMethod)
                 .build();
     }
+
+    // 대행사 관리자에 의한 배정 취소 — REJECTED 처리
+    public void cancel() {
+        if ("REJECTED".equals(this.status) || "COMPLETED".equals(this.status)) {
+            throw new IllegalStateException("이미 완료되거나 취소된 배정입니다.");
+        }
+        this.status = "REJECTED";
+        this.rejectedAt = LocalDateTime.now();
+    }
 }
