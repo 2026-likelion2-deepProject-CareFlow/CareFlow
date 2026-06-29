@@ -89,13 +89,13 @@ class AgencyAsStatusLogIntegrationTest {
                 .email("manager@logtest.com").passwordHash("hashed")
                 .name("대행사관리자").phone("010-9999-8888").role(Role.AGENCY).agency(agency).build());
         agencyToken = jwtProvider.generateAccessToken(
-                agencyManager.getId(), agencyManager.getEmail(), "AGENCY");
+                agencyManager.getId(), agencyManager.getEmail(), "AGENCY", null);
 
         customer = userRepository.save(User.builder()
                 .email("customer@logtest.com").passwordHash("hashed")
                 .name("테스트고객").phone("010-1111-2222").role(Role.CUSTOMER).build());
         customerToken = jwtProvider.generateAccessToken(
-                customer.getId(), customer.getEmail(), "CUSTOMER");
+                customer.getId(), customer.getEmail(), "CUSTOMER", null);
 
         appliance = applianceRepository.save(Appliance.create(
                 customer, cat, "삼성", "에어컨 Q9000",

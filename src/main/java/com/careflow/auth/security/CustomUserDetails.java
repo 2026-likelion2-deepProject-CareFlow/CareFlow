@@ -15,12 +15,14 @@ public class CustomUserDetails implements UserDetails {
     private final String username; // email 값이 들어감
     private final String password;
     private final String role;
+    private final Long agencyId; // AGENCY·ENGINEER 역할일 때만 값이 들어가고, 나머지는 null
 
-    public CustomUserDetails(Long userId, String username, String password, String role) {
+    public CustomUserDetails(Long userId, String username, String password, String role, Long agencyId) {
         this.userId = userId;
         this.username = username;
         this.password = password;
         this.role = role;
+        this.agencyId = agencyId;
     }
 
     @Override
