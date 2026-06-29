@@ -85,7 +85,7 @@ class AgencyEngineerControllerTest {
                             stubSummary(10L, "홍길동", "INTERMEDIATE", "AVAILABLE"),
                             stubSummary(11L, "김수리", "BEGINNER", "BOOKED")));
 
-            mockMvc.perform(get("/api/agencies/me/engineers"))
+            mockMvc.perform(get("/api/agency/engineers"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.length()").value(2))
                     .andExpect(jsonPath("$[0].engineerUserId").value(10))
@@ -102,7 +102,7 @@ class AgencyEngineerControllerTest {
             given(agencyEngineerService.getAgencyEngineers(AGENCY_USER_ID))
                     .willReturn(List.of());
 
-            mockMvc.perform(get("/api/agencies/me/engineers"))
+            mockMvc.perform(get("/api/agency/engineers"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.length()").value(0));
         }
@@ -110,7 +110,7 @@ class AgencyEngineerControllerTest {
         @Test
         @DisplayName("실패: 인증 없음 — 401 Unauthorized")
         void fail_noAuth_401() throws Exception {
-            mockMvc.perform(get("/api/agencies/me/engineers").with(anonymous()))
+            mockMvc.perform(get("/api/agency/engineers").with(anonymous()))
                     .andExpect(status().isUnauthorized());
         }
 
@@ -120,7 +120,7 @@ class AgencyEngineerControllerTest {
             given(agencyEngineerService.getAgencyEngineers(AGENCY_USER_ID))
                     .willThrow(new NoSuchElementException("소속 대행사 정보가 없습니다."));
 
-            mockMvc.perform(get("/api/agencies/me/engineers"))
+            mockMvc.perform(get("/api/agency/engineers"))
                     .andExpect(status().isNotFound());
         }
     }
@@ -138,7 +138,7 @@ class AgencyEngineerControllerTest {
             given(agencyEngineerService.getAgencyEngineerDetail(AGENCY_USER_ID, ENGINEER_USER_ID))
                     .willReturn(stubDetail(ENGINEER_USER_ID, "홍길동"));
 
-            mockMvc.perform(get("/api/agencies/me/engineers/{id}", ENGINEER_USER_ID))
+            mockMvc.perform(get("/api/agency/engineers/{id}/profile", ENGINEER_USER_ID))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.engineerUserId").value(ENGINEER_USER_ID))
                     .andExpect(jsonPath("$.name").value("홍길동"))
@@ -154,7 +154,7 @@ class AgencyEngineerControllerTest {
             given(agencyEngineerService.getAgencyEngineerDetail(AGENCY_USER_ID, 20L))
                     .willThrow(new IllegalAccessException("소속 대행사의 기사만 조회/수정할 수 있습니다."));
 
-            mockMvc.perform(get("/api/agencies/me/engineers/{id}", 20L))
+            mockMvc.perform(get("/api/agency/engineers/{id}/profile", 20L))
                     .andExpect(status().isUnauthorized());
         }
 
@@ -164,14 +164,14 @@ class AgencyEngineerControllerTest {
             given(agencyEngineerService.getAgencyEngineerDetail(AGENCY_USER_ID, 999L))
                     .willThrow(new NoSuchElementException("해당 기사의 프로필 정보가 존재하지 않습니다."));
 
-            mockMvc.perform(get("/api/agencies/me/engineers/{id}", 999L))
+            mockMvc.perform(get("/api/agency/engineers/{id}/profile", 999L))
                     .andExpect(status().isNotFound());
         }
 
         @Test
         @DisplayName("실패: 인증 없음 — 401 Unauthorized")
         void fail_noAuth_401() throws Exception {
-            mockMvc.perform(get("/api/agencies/me/engineers/{id}", ENGINEER_USER_ID).with(anonymous()))
+            mockMvc.perform(get("/api/agency/engineers/{id}/profile", ENGINEER_USER_ID).with(anonymous()))
                     .andExpect(status().isUnauthorized());
         }
     }
@@ -203,7 +203,7 @@ class AgencyEngineerControllerTest {
                     eq(AGENCY_USER_ID), eq(ENGINEER_USER_ID), any()))
                     .willReturn(updated);
 
-            mockMvc.perform(patch("/api/agencies/me/engineers/{id}/profile", ENGINEER_USER_ID)
+            mockMvc.perform(put("/api/agency/engineers/{id}/profile", ENGINEER_USER_ID)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isOk())
@@ -222,7 +222,7 @@ class AgencyEngineerControllerTest {
                     eq(AGENCY_USER_ID), eq(ENGINEER_USER_ID), any()))
                     .willThrow(new IllegalArgumentException("전문 분야는 소분류(depth=2) 카테고리만 선택 가능합니다."));
 
-            mockMvc.perform(patch("/api/agencies/me/engineers/{id}/profile", ENGINEER_USER_ID)
+            mockMvc.perform(put("/api/agency/engineers/{id}/profile", ENGINEER_USER_ID)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isBadRequest());
@@ -238,7 +238,7 @@ class AgencyEngineerControllerTest {
                     eq(AGENCY_USER_ID), eq(20L), any()))
                     .willThrow(new IllegalAccessException("소속 대행사의 기사만 조회/수정할 수 있습니다."));
 
-            mockMvc.perform(patch("/api/agencies/me/engineers/{id}/profile", 20L)
+            mockMvc.perform(put("/api/agency/engineers/{id}/profile", 20L)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isUnauthorized());
@@ -254,7 +254,7 @@ class AgencyEngineerControllerTest {
                     eq(AGENCY_USER_ID), eq(999L), any()))
                     .willThrow(new NoSuchElementException("해당 기사의 프로필 정보가 존재하지 않습니다."));
 
-            mockMvc.perform(patch("/api/agencies/me/engineers/{id}/profile", 999L)
+            mockMvc.perform(put("/api/agency/engineers/{id}/profile", 999L)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(request)))
                     .andExpect(status().isNotFound());
@@ -263,7 +263,7 @@ class AgencyEngineerControllerTest {
         @Test
         @DisplayName("실패: 인증 없음 — 401 Unauthorized")
         void fail_noAuth_401() throws Exception {
-            mockMvc.perform(patch("/api/agencies/me/engineers/{id}/profile", ENGINEER_USER_ID)
+            mockMvc.perform(put("/api/agency/engineers/{id}/profile", ENGINEER_USER_ID)
                             .with(anonymous())
                             .contentType(MediaType.APPLICATION_JSON)
                             .content("{}"))
@@ -287,7 +287,7 @@ class AgencyEngineerControllerTest {
                             stubSchedule(201L, "2026-06-03", "AVAILABLE"),
                             stubSchedule(202L, "2026-06-05", "BOOKED")));
 
-            mockMvc.perform(get("/api/agencies/me/engineers/{id}/schedules", ENGINEER_USER_ID)
+            mockMvc.perform(get("/api/agency/engineers/{id}/schedules", ENGINEER_USER_ID)
                             .param("year", "2026")
                             .param("month", "6"))
                     .andExpect(status().isOk())
@@ -305,7 +305,7 @@ class AgencyEngineerControllerTest {
                     AGENCY_USER_ID, ENGINEER_USER_ID, 2026, 6))
                     .willReturn(List.of());
 
-            mockMvc.perform(get("/api/agencies/me/engineers/{id}/schedules", ENGINEER_USER_ID)
+            mockMvc.perform(get("/api/agency/engineers/{id}/schedules", ENGINEER_USER_ID)
                             .param("year", "2026")
                             .param("month", "6"))
                     .andExpect(status().isOk())
@@ -315,7 +315,7 @@ class AgencyEngineerControllerTest {
         @Test
         @DisplayName("실패: year 파라미터 누락 — 400 Bad Request")
         void fail_missingYear_400() throws Exception {
-            mockMvc.perform(get("/api/agencies/me/engineers/{id}/schedules", ENGINEER_USER_ID)
+            mockMvc.perform(get("/api/agency/engineers/{id}/schedules", ENGINEER_USER_ID)
                             .param("month", "6"))
                     .andExpect(status().isBadRequest());
         }
@@ -323,7 +323,7 @@ class AgencyEngineerControllerTest {
         @Test
         @DisplayName("실패: month 파라미터 누락 — 400 Bad Request")
         void fail_missingMonth_400() throws Exception {
-            mockMvc.perform(get("/api/agencies/me/engineers/{id}/schedules", ENGINEER_USER_ID)
+            mockMvc.perform(get("/api/agency/engineers/{id}/schedules", ENGINEER_USER_ID)
                             .param("year", "2026"))
                     .andExpect(status().isBadRequest());
         }
@@ -335,7 +335,7 @@ class AgencyEngineerControllerTest {
                     AGENCY_USER_ID, 20L, 2026, 6))
                     .willThrow(new IllegalAccessException("소속 대행사의 기사만 조회할 수 있습니다."));
 
-            mockMvc.perform(get("/api/agencies/me/engineers/{id}/schedules", 20L)
+            mockMvc.perform(get("/api/agency/engineers/{id}/schedules", 20L)
                             .param("year", "2026")
                             .param("month", "6"))
                     .andExpect(status().isUnauthorized());
@@ -348,7 +348,7 @@ class AgencyEngineerControllerTest {
                     AGENCY_USER_ID, 999L, 2026, 6))
                     .willThrow(new NoSuchElementException("해당 기사 정보가 존재하지 않습니다."));
 
-            mockMvc.perform(get("/api/agencies/me/engineers/{id}/schedules", 999L)
+            mockMvc.perform(get("/api/agency/engineers/{id}/schedules", 999L)
                             .param("year", "2026")
                             .param("month", "6"))
                     .andExpect(status().isNotFound());
@@ -357,7 +357,7 @@ class AgencyEngineerControllerTest {
         @Test
         @DisplayName("실패: 인증 없음 — 401 Unauthorized")
         void fail_noAuth_401() throws Exception {
-            mockMvc.perform(get("/api/agencies/me/engineers/{id}/schedules", ENGINEER_USER_ID)
+            mockMvc.perform(get("/api/agency/engineers/{id}/schedules", ENGINEER_USER_ID)
                             .with(anonymous())
                             .param("year", "2026")
                             .param("month", "6"))

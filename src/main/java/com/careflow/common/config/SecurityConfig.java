@@ -83,6 +83,8 @@ public class SecurityConfig {
                         .requestMatchers("/api/agencies/profile").hasAuthority("AGENCY")
                         .requestMatchers("/api/agencies/fee-rate").hasAuthority("AGENCY")
                         .requestMatchers("/api/regions/**").permitAll()
+                        // 대행사 프로필 수정 (리팩토링된 경로)
+                        .requestMatchers("/api/agency/me").hasAuthority("AGENCY")
                         .anyRequest().authenticated()
                 )
                 .oauth2Login(oauth2 -> oauth2

@@ -3,8 +3,11 @@ package com.careflow.as_request.controller;
 import com.careflow.as_request.dto.AgencyAsRequestDetailResponse;
 import com.careflow.as_request.dto.AgencyAsRequestListResponse;
 import com.careflow.as_request.dto.AgencyDashboardSummaryResponse;
+import com.careflow.agency.controller.AgencyController;
+import com.careflow.agency.service.AgenciesService;
 import com.careflow.as_request.service.AgencyAsRequestService;
 import com.careflow.as_request.service.AsRequestService;
+import com.careflow.as_status_log.service.AgencyAsStatusLogService;
 import com.careflow.auth.security.CustomOAuth2UserService;
 import com.careflow.auth.security.CustomUserDetails;
 import com.careflow.auth.security.JwtProvider;
@@ -37,7 +40,7 @@ import static org.mockito.BDDMockito.given;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@WebMvcTest(AsRequestController.class)
+@WebMvcTest({AsRequestController.class, AgencyController.class})
 @Import({SecurityConfig.class, PasswordEncoderConfig.class})
 @DisplayName("AgencyAsRequest 컨트롤러 단위 테스트")
 class AgencyAsRequestControllerTest {
@@ -45,8 +48,10 @@ class AgencyAsRequestControllerTest {
     @Autowired
     private MockMvc mockMvc;
 
+    @MockitoBean private AgenciesService agenciesService;
     @MockitoBean private AgencyAsRequestService agencyAsRequestService;
     @MockitoBean private AsRequestService asRequestService;
+    @MockitoBean private AgencyAsStatusLogService agencyAsStatusLogService;
     @MockitoBean private JwtProvider jwtProvider;
     @MockitoBean private JpaMetamodelMappingContext jpaMetamodelMappingContext;
     @MockitoBean private CustomOAuth2UserService customOAuth2UserService;
@@ -79,7 +84,7 @@ class AgencyAsRequestControllerTest {
                             stubListResponse(1L, AsStatus.ASSIGNED),
                             stubListResponse(2L, AsStatus.IN_PROGRESS)));
 
-            mockMvc.perform(get("/api/as-requests/agency"))
+            mockMvc.perform(get("/api/agency/work-requests"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.length()").value(2))
                     .andExpect(jsonPath("$[0].requestId").value(1))
@@ -92,7 +97,7 @@ class AgencyAsRequestControllerTest {
         void empty_204() throws Exception {
             given(agencyAsRequestService.getAsRequestsByAgency(any())).willReturn(List.of());
 
-            mockMvc.perform(get("/api/as-requests/agency"))
+            mockMvc.perform(get("/api/agency/work-requests"))
                     .andExpect(status().isNoContent());
         }
 
@@ -102,7 +107,7 @@ class AgencyAsRequestControllerTest {
             given(agencyAsRequestService.getAsRequestsByAgency(any()))
                     .willThrow(new IllegalAccessException("대행사 관리자 권한이 없습니다."));
 
-            mockMvc.perform(get("/api/as-requests/agency"))
+            mockMvc.perform(get("/api/agency/work-requests"))
                     .andExpect(status().isUnauthorized())
                     .andExpect(jsonPath("$.success").value(false));
         }
@@ -113,7 +118,7 @@ class AgencyAsRequestControllerTest {
             given(agencyAsRequestService.getAsRequestsByAgency(any()))
                     .willThrow(new IllegalStateException("소속 대행사 정보가 없습니다."));
 
-            mockMvc.perform(get("/api/as-requests/agency"))
+            mockMvc.perform(get("/api/agency/work-requests"))
                     .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.success").value(false));
         }
@@ -132,7 +137,7 @@ class AgencyAsRequestControllerTest {
             given(agencyAsRequestService.searchAsRequests(any(), any(LocalDate.class), isNull()))
                     .willReturn(List.of(stubListResponse(1L, AsStatus.ASSIGNED)));
 
-            mockMvc.perform(get("/api/as-requests/agency/search")
+            mockMvc.perform(get("/api/agency/work-requests")
                             .param("date", "2026-07-01"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.length()").value(1));
@@ -144,7 +149,7 @@ class AgencyAsRequestControllerTest {
             given(agencyAsRequestService.searchAsRequests(any(), isNull(), eq("ASSIGNED")))
                     .willReturn(List.of(stubListResponse(1L, AsStatus.ASSIGNED)));
 
-            mockMvc.perform(get("/api/as-requests/agency/search")
+            mockMvc.perform(get("/api/agency/work-requests")
                             .param("status", "ASSIGNED"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$[0].status").value("ASSIGNED"));
@@ -153,10 +158,11 @@ class AgencyAsRequestControllerTest {
         @Test
         @DisplayName("성공: 필터 미입력(전체) — 결과 있음 200 OK")
         void noFilter_200() throws Exception {
-            given(agencyAsRequestService.searchAsRequests(any(), isNull(), isNull()))
+            // 파라미터 없을 때는 getAsRequestsByAgency()로 분기됨
+            given(agencyAsRequestService.getAsRequestsByAgency(any()))
                     .willReturn(List.of(stubListResponse(1L, AsStatus.IN_PROGRESS)));
 
-            mockMvc.perform(get("/api/as-requests/agency/search"))
+            mockMvc.perform(get("/api/agency/work-requests"))
                     .andExpect(status().isOk());
         }
 
@@ -165,7 +171,7 @@ class AgencyAsRequestControllerTest {
         void empty_204() throws Exception {
             given(agencyAsRequestService.searchAsRequests(any(), any(), any())).willReturn(List.of());
 
-            mockMvc.perform(get("/api/as-requests/agency/search"))
+            mockMvc.perform(get("/api/agency/work-requests"))
                     .andExpect(status().isNoContent());
         }
 
@@ -175,7 +181,7 @@ class AgencyAsRequestControllerTest {
             given(agencyAsRequestService.searchAsRequests(any(), any(), eq("INVALID")))
                     .willThrow(new IllegalArgumentException("유효하지 않은 상태 값입니다: INVALID"));
 
-            mockMvc.perform(get("/api/as-requests/agency/search")
+            mockMvc.perform(get("/api/agency/work-requests")
                             .param("status", "INVALID"))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.success").value(false));
@@ -195,7 +201,7 @@ class AgencyAsRequestControllerTest {
             given(agencyAsRequestService.getAsRequestDetail(any(), eq(1L)))
                     .willReturn(stubDetailResponse(1L, AsStatus.ASSIGNED));
 
-            mockMvc.perform(get("/api/as-requests/agency/1"))
+            mockMvc.perform(get("/api/agency/work-requests/1/detail"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.requestId").value(1))
                     .andExpect(jsonPath("$.status").value("ASSIGNED"))
@@ -210,7 +216,7 @@ class AgencyAsRequestControllerTest {
             given(agencyAsRequestService.getAsRequestDetail(any(), eq(999L)))
                     .willThrow(new NoSuchElementException("해당 A/S 요청을 찾을 수 없습니다."));
 
-            mockMvc.perform(get("/api/as-requests/agency/999"))
+            mockMvc.perform(get("/api/agency/work-requests/999/detail"))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.success").value(false));
         }
@@ -221,7 +227,7 @@ class AgencyAsRequestControllerTest {
             given(agencyAsRequestService.getAsRequestDetail(any(), eq(1L)))
                     .willThrow(new IllegalAccessException("본인 소속 대행사의 A/S 요청만 조회할 수 있습니다."));
 
-            mockMvc.perform(get("/api/as-requests/agency/1"))
+            mockMvc.perform(get("/api/agency/work-requests/1/detail"))
                     .andExpect(status().isUnauthorized())
                     .andExpect(jsonPath("$.success").value(false));
         }
@@ -240,7 +246,7 @@ class AgencyAsRequestControllerTest {
             given(agencyAsRequestService.getDashboardSummary(any()))
                     .willReturn(new AgencyDashboardSummaryResponse(5L, 3L, 1L, 1L, 1L));
 
-            mockMvc.perform(get("/api/as-requests/agency/dashboard-summary"))
+            mockMvc.perform(get("/api/agency/stats/summary"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.totalCount").value(5))
                     .andExpect(jsonPath("$.todayNewCount").value(3))
@@ -255,7 +261,7 @@ class AgencyAsRequestControllerTest {
             given(agencyAsRequestService.getDashboardSummary(any()))
                     .willReturn(new AgencyDashboardSummaryResponse(0L, 0L, 0L, 0L, 0L));
 
-            mockMvc.perform(get("/api/as-requests/agency/dashboard-summary"))
+            mockMvc.perform(get("/api/agency/stats/summary"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.totalCount").value(0))
                     .andExpect(jsonPath("$.todayNewCount").value(0));
@@ -267,7 +273,7 @@ class AgencyAsRequestControllerTest {
             given(agencyAsRequestService.getDashboardSummary(any()))
                     .willThrow(new IllegalAccessException("대행사 관리자 권한이 없습니다."));
 
-            mockMvc.perform(get("/api/as-requests/agency/dashboard-summary"))
+            mockMvc.perform(get("/api/agency/stats/summary"))
                     .andExpect(status().isUnauthorized())
                     .andExpect(jsonPath("$.success").value(false));
         }
@@ -278,7 +284,7 @@ class AgencyAsRequestControllerTest {
             given(agencyAsRequestService.getDashboardSummary(any()))
                     .willThrow(new IllegalStateException("소속 대행사 정보가 없습니다."));
 
-            mockMvc.perform(get("/api/as-requests/agency/dashboard-summary"))
+            mockMvc.perform(get("/api/agency/stats/summary"))
                     .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.success").value(false));
         }

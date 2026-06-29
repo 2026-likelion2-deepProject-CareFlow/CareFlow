@@ -88,7 +88,7 @@ class SettlementControllerTest {
             given(settlementService.getEngineerPerformance(eq(AGENCY_USER_ID), eq(2026), eq(6)))
                     .willReturn(response);
 
-            mockMvc.perform(get("/api/settlements/engineers/performance")
+            mockMvc.perform(get("/api/agency/settlements/engineers/performance")
                             .param("year", "2026")
                             .param("month", "6"))
                     .andExpect(status().isOk())
@@ -109,7 +109,7 @@ class SettlementControllerTest {
                     .willReturn(EngineerPerformanceResponse.builder()
                             .year(2026).month(6).engineers(List.of()).build());
 
-            mockMvc.perform(get("/api/settlements/engineers/performance")
+            mockMvc.perform(get("/api/agency/settlements/engineers/performance")
                             .param("year", "2026")
                             .param("month", "6"))
                     .andExpect(status().isOk())
@@ -119,7 +119,7 @@ class SettlementControllerTest {
         @Test
         @DisplayName("실패: JWT 없음 — 401 Unauthorized")
         void fail_noAuth_401() throws Exception {
-            mockMvc.perform(get("/api/settlements/engineers/performance")
+            mockMvc.perform(get("/api/agency/settlements/engineers/performance")
                             .with(anonymous())
                             .param("year", "2026")
                             .param("month", "6"))
@@ -129,7 +129,7 @@ class SettlementControllerTest {
         @Test
         @DisplayName("실패: year 파라미터 누락 — 400 Bad Request")
         void fail_missingYear_400() throws Exception {
-            mockMvc.perform(get("/api/settlements/engineers/performance")
+            mockMvc.perform(get("/api/agency/settlements/engineers/performance")
                             .param("month", "6"))
                     .andExpect(status().isBadRequest());
         }
@@ -137,7 +137,7 @@ class SettlementControllerTest {
         @Test
         @DisplayName("실패: month 파라미터 누락 — 400 Bad Request")
         void fail_missingMonth_400() throws Exception {
-            mockMvc.perform(get("/api/settlements/engineers/performance")
+            mockMvc.perform(get("/api/agency/settlements/engineers/performance")
                             .param("year", "2026"))
                     .andExpect(status().isBadRequest());
         }
@@ -148,7 +148,7 @@ class SettlementControllerTest {
             given(settlementService.getEngineerPerformance(eq(AGENCY_USER_ID), anyInt(), eq(0)))
                     .willThrow(new IllegalArgumentException("월은 1~12 사이여야 합니다."));
 
-            mockMvc.perform(get("/api/settlements/engineers/performance")
+            mockMvc.perform(get("/api/agency/settlements/engineers/performance")
                             .param("year", "2026")
                             .param("month", "0"))
                     .andExpect(status().isBadRequest());
@@ -160,7 +160,7 @@ class SettlementControllerTest {
             given(settlementService.getEngineerPerformance(eq(AGENCY_USER_ID), anyInt(), anyInt()))
                     .willThrow(new NoSuchElementException("소속 대행사 정보가 없습니다."));
 
-            mockMvc.perform(get("/api/settlements/engineers/performance")
+            mockMvc.perform(get("/api/agency/settlements/engineers/performance")
                             .param("year", "2026")
                             .param("month", "6"))
                     .andExpect(status().isNotFound());
@@ -187,7 +187,7 @@ class SettlementControllerTest {
                             .totalEngineerPayout(3240000)
                             .build());
 
-            mockMvc.perform(get("/api/settlements/monthly-summary")
+            mockMvc.perform(get("/api/agency/settlements/summary")
                             .param("year", "2026")
                             .param("month", "6"))
                     .andExpect(status().isOk())
@@ -208,7 +208,7 @@ class SettlementControllerTest {
                             .totalPlatformFee(0).totalAgencyFee(0).totalEngineerPayout(0)
                             .build());
 
-            mockMvc.perform(get("/api/settlements/monthly-summary")
+            mockMvc.perform(get("/api/agency/settlements/summary")
                             .param("year", "2026")
                             .param("month", "6"))
                     .andExpect(status().isOk())
@@ -219,7 +219,7 @@ class SettlementControllerTest {
         @Test
         @DisplayName("실패: JWT 없음 — 401 Unauthorized")
         void fail_noAuth_401() throws Exception {
-            mockMvc.perform(get("/api/settlements/monthly-summary")
+            mockMvc.perform(get("/api/agency/settlements/summary")
                             .with(anonymous())
                             .param("year", "2026")
                             .param("month", "6"))
@@ -232,7 +232,7 @@ class SettlementControllerTest {
             given(settlementService.getMonthlySummary(eq(AGENCY_USER_ID), anyInt(), eq(13)))
                     .willThrow(new IllegalArgumentException("월은 1~12 사이여야 합니다."));
 
-            mockMvc.perform(get("/api/settlements/monthly-summary")
+            mockMvc.perform(get("/api/agency/settlements/summary")
                             .param("year", "2026")
                             .param("month", "13"))
                     .andExpect(status().isBadRequest());
@@ -241,7 +241,7 @@ class SettlementControllerTest {
         @Test
         @DisplayName("실패: month 누락 — 400 Bad Request")
         void fail_missingMonth_400() throws Exception {
-            mockMvc.perform(get("/api/settlements/monthly-summary")
+            mockMvc.perform(get("/api/agency/settlements/summary")
                             .param("year", "2026"))
                     .andExpect(status().isBadRequest());
         }
@@ -264,7 +264,7 @@ class SettlementControllerTest {
             given(settlementService.generateMonthlyCsv(eq(AGENCY_USER_ID), eq(2026), eq(6)))
                     .willReturn(csvBytes);
 
-            mockMvc.perform(get("/api/settlements/monthly-report/download")
+            mockMvc.perform(get("/api/agency/settlements/monthly-report/download")
                             .param("year", "2026")
                             .param("month", "6"))
                     .andExpect(status().isOk())
@@ -281,7 +281,7 @@ class SettlementControllerTest {
             given(settlementService.generateMonthlyCsv(eq(AGENCY_USER_ID), anyInt(), anyInt()))
                     .willReturn(csvBytes);
 
-            byte[] body = mockMvc.perform(get("/api/settlements/monthly-report/download")
+            byte[] body = mockMvc.perform(get("/api/agency/settlements/monthly-report/download")
                             .param("year", "2026")
                             .param("month", "6"))
                     .andExpect(status().isOk())
@@ -295,7 +295,7 @@ class SettlementControllerTest {
         @Test
         @DisplayName("실패: JWT 없음 — 401 Unauthorized")
         void fail_noAuth_401() throws Exception {
-            mockMvc.perform(get("/api/settlements/monthly-report/download")
+            mockMvc.perform(get("/api/agency/settlements/monthly-report/download")
                             .with(anonymous())
                             .param("year", "2026")
                             .param("month", "6"))
@@ -308,7 +308,7 @@ class SettlementControllerTest {
             given(settlementService.generateMonthlyCsv(eq(AGENCY_USER_ID), anyInt(), eq(0)))
                     .willThrow(new IllegalArgumentException("월은 1~12 사이여야 합니다."));
 
-            mockMvc.perform(get("/api/settlements/monthly-report/download")
+            mockMvc.perform(get("/api/agency/settlements/monthly-report/download")
                             .param("year", "2026")
                             .param("month", "0"))
                     .andExpect(status().isBadRequest());
@@ -321,7 +321,7 @@ class SettlementControllerTest {
             given(settlementService.generateMonthlyCsv(eq(AGENCY_USER_ID), anyInt(), anyInt()))
                     .willReturn(emptyCsv);
 
-            mockMvc.perform(get("/api/settlements/monthly-report/download")
+            mockMvc.perform(get("/api/agency/settlements/monthly-report/download")
                             .param("year", "2026")
                             .param("month", "6"))
                     .andExpect(status().isOk());

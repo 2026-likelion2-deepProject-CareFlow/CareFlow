@@ -16,7 +16,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
-@RequestMapping("/api/settlements")
+@RequestMapping("/api/agency/settlements")
 @RequiredArgsConstructor
 @PreAuthorize("hasRole('AGENCY')")
 public class SettlementController {
@@ -24,7 +24,7 @@ public class SettlementController {
     private final SettlementService settlementService;
 
     /**
-     * [기사별 실적 리포트] GET /api/settlements/engineers/performance
+     * [기사별 실적 리포트] GET /api/agency/settlements/engineers/performance
      *
      * - AGENCY 역할만 접근 가능 (본인 소속 대행사 기준 자동 필터)
      * - settlements.paid_at 기준 월 집계: 완료 건수 / 평균 평점 / 기사 실수령액
@@ -45,7 +45,7 @@ public class SettlementController {
     }
 
     /**
-     * [대행사 정산 합산 내역] GET /api/settlements/monthly-summary
+     * [대행사 정산 합산 내역] GET /api/agency/settlements/summary
      *
      * - AGENCY 역할만 접근 가능
      * - settlements.paid_at 기준 월 합산: 총매출 / CareFlow수수료 / 대행사수수료 / 기사지급액
@@ -54,7 +54,7 @@ public class SettlementController {
      * @param year  조회 연도
      * @param month 조회 월 (1~12)
      */
-    @GetMapping("/monthly-summary")
+    @GetMapping("/summary")
     public ResponseEntity<MonthlySummaryResponse> getMonthlySummary(
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @RequestParam int year,
@@ -67,7 +67,7 @@ public class SettlementController {
     }
 
     /**
-     * [월별 정산 리포트 다운로드] GET /api/settlements/monthly-report/download
+     * [월별 정산 리포트 다운로드] GET /api/agency/settlements/monthly-report/download
      *
      * - AGENCY 역할만 접근 가능
      * - 기사별 실적 + 합산 내역을 CSV 파일로 반환

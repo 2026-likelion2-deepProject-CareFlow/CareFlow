@@ -26,6 +26,7 @@ public class ApplianceController {
 
     /**
      * 가전제품 등록 API
+     * customerId는 경로에서 받지만 실제 인증은 JWT(@AuthenticationPrincipal)로 처리
      */
     @PostMapping
     public ResponseEntity<ApplianceResponse> registerAppliance(
@@ -37,7 +38,7 @@ public class ApplianceController {
     }
 
     /**
-     * 내 가전제품 목록 조회 API (논리 삭제 제외)
+     * 고객 가전제품 목록 조회 API (논리 삭제 제외)
      */
     @GetMapping("/me")
     public ResponseEntity<List<ApplianceResponse>> getMyAppliances(

@@ -2,9 +2,7 @@ package com.careflow.agency.controller;
 
 import com.careflow.agency.dto.request.AgencyCreateRequest;
 import com.careflow.agency.dto.request.AgencyFeeRateUpdateRequest;
-import com.careflow.agency.dto.request.AgencyProfileUpdateRequest;
 import com.careflow.agency.dto.response.AgencyFeeRateResponse;
-import com.careflow.agency.dto.response.AgencyProfileResponse;
 import com.careflow.agency.entity.Agencies;
 import com.careflow.agency.service.AgenciesService;
 import com.careflow.auth.security.CustomUserDetails;
@@ -51,17 +49,6 @@ public class AgenciesController {
     // ─────────────────────────────────────────────
     //  대행사 설정 API (인증 필요 — ROLE_AGENCY)
     // ─────────────────────────────────────────────
-
-    // 대행사 프로필(상호명, 주소) 수정
-    // JWT에서 userId 추출 → 해당 대행사 조회 → 상호명/주소 갱신
-    @PatchMapping("/profile")
-    public ResponseEntity<AgencyProfileResponse> updateProfile(
-            @AuthenticationPrincipal CustomUserDetails userDetails,
-            @Valid @RequestBody AgencyProfileUpdateRequest request) {
-
-        AgencyProfileResponse response = agenciesService.updateProfile(userDetails.getUserId(), request);
-        return ResponseEntity.ok(response);
-    }
 
     // 대행사 수수료율 조회
     @GetMapping("/fee-rate")

@@ -5,6 +5,8 @@ import com.careflow.agency.dto.request.AgencyProfileUpdateRequest;
 import com.careflow.agency.dto.response.AgencyFeeRateResponse;
 import com.careflow.agency.dto.response.AgencyProfileResponse;
 import com.careflow.agency.service.AgenciesService;
+import com.careflow.as_request.service.AgencyAsRequestService;
+import com.careflow.as_status_log.service.AgencyAsStatusLogService;
 import com.careflow.auth.security.CustomOAuth2UserService;
 import com.careflow.auth.security.CustomUserDetails;
 import com.careflow.auth.security.JwtProvider;
@@ -34,7 +36,7 @@ import static org.springframework.security.test.web.servlet.request.SecurityMock
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
-@WebMvcTest(AgenciesController.class)
+@WebMvcTest({AgenciesController.class, AgencyController.class})
 @Import({SecurityConfig.class, PasswordEncoderConfig.class})
 @DisplayName("AgenciesController 대행사 설정 단위 테스트")
 class AgencySettingsControllerTest {
@@ -43,6 +45,8 @@ class AgencySettingsControllerTest {
     @Autowired private ObjectMapper objectMapper;
 
     @MockitoBean private AgenciesService agenciesService;
+    @MockitoBean private AgencyAsRequestService agencyAsRequestService;
+    @MockitoBean private AgencyAsStatusLogService agencyAsStatusLogService;
     @MockitoBean private JwtProvider jwtProvider;
     @MockitoBean private JpaMetamodelMappingContext jpaMetamodelMappingContext;
     @MockitoBean private CustomOAuth2UserService customOAuth2UserService;
@@ -70,7 +74,7 @@ class AgencySettingsControllerTest {
 
             given(agenciesService.updateProfile(eq(1L), any())).willReturn(resp);
 
-            mockMvc.perform(patch("/api/agencies/profile")
+            mockMvc.perform(put("/api/agency/me")
                             .with(user(agencyUser()))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(req)))
@@ -84,7 +88,7 @@ class AgencySettingsControllerTest {
         void updateProfile_noAuth_401() throws Exception {
             AgencyProfileUpdateRequest req = new AgencyProfileUpdateRequest("수정된대행사", "서울 서초구");
 
-            mockMvc.perform(patch("/api/agencies/profile")
+            mockMvc.perform(put("/api/agency/me")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(req)))
                     .andExpect(status().isUnauthorized());
@@ -96,7 +100,7 @@ class AgencySettingsControllerTest {
         void updateProfile_wrongRole_403() throws Exception {
             AgencyProfileUpdateRequest req = new AgencyProfileUpdateRequest("수정된대행사", "서울 서초구");
 
-            mockMvc.perform(patch("/api/agencies/profile")
+            mockMvc.perform(put("/api/agency/me")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(req)))
                     .andExpect(status().isForbidden());
@@ -107,7 +111,7 @@ class AgencySettingsControllerTest {
         void updateProfile_blankName_400() throws Exception {
             AgencyProfileUpdateRequest req = new AgencyProfileUpdateRequest("", "서울 서초구");
 
-            mockMvc.perform(patch("/api/agencies/profile")
+            mockMvc.perform(put("/api/agency/me")
                             .with(user(agencyUser()))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(req)))
@@ -119,7 +123,7 @@ class AgencySettingsControllerTest {
         void updateProfile_blankAddress_400() throws Exception {
             AgencyProfileUpdateRequest req = new AgencyProfileUpdateRequest("정상대행사", "");
 
-            mockMvc.perform(patch("/api/agencies/profile")
+            mockMvc.perform(put("/api/agency/me")
                             .with(user(agencyUser()))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(req)))
@@ -131,7 +135,7 @@ class AgencySettingsControllerTest {
         void updateProfile_addressTooLong_400() throws Exception {
             AgencyProfileUpdateRequest req = new AgencyProfileUpdateRequest("정상대행사", "주".repeat(256));
 
-            mockMvc.perform(patch("/api/agencies/profile")
+            mockMvc.perform(put("/api/agency/me")
                             .with(user(agencyUser()))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(req)))
@@ -146,7 +150,7 @@ class AgencySettingsControllerTest {
             given(agenciesService.updateProfile(eq(1L), any()))
                     .willThrow(new NoSuchElementException("해당 사용자의 대행사 정보를 찾을 수 없습니다."));
 
-            mockMvc.perform(patch("/api/agencies/profile")
+            mockMvc.perform(put("/api/agency/me")
                             .with(user(agencyUser()))
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(req)))

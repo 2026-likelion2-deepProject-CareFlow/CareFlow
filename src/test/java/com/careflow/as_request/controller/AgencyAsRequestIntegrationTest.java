@@ -131,7 +131,7 @@ class AgencyAsRequestIntegrationTest {
             // COMPLETED 요청 — 목록에서 제외되어야 함
             saveRequest(AsStatus.COMPLETED, agency, SCHED_DATE);
 
-            mockMvc.perform(get("/api/as-requests/agency")
+            mockMvc.perform(get("/api/agency/work-requests")
                             .header("Authorization", "Bearer " + agencyToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.length()").value(2))
@@ -150,7 +150,7 @@ class AgencyAsRequestIntegrationTest {
             // 타 대행사 요청 1건 — 노출 안 됨
             saveRequest(AsStatus.ASSIGNED, otherAgency, SCHED_DATE);
 
-            mockMvc.perform(get("/api/as-requests/agency")
+            mockMvc.perform(get("/api/agency/work-requests")
                             .header("Authorization", "Bearer " + agencyToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.length()").value(1));
@@ -159,7 +159,7 @@ class AgencyAsRequestIntegrationTest {
         @Test
         @DisplayName("성공: 요청 없음 — 204 No Content")
         void empty_204() throws Exception {
-            mockMvc.perform(get("/api/as-requests/agency")
+            mockMvc.perform(get("/api/agency/work-requests")
                             .header("Authorization", "Bearer " + agencyToken))
                     .andExpect(status().isNoContent());
         }
@@ -167,7 +167,7 @@ class AgencyAsRequestIntegrationTest {
         @Test
         @DisplayName("실패: CUSTOMER 계정으로 요청 — 401 Unauthorized")
         void customerRole_401() throws Exception {
-            mockMvc.perform(get("/api/as-requests/agency")
+            mockMvc.perform(get("/api/agency/work-requests")
                             .header("Authorization", "Bearer " + customerToken))
                     .andExpect(status().isUnauthorized());
         }
@@ -175,7 +175,7 @@ class AgencyAsRequestIntegrationTest {
         @Test
         @DisplayName("실패: 인증 토큰 없음 — 401 Unauthorized")
         void noToken_401() throws Exception {
-            mockMvc.perform(get("/api/as-requests/agency"))
+            mockMvc.perform(get("/api/agency/work-requests"))
                     .andExpect(status().isUnauthorized());
         }
     }
@@ -208,7 +208,7 @@ class AgencyAsRequestIntegrationTest {
         @Test
         @DisplayName("성공: 접수일 필터(오늘) — ASSIGNED + ACCEPTED 2건, 어제/COMPLETED 제외")
         void dateFilter_today() throws Exception {
-            mockMvc.perform(get("/api/as-requests/agency/search")
+            mockMvc.perform(get("/api/agency/work-requests")
                             .header("Authorization", "Bearer " + agencyToken)
                             .param("date", TODAY.toString()))
                     .andExpect(status().isOk())
@@ -218,7 +218,7 @@ class AgencyAsRequestIntegrationTest {
         @Test
         @DisplayName("성공: 접수일 필터(어제) — IN_PROGRESS 1건")
         void dateFilter_yesterday() throws Exception {
-            mockMvc.perform(get("/api/as-requests/agency/search")
+            mockMvc.perform(get("/api/agency/work-requests")
                             .header("Authorization", "Bearer " + agencyToken)
                             .param("date", YESTERDAY.toString()))
                     .andExpect(status().isOk())
@@ -229,7 +229,7 @@ class AgencyAsRequestIntegrationTest {
         @Test
         @DisplayName("성공: 상태 필터(ASSIGNED) — 접수일 무관 1건")
         void statusFilter_assigned() throws Exception {
-            mockMvc.perform(get("/api/as-requests/agency/search")
+            mockMvc.perform(get("/api/agency/work-requests")
                             .header("Authorization", "Bearer " + agencyToken)
                             .param("status", "ASSIGNED"))
                     .andExpect(status().isOk())
@@ -240,7 +240,7 @@ class AgencyAsRequestIntegrationTest {
         @Test
         @DisplayName("성공: 접수일 + 상태 복합 필터 — 오늘 접수 AND ACCEPTED 1건")
         void dateAndStatusFilter() throws Exception {
-            mockMvc.perform(get("/api/as-requests/agency/search")
+            mockMvc.perform(get("/api/agency/work-requests")
                             .header("Authorization", "Bearer " + agencyToken)
                             .param("date", TODAY.toString())
                             .param("status", "ACCEPTED"))
@@ -252,7 +252,7 @@ class AgencyAsRequestIntegrationTest {
         @Test
         @DisplayName("특수: status=COMPLETED 필터 — 204 No Content (항상 제외)")
         void completedFilter_noContent() throws Exception {
-            mockMvc.perform(get("/api/as-requests/agency/search")
+            mockMvc.perform(get("/api/agency/work-requests")
                             .header("Authorization", "Bearer " + agencyToken)
                             .param("status", "COMPLETED"))
                     .andExpect(status().isNoContent());
@@ -261,7 +261,7 @@ class AgencyAsRequestIntegrationTest {
         @Test
         @DisplayName("실패: 유효하지 않은 status 값 — 400 Bad Request")
         void invalidStatus_400() throws Exception {
-            mockMvc.perform(get("/api/as-requests/agency/search")
+            mockMvc.perform(get("/api/agency/work-requests")
                             .header("Authorization", "Bearer " + agencyToken)
                             .param("status", "WRONG_STATUS"))
                     .andExpect(status().isBadRequest())
@@ -271,7 +271,7 @@ class AgencyAsRequestIntegrationTest {
         @Test
         @DisplayName("성공: 필터 미입력 — 전체 반환 (COMPLETED 제외 3건)")
         void noFilter_allExceptCompleted() throws Exception {
-            mockMvc.perform(get("/api/as-requests/agency/search")
+            mockMvc.perform(get("/api/agency/work-requests")
                             .header("Authorization", "Bearer " + agencyToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.length()").value(3));
@@ -290,7 +290,7 @@ class AgencyAsRequestIntegrationTest {
         void success_200() throws Exception {
             AsRequest req = saveRequest(AsStatus.ASSIGNED, agency, SCHED_DATE);
 
-            mockMvc.perform(get("/api/as-requests/agency/" + req.getId())
+            mockMvc.perform(get("/api/agency/work-requests/" + req.getId() + "/detail")
                             .header("Authorization", "Bearer " + agencyToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.requestId").value(req.getId()))
@@ -307,7 +307,7 @@ class AgencyAsRequestIntegrationTest {
         @Test
         @DisplayName("실패: 존재하지 않는 requestId — 404 Not Found")
         void notFound_404() throws Exception {
-            mockMvc.perform(get("/api/as-requests/agency/999999")
+            mockMvc.perform(get("/api/agency/work-requests/999999/detail")
                             .header("Authorization", "Bearer " + agencyToken))
                     .andExpect(status().isNotFound())
                     .andExpect(jsonPath("$.success").value(false));
@@ -319,7 +319,7 @@ class AgencyAsRequestIntegrationTest {
             // 타 대행사 소속 요청
             AsRequest otherReq = saveRequest(AsStatus.ASSIGNED, otherAgency, SCHED_DATE);
 
-            mockMvc.perform(get("/api/as-requests/agency/" + otherReq.getId())
+            mockMvc.perform(get("/api/agency/work-requests/" + otherReq.getId() + "/detail")
                             .header("Authorization", "Bearer " + agencyToken))
                     .andExpect(status().isUnauthorized())
                     .andExpect(jsonPath("$.success").value(false));
@@ -330,7 +330,7 @@ class AgencyAsRequestIntegrationTest {
         void noToken_401() throws Exception {
             AsRequest req = saveRequest(AsStatus.ASSIGNED, agency, SCHED_DATE);
 
-            mockMvc.perform(get("/api/as-requests/agency/" + req.getId()))
+            mockMvc.perform(get("/api/agency/work-requests/" + req.getId() + "/detail"))
                     .andExpect(status().isUnauthorized());
         }
     }
@@ -352,7 +352,7 @@ class AgencyAsRequestIntegrationTest {
             saveRequestWithCreatedAt(AsStatus.ASSIGNED, agency, SCHED_DATE,
                     LocalDate.now().minusDays(1).atStartOfDay());
 
-            mockMvc.perform(get("/api/as-requests/agency/dashboard-summary")
+            mockMvc.perform(get("/api/agency/stats/summary")
                             .header("Authorization", "Bearer " + agencyToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.totalCount").value(3))
@@ -378,7 +378,7 @@ class AgencyAsRequestIntegrationTest {
             // CANCELLED 요청은 agency_id = null 이므로 대행사 집계에 포함되지 않음
             // totalCount = 1(ASSIGNED), todayNewCount = 2(ASSIGNED + CANCELLED 접수)
             // 단, CANCELLED는 agency_id가 없어 countByAgencyId 쿼리에서 제외되므로 totalCount = 1
-            mockMvc.perform(get("/api/as-requests/agency/dashboard-summary")
+            mockMvc.perform(get("/api/agency/stats/summary")
                             .header("Authorization", "Bearer " + agencyToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.totalCount").value(1))
@@ -396,7 +396,7 @@ class AgencyAsRequestIntegrationTest {
             // 타 대행사 요청 — 집계 제외 대상
             saveRequest(AsStatus.ASSIGNED, otherAgency, SCHED_DATE);
 
-            mockMvc.perform(get("/api/as-requests/agency/dashboard-summary")
+            mockMvc.perform(get("/api/agency/stats/summary")
                             .header("Authorization", "Bearer " + agencyToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.totalCount").value(2))
@@ -406,7 +406,7 @@ class AgencyAsRequestIntegrationTest {
         @Test
         @DisplayName("성공: 신규 대행사(요청 전혀 없음) — 모든 카운트 0")
         void success_allZero() throws Exception {
-            mockMvc.perform(get("/api/as-requests/agency/dashboard-summary")
+            mockMvc.perform(get("/api/agency/stats/summary")
                             .header("Authorization", "Bearer " + agencyToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.totalCount").value(0))
@@ -425,7 +425,7 @@ class AgencyAsRequestIntegrationTest {
             saveRequestWithCreatedAt(AsStatus.ACCEPTED, agency, SCHED_DATE,
                     LocalDate.now().minusDays(1).atStartOfDay());
 
-            mockMvc.perform(get("/api/as-requests/agency/dashboard-summary")
+            mockMvc.perform(get("/api/agency/stats/summary")
                             .header("Authorization", "Bearer " + agencyToken))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.totalCount").value(2))
@@ -437,7 +437,7 @@ class AgencyAsRequestIntegrationTest {
         @Test
         @DisplayName("실패: CUSTOMER 계정으로 요청 — 401 Unauthorized")
         void customerRole_401() throws Exception {
-            mockMvc.perform(get("/api/as-requests/agency/dashboard-summary")
+            mockMvc.perform(get("/api/agency/stats/summary")
                             .header("Authorization", "Bearer " + customerToken))
                     .andExpect(status().isUnauthorized());
         }
@@ -445,7 +445,7 @@ class AgencyAsRequestIntegrationTest {
         @Test
         @DisplayName("실패: 인증 토큰 없음 — 401 Unauthorized")
         void noToken_401() throws Exception {
-            mockMvc.perform(get("/api/as-requests/agency/dashboard-summary"))
+            mockMvc.perform(get("/api/agency/stats/summary"))
                     .andExpect(status().isUnauthorized());
         }
     }
