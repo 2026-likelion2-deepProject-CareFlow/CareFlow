@@ -100,7 +100,7 @@ class AsRequestControllerIntegrationTest {
                 .email("customer@test.com").passwordHash("hashed")
                 .name("테스트고객").phone("010-1111-2222").role(Role.CUSTOMER).build());
         customerToken = jwtProvider.generateAccessToken(
-                customer.getId(), customer.getEmail(), "CUSTOMER");
+                customer.getId(), customer.getEmail(), "CUSTOMER", null);
 
         // 5. 수리 기사 계정 (대행사 소속)
         engineer = userRepository.save(User.builder()

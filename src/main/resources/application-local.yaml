@@ -44,7 +44,7 @@ spring:
 app:
   oauth2:
     # 로컬 개발 환경용 OAuth2 로그인 성공 후 리다이렉트 URI
-    redirect-uri: http://localhost:3000/oauth2/callback
+    redirect-uri: http://localhost:5173/oauth2/callback
 
 jwt:
   secret: careflow-secret-key-32charslongenough!!

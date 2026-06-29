@@ -18,9 +18,11 @@
 - **입력**: 교체 부품 중 최고 중요도(`PartImportance`, 교체 없으면 `null`), 가전 `purchase_date`
 - **처리**: 대상 가전 진단서가 없으면 신규 생성(INSERT), 있으면 조회 후 갱신(UPDATE, JPA Dirty Checking)
 
-### (B) [GET] /api/appliances/{applianceId}/health-certificate - (구현 예정, 요구사항 C-24 고객용)
-- **설명**: 고객이 본인 가전의 건강 진단서(등급·점수·항목별 점수·인증 여부)를 조회·다운로드한다. (JWT 인증 필요)
-- **Response (200 OK)**: `cert_id`, `grade`, `score`, `repair_count`, `critical_parts_replaced`, `last_repaired_at`, `is_certified`, `issued_at` 등을 JSON 으로 반환 (정적 팩토리 `from()` 기반 Response DTO 권장)
+### (B) [GET] /api/appliances/{applianceId}/health-certificate - ApplianceController.getHealthCertificate
+- **설명**: 고객 또는 기사가 대상 가전의 건강 진단서를 조회한다. (JWT 인증 필요, BOLA 방어 적용)
+- **Response (200 OK)**: `HealthCertificateResponse`
+    - `certId`, `grade`, `score`, `isCertified`, `issuedAt`, `updatedAt`
+    - (핵심) 프론트엔드 레이더 차트 렌더링을 위한 4축 세부 점수(`repairCountScore`, `usagePeriodScore`, `partImportanceScore`, `lastRepairedScore`)를 동적으로 역추산하여 반환한다.
 
 ## 3. 상세 처리 로직 (Pipeline)
 
@@ -49,16 +51,16 @@
 5. **인증 뱃지** : `score >= 75 && grade ∈ {A, B}` → `is_certified = true`
 6. **최근 수리 일시 갱신** : `last_repaired_at = now()` (④ 점수 산정이 끝난 **이후**에 갱신하여, 이번 수리와 직전 수리 사이의 간격이 반영되도록 함)
 
-### (B) 조회 로직 (구현 예정)
-1. **검증** : `@AuthenticationPrincipal` 인증 확인, `applianceId` 의 소유자가 요청 고객 본인인지 확인
-2. **처리** : `appliance_id` 로 진단서 조회, 미발급(진단서 없음) 시 별도 응답 처리
-3. **응답** : 등급·점수·항목별 정보·인증 여부 반환
+### (B) 조회 로직 — getHealthCertificate
+1. **검증** : `@AuthenticationPrincipal` 인증 확인. `role`이 `CUSTOMER`일 경우, `applianceId`의 소유자가 요청 고객 본인인지 확인.
+2. **처리** : `applianceId`로 `HealthCertificate`를 조회. 미발급(진단서 없음) 시 예외 처리. 해당 가전의 과거 `WorkReport`를 모두 조회하여 4축 점수를 역산.
+3. **응답** : 등급, 총점, 4축별 점수, 인증 여부 등을 `HealthCertificateResponse`에 담아 반환.
 
 ## 5. 예외 처리 (Error Handling) 및 제약 조건
 - 모든 에러 발생 시 공통 포맷(`{ "success": false, "message": "에러 내용" }`)으로 응답할 것.
 - **(A) 자동 갱신은 보고서 제출 트랜잭션에 종속** — 진단서 갱신 단계에서 에러가 발생하면 보고서 저장·상태 전이까지 함께 롤백된다(부분 반영 방지).
 - `appliance_id` UNIQUE 제약으로 진단서 중복 생성을 방지한다(동시 요청 시 DB 제약이 최종 방어선).
-- (B) 조회 시 진단서 미발급 가전 → `404` 또는 "미발급" 안내 응답 / 타인 가전 조회 시도 → `403`
+- (B) 조회 시 진단서 미발급 가전 → `404` (NoSuchElementException) / 타인 가전 조회 시도 → `403` (IllegalAccessException)
 
 ## 6. 개발 및 출력 요구사항
 - 진단서 점수 산정(4축) 로직은 서비스가 아닌 **`HealthCertificate` 엔티티 도메인 메서드**(`calculateAndUpdateHealth()`)로 캡슐화할 것

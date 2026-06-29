@@ -107,7 +107,7 @@ class AssignmentControllerIntegrationTest {
                 .name("대행사관리자").phone("010-0000-0001")
                 .role(Role.AGENCY).agency(agency).build());
         agencyToken = jwtProvider.generateAccessToken(
-                agencyManager.getId(), agencyManager.getEmail(), "AGENCY");
+                agencyManager.getId(), agencyManager.getEmail(), "AGENCY", null);
 
         // 4. 수리 기사 (대행사 소속)
         engineer = userRepository.save(User.builder()
@@ -121,7 +121,7 @@ class AssignmentControllerIntegrationTest {
                 .name("테스트고객").phone("010-0000-0003")
                 .role(Role.CUSTOMER).build());
         customerToken = jwtProvider.generateAccessToken(
-                customer.getId(), customer.getEmail(), "CUSTOMER");
+                customer.getId(), customer.getEmail(), "CUSTOMER", null);
 
         // 6. 가전 카테고리 + 가전 + 증상
         ApplianceCategory rootCat = categoryRepository.save(ApplianceCategory.createRoot("에어컨", 1));

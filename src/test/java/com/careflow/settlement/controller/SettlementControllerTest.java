@@ -55,7 +55,7 @@ class SettlementControllerTest {
     @BeforeEach
     void setUpAuth() {
         CustomUserDetails userDetails = new CustomUserDetails(
-                AGENCY_USER_ID, "agency@test.com", "pw", "ROLE_AGENCY");
+                AGENCY_USER_ID, "agency@test.com", "pw", "ROLE_AGENCY", null);
         UsernamePasswordAuthenticationToken auth =
                 new UsernamePasswordAuthenticationToken(
                         userDetails, null, userDetails.getAuthorities());

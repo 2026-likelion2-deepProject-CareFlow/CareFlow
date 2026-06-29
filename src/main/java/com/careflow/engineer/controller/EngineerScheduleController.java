@@ -6,11 +6,13 @@ import com.careflow.engineer.dto.ScheduleResponse;
 import com.careflow.engineer.service.EngineerScheduleService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
+import java.time.LocalDate;
 import java.util.List;
 
 @RestController
@@ -46,5 +48,14 @@ public class EngineerScheduleController {
 
         scheduleService.deleteSchedule(userDetails.getUserId(), scheduleId);
         return ResponseEntity.ok("해당 날짜의 근무표가 휴무(OFF) 처리되었습니다.");
+    }
+
+    @GetMapping("/schedule")
+    public ResponseEntity<ScheduleResponse> getDailySchedule(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @RequestParam(name = "date") @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date) {
+
+        ScheduleResponse response = scheduleService.getDailySchedule(userDetails.getUserId(), date);
+        return ResponseEntity.ok(response);
     }
 }

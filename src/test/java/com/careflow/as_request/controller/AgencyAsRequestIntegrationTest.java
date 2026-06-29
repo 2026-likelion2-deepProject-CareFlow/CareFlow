@@ -95,14 +95,14 @@ class AgencyAsRequestIntegrationTest {
                 .email("manager@test.com").passwordHash("hashed")
                 .name("대행사관리자").phone("010-9999-8888").role(Role.AGENCY).agency(agency).build());
         agencyToken = jwtProvider.generateAccessToken(
-                agencyManager.getId(), agencyManager.getEmail(), "AGENCY");
+                agencyManager.getId(), agencyManager.getEmail(), "AGENCY", null);
 
         // 6. 고객 계정 + JWT (권한 검증용)
         customer = userRepository.save(User.builder()
                 .email("customer@test.com").passwordHash("hashed")
                 .name("테스트고객").phone("010-1111-2222").role(Role.CUSTOMER).build());
         customerToken = jwtProvider.generateAccessToken(
-                customer.getId(), customer.getEmail(), "CUSTOMER");
+                customer.getId(), customer.getEmail(), "CUSTOMER", null);
 
         // 7. 고객 소유 가전
         appliance = applianceRepository.save(Appliance.create(

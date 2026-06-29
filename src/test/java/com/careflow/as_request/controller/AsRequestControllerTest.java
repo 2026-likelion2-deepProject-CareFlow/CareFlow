@@ -67,7 +67,7 @@ class AsRequestControllerTest {
     @BeforeEach
     void setUpAuth() {
         CustomUserDetails userDetails = new CustomUserDetails(
-                CUSTOMER_ID, "customer@test.com", "pw", "CUSTOMER");
+                CUSTOMER_ID, "customer@test.com", "pw", "CUSTOMER", null);
         UsernamePasswordAuthenticationToken auth =
                 new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
         SecurityContextHolder.getContext().setAuthentication(auth);

@@ -50,9 +50,7 @@ public class LmsController {
      */
     @GetMapping("/contents/{contentId}")
     @PreAuthorize("hasRole('ENGINEER')")
-    public ResponseEntity<LmsContent> getContent(
-            @PathVariable Long contentId
-    ) {
+    public ResponseEntity<LmsContentResponseDto> getContent(@PathVariable Long contentId) {
         return ResponseEntity.ok(lmsService.getContent(contentId));
     }
 
@@ -97,17 +95,16 @@ public class LmsController {
      */
     @GetMapping("/admin/contents")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<List<LmsContent>> getAllContents() {
+    public ResponseEntity<List<LmsContentResponseDto>> getAllContents() {
         return ResponseEntity.ok(lmsService.getAllContents());
     }
-
     /**
      * [관리자] 콘텐츠 등록 (M-13)
      * POST /api/lms/admin/contents
      */
     @PostMapping("/admin/contents")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<LmsContent> createContent(
+    public ResponseEntity<LmsContentResponseDto> createContent(
             @RequestBody LmsContentCreateDto dto,
             @AuthenticationPrincipal CustomUserDetails userDetails
     ) {
@@ -177,7 +174,7 @@ public class LmsController {
      */
     @GetMapping("/admin/contents/filter")
     @PreAuthorize("hasRole('ADMIN')")
-    public ResponseEntity<List<LmsContent>> getContentsByFilters(
+    public ResponseEntity<List<LmsContentResponseDto>> getContentsByFilters(
             @RequestParam(required = false) Integer categoryId,
             @RequestParam(required = false) LmsContent.RequiredLevel requiredLevel,
             @RequestParam(required = false) Boolean isActive

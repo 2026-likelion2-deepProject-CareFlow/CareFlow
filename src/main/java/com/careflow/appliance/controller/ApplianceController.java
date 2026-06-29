@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.*;
 import java.util.List;
 
 @RestController
-@RequestMapping("/api/customers/{customerId}/appliances")
+@RequestMapping("/api/appliances")
 @RequiredArgsConstructor
 public class ApplianceController {
 
@@ -30,7 +30,6 @@ public class ApplianceController {
      */
     @PostMapping
     public ResponseEntity<ApplianceResponse> registerAppliance(
-            @PathVariable Long customerId,
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @Valid @RequestBody ApplianceCreateRequest request) {
 
@@ -41,9 +40,8 @@ public class ApplianceController {
     /**
      * 고객 가전제품 목록 조회 API (논리 삭제 제외)
      */
-    @GetMapping
+    @GetMapping("/me")
     public ResponseEntity<List<ApplianceResponse>> getMyAppliances(
-            @PathVariable Long customerId,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
         return ResponseEntity.ok(applianceService.getMyAppliances(userDetails.getUserId()));
     }
@@ -53,9 +51,8 @@ public class ApplianceController {
      */
     @GetMapping("/{applianceId}")
     public ResponseEntity<ApplianceResponse> getApplianceDetail(
-            @PathVariable Long customerId,
-            @PathVariable Long applianceId,
-            @AuthenticationPrincipal CustomUserDetails userDetails) throws IllegalAccessException {
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long applianceId) throws IllegalAccessException {
 
         return ResponseEntity.ok(applianceService.getApplianceDetail(userDetails.getUserId(), applianceId));
     }
@@ -65,21 +62,19 @@ public class ApplianceController {
      */
     @DeleteMapping("/{applianceId}")
     public ResponseEntity<Void> deleteAppliance(
-            @PathVariable Long customerId,
-            @PathVariable Long applianceId,
-            @AuthenticationPrincipal CustomUserDetails userDetails) throws IllegalAccessException {
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long applianceId) throws IllegalAccessException {
 
         applianceService.deleteAppliance(userDetails.getUserId(), applianceId);
         return ResponseEntity.noContent().build();
     }
 
     /**
-     * 가전제품 이전 수리 이력 타임라인 조회 API
+     * 가전제품 이전 수리 이력 타임라인 조회 API (E-10)
      * 고객의 가전 상세 화면 및 수리기사의 작업 상세 화면에서 공통 사용
      */
     @GetMapping("/{applianceId}/repair-history")
     public ResponseEntity<List<RepairHistoryResponse>> getRepairHistory(
-            @PathVariable Long customerId,
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @PathVariable Long applianceId) throws IllegalAccessException {
 
@@ -93,11 +88,10 @@ public class ApplianceController {
     }
 
     /**
-     * 가전제품 건강 진단서 상세 조회 API
+     * 가전제품 건강 진단서 상세 조회 API (C-24)
      */
     @GetMapping("/{applianceId}/health-certificate")
     public ResponseEntity<HealthCertificateResponse> getHealthCertificate(
-            @PathVariable Long customerId,
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @PathVariable Long applianceId) throws IllegalAccessException {
 

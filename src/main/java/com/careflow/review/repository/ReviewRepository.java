@@ -12,6 +12,12 @@ import java.util.List;
 @Repository
 public interface ReviewRepository extends JpaRepository<Review, Long> {
 
+    // 동일 A/S 건에 대한 중복 리뷰 방지
+    boolean existsByAsRequest_Id(Long requestId);
+
+    // 특정 기사가 받은 리뷰 목록 조회
+    List<Review> findByEngineer_Id(Long engineerId);
+
     /**
      * 특정 기사들의 해당 월 평균 평점 조회
      * - 기사 ID 목록과 날짜 범위를 기준으로 그룹핑

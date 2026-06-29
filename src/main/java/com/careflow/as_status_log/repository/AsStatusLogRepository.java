@@ -14,6 +14,14 @@ public interface AsStatusLogRepository extends JpaRepository<AsStatusLog, Long> 
     // request_id 기준 상태 변경 이력을 시간순 조회
     List<AsStatusLog> findByAsRequest_IdOrderByCreatedAtAsc(Long requestId);
 
+    // request_id 기준 상태 변경 이력을 시간순 조회 (고객용 — N+1 방지 JOIN FETCH 포함)
+    @Query("SELECT l FROM AsStatusLog l " +
+           "JOIN FETCH l.asRequest r " +
+           "JOIN FETCH l.changedBy " +
+           "WHERE r.id = :requestId " +
+           "ORDER BY l.createdAt ASC")
+    List<AsStatusLog> findByRequestIdWithDetails(@Param("requestId") Long requestId);
+
     // 소속 대행사의 모든 A/S 요청에 대한 상태 변경 이력 조회 (최신순)
     @Query("SELECT l FROM AsStatusLog l " +
            "JOIN FETCH l.asRequest r " +

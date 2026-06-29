@@ -70,12 +70,12 @@ class AssignmentControllerTest {
 
     // AGENCY 권한 테스트용 사용자
     private CustomUserDetails agencyUser() {
-        return new CustomUserDetails(1L, "agency@test.com", "pw", "AGENCY");
+        return new CustomUserDetails(1L, "agency@test.com", "pw", "AGENCY", null);
     }
 
     // CUSTOMER 권한 테스트용 사용자 (권한 없음)
     private CustomUserDetails customerUser() {
-        return new CustomUserDetails(2L, "customer@test.com", "pw", "CUSTOMER");
+        return new CustomUserDetails(2L, "customer@test.com", "pw", "CUSTOMER", null);
     }
 
     private AssignmentResponse sampleResponse() {

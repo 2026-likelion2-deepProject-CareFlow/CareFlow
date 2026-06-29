@@ -15,6 +15,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 @RestController
+@RequestMapping("/api/engineer")
 @RequiredArgsConstructor
 public class EngineerTaskController {
 
@@ -26,7 +27,7 @@ public class EngineerTaskController {
      * - 특정 날짜에 배정된 작업 목록(고객·제품·방문주소 포함) 반환
      * - REJECTED 배정 건은 제외
      */
-    @GetMapping("/api/engineer/schedule")
+    @GetMapping("/schedule")
     public ResponseEntity<List<EngineerTaskScheduleResponse>> getTaskSchedule(
             @RequestParam @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
             @AuthenticationPrincipal CustomUserDetails userDetails) {
@@ -40,7 +41,7 @@ public class EngineerTaskController {
      * 기사 작업 수행 단계별 상태 업데이트 API
      * - 전달 가능한 상태: ENGINEER_DEPARTED(출발), ENGINEER_ARRIVED(도착), IN_PROGRESS(작업시작)
      */
-    @PutMapping("/api/engineer/assignments/{requestId}/status")
+    @PatchMapping("/tasks/{requestId}/status")
     public ResponseEntity<String> updateTaskStatus(
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @PathVariable Long requestId,
