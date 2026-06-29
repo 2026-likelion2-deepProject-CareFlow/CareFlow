@@ -19,6 +19,7 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -128,5 +129,20 @@ public class EngineerScheduleService {
 
         schedule.changeScheduleStatus(ScheduleStatus.OFF);
         schedule.getTimeSlots().clear();
+    }
+
+    @Transactional(readOnly = true)
+    public ScheduleResponse getDailySchedule(Long userId, LocalDate date) {
+        // 해당 날짜의 스케줄이 없으면 빈 응답(OFF 상태 등)으로 반환하거나 null 처리
+        Optional<EngineerSchedule> scheduleOpt = engineerScheduleRepository
+                .findByUser_IdAndWorkDateBetweenOrderByWorkDateAsc(userId, date, date)
+                .stream().findFirst();
+
+        if (scheduleOpt.isEmpty()) {
+            // 근무표가 없으면 프론트엔드가 에러 대신 '일정 없음'으로 처리할 수 있도록 204 No Content 대신 빈 객체를 주거나 예외 처리
+            throw new IllegalArgumentException("해당 날짜에 등록된 근무표가 없습니다.");
+        }
+
+        return ScheduleResponse.from(scheduleOpt.get());
     }
 }

@@ -9,7 +9,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/engineers/me/tasks")
+@RequestMapping("/api/engineer/tasks")
 @RequiredArgsConstructor
 public class EngineerTaskController {
 

@@ -29,7 +29,9 @@ import org.springframework.transaction.annotation.Transactional;
 import org.springframework.context.ApplicationEventPublisher;
 import com.careflow.notification.event.AsStatusNotificationEvent;
 
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.stream.Collectors;
 
@@ -182,7 +184,18 @@ public class WorkReportService {
             throw new IllegalAccessException("보고서 조회 권한이 없습니다.");
         }
 
-        return WorkReportDetailResponse.from(report);
+        // 🌟 타임라인 생성을 위한 상태 로그 추출
+        List<AsStatusLog> logs = asStatusLogRepository.findByAsRequest_IdOrderByCreatedAtAsc(report.getAsRequest().getId());
+        Map<String, LocalDateTime> statusTimeMap = logs.stream()
+                .filter(log -> log.getToStatus() != null)
+                .collect(Collectors.toMap(
+                        AsStatusLog::getToStatus,
+                        AsStatusLog::getCreatedAt,
+                        (existing, replacement) -> existing // 중복 시 최초값 유지
+                ));
+
+        // .from 대신 우리가 만든 .of 사용!
+        return WorkReportDetailResponse.of(report, statusTimeMap);
     }
 
     /**
