@@ -10,6 +10,7 @@ import com.careflow.appliance.repository.ApplianceRepository;
 import com.careflow.appliance.repository.HealthCertificateRepository;
 import com.careflow.as_request.entity.AsRequest;
 import com.careflow.as_request.repository.AsRequestRepository;
+import com.careflow.as_status_log.repository.AsStatusLogRepository;
 import com.careflow.assignment.entity.AsAssignment;
 import com.careflow.assignment.repository.AsAssignmentRepository;
 import com.careflow.common.enums.AsStatus;
@@ -17,6 +18,7 @@ import com.careflow.common.enums.AssignType;
 import com.careflow.common.enums.RegisterMethod;
 import com.careflow.common.enums.Role;
 import com.careflow.engineer.dto.CreateWorkReportRequest;
+import com.careflow.notification.repository.NotificationRepository;
 import com.careflow.part.domain.entity.RepairPart;
 import com.careflow.part.repository.RepairPartRepository;
 import com.careflow.region.entity.Regions;
@@ -68,6 +70,8 @@ class WorkReportServiceIntegrationTest {
     @Autowired private AgenciesRepository agenciesRepository;
     @Autowired private AsAssignmentRepository asAssignmentRepository;
     @Autowired private EntityManager em;
+    @Autowired private AsStatusLogRepository asStatusLogRepository;
+    @Autowired private NotificationRepository notificationRepository;
 
     private User testEngineer;
     private AsRequest testAsRequest;
@@ -146,16 +150,25 @@ class WorkReportServiceIntegrationTest {
     }
 
     @Test
-    @DisplayName("성공: [부품 교체 없음] 4축 계산 모델 적용되어 100점(A등급)으로 DB 갱신")
+    @DisplayName("성공: [부품 교체 없음] 4축 계산 모델 적용 및 DB에 완료 로그 저장")
     void submitWorkReport_NoPart_Integration() throws Exception {
         CreateWorkReportRequest request = createReportRequest("REPAIRED", null);
 
+        long initialLogCount = asStatusLogRepository.count();
+
+        // When
         workReportService.submitWorkReport(testEngineer.getId(), request);
 
+        // Then
         HealthCertificate cert = healthCertificateRepository.findAll().getFirst();
-        // 🎯 검증: 첫 수리(25) + 기간 모름(25) + 과거 수리 없음(25) + 부품 교체 없음(25) = 100점 (A등급)
         assertThat(cert.getGrade()).isEqualTo("A");
         assertThat(cert.getScore()).isEqualTo(100);
+
+        // 🌟 추가 검증: DB에 상태 로그 데이터가 INSERT 되었는지 확인
+        long newLogCount = asStatusLogRepository.count();
+        assertThat(newLogCount).isGreaterThan(initialLogCount);
+
+        // 💡 AFTER_COMMIT 리스너는 @Transactional 테스트에서 트리거되지 않으므로 알림 카운트 검증은 제외합니다.
     }
 
     @Test
