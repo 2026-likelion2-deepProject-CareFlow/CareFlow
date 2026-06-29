@@ -6,6 +6,8 @@ import com.careflow.as_request.dto.AsRequestCreateDto;
 import com.careflow.as_request.dto.AsRequestCreateResponseDto;
 import com.careflow.as_request.dto.AsRequestResponseDto;
 import com.careflow.as_request.dto.CustomerAsRequestDetailResponse;
+import com.careflow.as_status_log.entity.AsStatusLog;
+import com.careflow.as_status_log.repository.AsStatusLogRepository;
 import com.careflow.assignment.dto.MatchReason;
 import com.careflow.as_request.entity.AsRequest;
 import com.careflow.as_request.repository.AsRequestRepository;
@@ -17,6 +19,7 @@ import com.careflow.common.enums.Role;
 import com.careflow.engineer.domain.entity.EngineerProfile;
 import com.careflow.engineer.domain.enums.ScheduleStatus;
 import com.careflow.engineer.repository.EngineerProfileRepository;
+import com.careflow.notification.service.NotificationService;
 import com.careflow.region.entity.Regions;
 import com.careflow.region.repository.RegionRepository;
 import com.careflow.symptom.entity.Symptom;
@@ -26,6 +29,9 @@ import com.careflow.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.context.ApplicationEventPublisher;
+import com.careflow.notification.event.AsStatusNotificationEvent;
+
 
 import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
@@ -46,6 +52,9 @@ public class AsRequestService {
     private final RegionRepository regionRepository;
     private final SymptomRepository symptomRepository;
     private final EngineerProfileRepository engineerProfileRepository;
+    private final AsStatusLogRepository asStatusLogRepository;
+    private final NotificationService notificationService;
+    private final ApplicationEventPublisher eventPublisher;
 
     /**
      * 고객 A/S 접수 및 수리 기사 배정
@@ -298,12 +307,54 @@ public class AsRequestService {
             throw new IllegalStateException("본인에게 배정되어 진행 중인 작업만 상태를 변경할 수 있습니다.");
         }
 
-        // 2. 새로운 상태에 따른 도메인 메서드 호출 (더티 체킹 업데이트)
+        User engineer = userRepository.findById(engineerId).orElseThrow();
+        String oldStatusStr = asRequest.getStatus().name();
+
+        // 2. 도메인 메서드로 상태 변경 (더티 체킹)
+        String actionMemo = "";
         switch (newStatus) {
-            case ENGINEER_DEPARTED -> asRequest.depart();
-            case ENGINEER_ARRIVED -> asRequest.arrive();
-            case IN_PROGRESS -> asRequest.startWork();
+            case ENGINEER_DEPARTED -> {
+                asRequest.depart();
+                actionMemo = engineer.getName() + " 기사님이 고객님 댁으로 출발했습니다.";
+            }
+            case ENGINEER_ARRIVED -> {
+                asRequest.arrive();
+                actionMemo = engineer.getName() + " 기사님이 현장에 도착했습니다.";
+            }
+            case IN_PROGRESS -> {
+                asRequest.startWork();
+                actionMemo = engineer.getName() + " 기사님이 수리 작업을 시작했습니다.";
+            }
             default -> throw new IllegalArgumentException("해당 API로는 출발/도착/작업시작 상태만 변경 가능합니다.");
+        }
+
+        // 🌟 3. 상태 변경 로그(AsStatusLog) 기록
+        AsStatusLog statusLog = AsStatusLog.builder()
+                .asRequest(asRequest)
+                .changedBy(engineer)
+                .fromStatus(oldStatusStr)
+                .toStatus(newStatus.name())
+                .memo(actionMemo)
+                .build();
+        asStatusLogRepository.save(statusLog);
+
+        // 🌟 4. SSE 실시간 알림 발송 (고객 & 대행사)
+        sendRealTimeNotification(asRequest, actionMemo);
+    }
+
+    /**
+     * 알림 발송 공통 헬퍼 메서드
+     */
+    private void sendRealTimeNotification(AsRequest asRequest, String message) {
+        String title = "A/S 진행 상태 업데이트";
+        String applianceInfo = asRequest.getAppliance().getBrand() + " " + asRequest.getAppliance().getModelName();
+        String body = "[" + applianceInfo + "] " + message;
+
+        // 직접 전송이 아닌 "이벤트 발행"
+        eventPublisher.publishEvent(new AsStatusNotificationEvent(asRequest.getCustomer(), title, body));
+
+        if (asRequest.getAgency() != null && asRequest.getAgency().getRepresentativeId() != null) {
+            eventPublisher.publishEvent(new AsStatusNotificationEvent(asRequest.getAgency().getRepresentativeId(), title, body));
         }
     }
 }

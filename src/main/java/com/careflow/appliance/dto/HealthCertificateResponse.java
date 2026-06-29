@@ -20,4 +20,10 @@ public class HealthCertificateResponse {
     private final Integer usagePeriodScore;      // 2축: 사용 기간 점수
     private final Integer partImportanceScore;   // 3축: 핵심 부품 교체 점수
     private final Integer lastRepairedScore;     // 4축: 최근 수리 경과일 점수
+
+    // 🌟 프론트용 텍스트 라벨 추가
+    private final String repairCountCondition;
+    private final String usagePeriodCondition;
+    private final String partImportanceCondition;
+    private final String lastRepairedCondition;
 }

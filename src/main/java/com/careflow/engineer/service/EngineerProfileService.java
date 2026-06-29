@@ -80,7 +80,13 @@ public class EngineerProfileService {
         // 전문 브랜드 갱신
         List<String> brandNames = saveExpertBrands(user, request.getExpertBrands());
 
-        return ProfileResponse.from(saved, brandNames, regionIds);
+// 🌟 수정: 프론트엔드 응답용 지역 이름 리스트 조회
+        List<String> regionNames = serviceRegionRepository.findByEngineer_Id(userId).stream()
+                .map(r -> r.getRegion().getName())
+                .toList();
+
+        // 🌟 수정: .from -> .of 로 변경하고 지역 이름 리스트 추가
+        return ProfileResponse.of(saved, brandNames, regionIds, regionNames);
     }
 
     private List<Integer> saveServiceRegions(User user, List<Integer> serviceRegionIds) {
@@ -140,11 +146,19 @@ public class EngineerProfileService {
                 .map(EngineerExpertBrand::getBrandName)
                 .toList();
 
-        List<Integer> serviceRegionIds = serviceRegionRepository.findByEngineer_Id(userId).stream()
-                .map(region -> region.getRegion().getId())
+        // 🌟 프론트엔드를 위해 지역 ID와 지역 이름을 동시에 추출
+        List<EngineerServiceRegion> regions = serviceRegionRepository.findByEngineer_Id(userId);
+
+        List<Integer> serviceRegionIds = regions.stream()
+                .map(r -> r.getRegion().getId())
                 .toList();
 
-        return ProfileResponse.from(profile, expertBrands, serviceRegionIds);
+        List<String> serviceRegionNames = regions.stream()
+                .map(r -> r.getRegion().getName()) // ex) "강남구"
+                .toList();
+
+        // from 대신 우리가 새로 만든 of 메서드 사용!
+        return ProfileResponse.of(profile, expertBrands, serviceRegionIds, serviceRegionNames);
     }
 
     @Transactional
@@ -169,16 +183,24 @@ public class EngineerProfileService {
 
         List<String> brandNames = expertBrandRepository.findByEngineer_Id(userId).stream()
                 .map(EngineerExpertBrand::getBrandName).toList();
-        List<Integer> regionIds = serviceRegionRepository.findByEngineer_Id(userId).stream()
-                .map(r -> r.getRegion().getId()).toList();
+
+        List<EngineerServiceRegion> currentRegions = serviceRegionRepository.findByEngineer_Id(userId);
+        List<Integer> regionIds = currentRegions.stream().map(r -> r.getRegion().getId()).toList();
+        List<String> regionNames = currentRegions.stream().map(r -> r.getRegion().getName()).toList();
 
         if (request.getExpertBrands() != null && !request.getExpertBrands().isEmpty()) {
             brandNames = saveExpertBrands(user, request.getExpertBrands());
         }
         if (request.getServiceRegionIds() != null && !request.getServiceRegionIds().isEmpty()) {
             regionIds = saveServiceRegions(user, request.getServiceRegionIds());
+
+            // 🌟 수정: 지역 ID가 변경되었으므로, DB에서 새로운 지역 이름들을 다시 읽어옵니다.
+            regionNames = serviceRegionRepository.findByEngineer_Id(userId).stream()
+                    .map(r -> r.getRegion().getName())
+                    .toList();
         }
 
-        return ProfileResponse.from(profile, brandNames, regionIds);
+        // 🌟 수정: .from -> .of 로 변경하고 지역 이름 리스트 추가
+        return ProfileResponse.of(profile, brandNames, regionIds, regionNames);
     }
 }

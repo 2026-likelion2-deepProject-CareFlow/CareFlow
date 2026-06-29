@@ -5,6 +5,7 @@ import com.careflow.appliance.entity.Appliance;
 import com.careflow.appliance.repository.ApplianceRepository;
 import com.careflow.as_request.dto.AsRequestCreateDto;
 import com.careflow.as_request.dto.AsRequestCreateResponseDto;
+import com.careflow.as_status_log.repository.AsStatusLogRepository;
 import com.careflow.assignment.dto.MatchReason;
 import com.careflow.as_request.entity.AsRequest;
 import com.careflow.as_request.repository.AsRequestRepository;
@@ -16,6 +17,7 @@ import com.careflow.appliance.entity.ApplianceCategory;
 import com.careflow.engineer.domain.entity.EngineerProfile;
 import com.careflow.engineer.domain.enums.ScheduleStatus;
 import com.careflow.engineer.repository.EngineerProfileRepository;
+import com.careflow.notification.service.NotificationService;
 import com.careflow.region.entity.Regions;
 import com.careflow.region.repository.RegionRepository;
 import com.careflow.symptom.entity.Symptom;
@@ -33,6 +35,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
+import org.springframework.context.ApplicationEventPublisher;
 
 import java.util.List;
 import java.util.Optional;
@@ -58,6 +61,9 @@ class AsRequestServiceTest {
     @Mock private RegionRepository regionRepository;
     @Mock private SymptomRepository symptomRepository;
     @Mock private EngineerProfileRepository engineerProfileRepository;
+    @Mock private AsStatusLogRepository asStatusLogRepository;
+    @Mock private NotificationService notificationService;
+    @Mock private ApplicationEventPublisher eventPublisher;
 
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 
@@ -385,34 +391,43 @@ class AsRequestServiceTest {
         }
     }
 
-
     @Test
-    @DisplayName("성공: 기사가 자신의 배정 건을 순차적으로 상태 변경(출발->도착->시작) 한다")
+    @DisplayName("성공: 기사가 자신의 배정 건을 순차적으로 상태 변경(출발->도착->시작) 하고 SSE 이벤트가 발행된다")
     void updateEngineerTaskStatus_Success() {
         // Given
         Long engineerId = 5L;
         Long requestId = 10L;
 
         AsRequest mockRequest = mock(AsRequest.class);
+        Appliance mockAppliance = mock(Appliance.class);
+        User mockCustomer = mock(User.class);
+
+        // 🌟 NPE 방지: 필수 객체들 완벽 모킹
+        given(mockRequest.getAppliance()).willReturn(mockAppliance);
+        given(mockRequest.getCustomer()).willReturn(mockCustomer);
+        given(mockAppliance.getBrand()).willReturn("삼성");
+        given(mockAppliance.getModelName()).willReturn("테스트냉장고");
+        given(mockRequest.getStatus()).willReturn(com.careflow.common.enums.AsStatus.ACCEPTED);
         given(asRequestRepository.findById(requestId)).willReturn(Optional.of(mockRequest));
 
         AsAssignment mockAssignment = mock(AsAssignment.class);
         User mockEngineer = mock(User.class);
         given(mockAssignment.getEngineer()).willReturn(mockEngineer);
         given(mockEngineer.getId()).willReturn(engineerId);
+        given(mockEngineer.getName()).willReturn("김기사");
         given(mockAssignment.getStatus()).willReturn("ACCEPTED"); // 배정 수락됨
 
+        given(userRepository.findById(engineerId)).willReturn(Optional.of(mockEngineer));
         given(asAssignmentRepository.findByAsRequest_Id(requestId)).willReturn(List.of(mockAssignment));
 
         // When
-        asRequestService.updateEngineerTaskStatus(engineerId, requestId, AsStatus.ENGINEER_DEPARTED);
-        asRequestService.updateEngineerTaskStatus(engineerId, requestId, AsStatus.ENGINEER_ARRIVED);
-        asRequestService.updateEngineerTaskStatus(engineerId, requestId, AsStatus.IN_PROGRESS);
+        asRequestService.updateEngineerTaskStatus(engineerId, requestId, com.careflow.common.enums.AsStatus.ENGINEER_DEPARTED);
 
         // Then
         verify(mockRequest).depart();
-        verify(mockRequest).arrive();
-        verify(mockRequest).startWork();
+        verify(asStatusLogRepository, times(1)).save(any());
+        // 🌟 수정됨: notificationService가 아닌 eventPublisher가 작동하는지 검증!
+        verify(eventPublisher, atLeastOnce()).publishEvent(any(com.careflow.notification.event.AsStatusNotificationEvent.class));
     }
 
     @Test

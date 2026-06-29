@@ -12,7 +12,7 @@ import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
-@RequestMapping("/api/engineers/me/reports")
+@RequestMapping("/api/engineer/work-reports")
 @RequiredArgsConstructor
 public class WorkReportController {
 

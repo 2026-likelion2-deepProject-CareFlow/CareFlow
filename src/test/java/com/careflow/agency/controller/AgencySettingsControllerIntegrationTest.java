@@ -71,7 +71,7 @@ class AgencySettingsControllerIntegrationTest {
 
         // 4. 테스트용 JWT 발급 — 실제 로그인(AuthService)과 동일하게 Role.name() 값인 "AGENCY" 사용
         accessToken = jwtProvider.generateAccessToken(
-                representative.getId(), representative.getEmail(), "AGENCY");
+                representative.getId(), representative.getEmail(), "AGENCY", null);
     }
 
     // ─────────────────────────────────────────────
@@ -122,7 +122,7 @@ class AgencySettingsControllerIntegrationTest {
         @DisplayName("실패: 존재하지 않는 사용자 토큰 — 404 Not Found")
         void updateProfile_unknownUser_404() throws Exception {
             // representative_user_id 가 존재하지 않는 userId 로 토큰 생성
-            String unknownToken = jwtProvider.generateAccessToken(9999L, "ghost@test.com", "AGENCY");
+            String unknownToken = jwtProvider.generateAccessToken(9999L, "ghost@test.com", "AGENCY", null);
             AgencyProfileUpdateRequest req = new AgencyProfileUpdateRequest("수정된대행사", "서울 서초구");
 
             mockMvc.perform(patch("/api/agencies/profile")
@@ -154,7 +154,7 @@ class AgencySettingsControllerIntegrationTest {
         @Test
         @DisplayName("실패: 존재하지 않는 사용자 토큰 — 404 Not Found")
         void getFeeRate_unknownUser_404() throws Exception {
-            String unknownToken = jwtProvider.generateAccessToken(9999L, "ghost@test.com", "AGENCY");
+            String unknownToken = jwtProvider.generateAccessToken(9999L, "ghost@test.com", "AGENCY", null);
 
             mockMvc.perform(get("/api/agencies/fee-rate")
                             .header("Authorization", "Bearer " + unknownToken))
@@ -243,7 +243,7 @@ class AgencySettingsControllerIntegrationTest {
         @Test
         @DisplayName("실패: 존재하지 않는 사용자 토큰 — 404 Not Found")
         void updateFeeRate_unknownUser_404() throws Exception {
-            String unknownToken = jwtProvider.generateAccessToken(9999L, "ghost@test.com", "AGENCY");
+            String unknownToken = jwtProvider.generateAccessToken(9999L, "ghost@test.com", "AGENCY", null);
             AgencyFeeRateUpdateRequest req = new AgencyFeeRateUpdateRequest(7.50);
 
             mockMvc.perform(patch("/api/agencies/fee-rate")

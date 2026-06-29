@@ -62,7 +62,7 @@ class AgencyAsRequestServiceTest {
     @BeforeEach
     void setUp() {
         agencyUserDetails = new CustomUserDetails(
-                AGENCY_USER_ID, "agency@test.com", "pw", "AGENCY");
+                AGENCY_USER_ID, "agency@test.com", "pw", "AGENCY", null);
 
         agency = buildAgency(AGENCY_ID);
         agencyUser = buildUser(AGENCY_USER_ID, Role.AGENCY, agency);
@@ -107,7 +107,7 @@ class AgencyAsRequestServiceTest {
         @Test
         @DisplayName("실패: AGENCY 권한 없음 — IllegalAccessException")
         void fail_notAgencyRole() {
-            CustomUserDetails customer = new CustomUserDetails(2L, "c@test.com", "pw", "CUSTOMER");
+            CustomUserDetails customer = new CustomUserDetails(2L, "c@test.com", "pw", "CUSTOMER", null);
 
             assertThatThrownBy(() -> agencyAsRequestService.getAsRequestsByAgency(customer))
                     .isInstanceOf(IllegalAccessException.class)
@@ -342,7 +342,7 @@ class AgencyAsRequestServiceTest {
         @Test
         @DisplayName("실패: AGENCY 권한 없음 — IllegalAccessException")
         void fail_notAgencyRole() {
-            CustomUserDetails customer = new CustomUserDetails(2L, "c@test.com", "pw", "CUSTOMER");
+            CustomUserDetails customer = new CustomUserDetails(2L, "c@test.com", "pw", "CUSTOMER", null);
 
             assertThatThrownBy(() -> agencyAsRequestService.getDashboardSummary(customer))
                     .isInstanceOf(IllegalAccessException.class)

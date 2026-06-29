@@ -79,7 +79,7 @@ class EngineerAccountRequestControllerIntegrationTest {
     @DisplayName("[approval] 성공: AGENCY 슈퍼 계정이 요청 승인 → ENGINEER 역할 회원 생성 + account_requests APPROVED 전환")
     void approve_byAgencySuper_engineerCreated() throws Exception {
         AccountRequests request = pendingEngineerRequest("engineer@test.com");
-        String superToken = jwtProvider.generateAccessToken(superUser.getId(), superUser.getEmail(), "AGENCY");
+        String superToken = jwtProvider.generateAccessToken(superUser.getId(), superUser.getEmail(), "AGENCY", null);
 
         mockMvc.perform(post("/api/account-requests/engineer/approval")
                         .header("Authorization", "Bearer " + superToken)
@@ -105,7 +105,7 @@ class EngineerAccountRequestControllerIntegrationTest {
                 .email("admin@careflow.com").passwordHash("hashed")
                 .name("관리자").role(Role.ADMIN).build());
         AccountRequests request = pendingEngineerRequest("engineer2@test.com");
-        String adminToken = jwtProvider.generateAccessToken(adminUser.getId(), adminUser.getEmail(), "ADMIN");
+        String adminToken = jwtProvider.generateAccessToken(adminUser.getId(), adminUser.getEmail(), "ADMIN", null);
 
         mockMvc.perform(post("/api/account-requests/engineer/approval")
                         .header("Authorization", "Bearer " + adminToken)
@@ -120,7 +120,7 @@ class EngineerAccountRequestControllerIntegrationTest {
     @Test
     @DisplayName("[approval] 실패: 존재하지 않는 요청 ID — 404 Not Found")
     void approve_notFound_404() throws Exception {
-        String superToken = jwtProvider.generateAccessToken(superUser.getId(), superUser.getEmail(), "AGENCY");
+        String superToken = jwtProvider.generateAccessToken(superUser.getId(), superUser.getEmail(), "AGENCY", null);
 
         mockMvc.perform(post("/api/account-requests/engineer/approval")
                         .header("Authorization", "Bearer " + superToken)
@@ -138,7 +138,7 @@ class EngineerAccountRequestControllerIntegrationTest {
                         .requestsRole(AccountRequestsRole.ENGINEER).addressDetail("상세주소")
                         .region(region).status(AccountRequestsStatus.APPROVED).build());
 
-        String superToken = jwtProvider.generateAccessToken(superUser.getId(), superUser.getEmail(), "AGENCY");
+        String superToken = jwtProvider.generateAccessToken(superUser.getId(), superUser.getEmail(), "AGENCY", null);
 
         mockMvc.perform(post("/api/account-requests/engineer/approval")
                         .header("Authorization", "Bearer " + superToken)
@@ -154,7 +154,7 @@ class EngineerAccountRequestControllerIntegrationTest {
     @DisplayName("[rejection] 성공: AGENCY 슈퍼 계정이 요청 거부 → REJECTED 전환 + 거부 사유·검토자 기록")
     void reject_byAgencySuper_dbUpdated() throws Exception {
         AccountRequests request = pendingEngineerRequest("engineer3@test.com");
-        String superToken = jwtProvider.generateAccessToken(superUser.getId(), superUser.getEmail(), "AGENCY");
+        String superToken = jwtProvider.generateAccessToken(superUser.getId(), superUser.getEmail(), "AGENCY", null);
 
         mockMvc.perform(post("/api/account-requests/engineer/rejection")
                         .header("Authorization", "Bearer " + superToken)
@@ -180,7 +180,7 @@ class EngineerAccountRequestControllerIntegrationTest {
                 .email("admin2@careflow.com").passwordHash("hashed")
                 .name("관리자2").role(Role.ADMIN).build());
         AccountRequests request = pendingEngineerRequest("engineer4@test.com");
-        String adminToken = jwtProvider.generateAccessToken(adminUser.getId(), adminUser.getEmail(), "ADMIN");
+        String adminToken = jwtProvider.generateAccessToken(adminUser.getId(), adminUser.getEmail(), "ADMIN", null);
 
         mockMvc.perform(post("/api/account-requests/engineer/rejection")
                         .header("Authorization", "Bearer " + adminToken)
@@ -203,7 +203,7 @@ class EngineerAccountRequestControllerIntegrationTest {
                         .requestsRole(AccountRequestsRole.ENGINEER).addressDetail("상세주소")
                         .region(region).status(AccountRequestsStatus.APPROVED).build());
 
-        String superToken = jwtProvider.generateAccessToken(superUser.getId(), superUser.getEmail(), "AGENCY");
+        String superToken = jwtProvider.generateAccessToken(superUser.getId(), superUser.getEmail(), "AGENCY", null);
 
         mockMvc.perform(post("/api/account-requests/engineer/rejection")
                         .header("Authorization", "Bearer " + superToken)
@@ -223,7 +223,7 @@ class EngineerAccountRequestControllerIntegrationTest {
                         .requestsRole(AccountRequestsRole.ENGINEER).addressDetail("상세주소")
                         .region(region).status(AccountRequestsStatus.REJECTED).build());
 
-        String superToken = jwtProvider.generateAccessToken(superUser.getId(), superUser.getEmail(), "AGENCY");
+        String superToken = jwtProvider.generateAccessToken(superUser.getId(), superUser.getEmail(), "AGENCY", null);
 
         mockMvc.perform(post("/api/account-requests/engineer/rejection")
                         .header("Authorization", "Bearer " + superToken)
@@ -237,7 +237,7 @@ class EngineerAccountRequestControllerIntegrationTest {
     @DisplayName("[rejection] 실패: 거부 사유가 255자 초과 — 400 Bad Request")
     void reject_reasonTooLong_400() throws Exception {
         AccountRequests request = pendingEngineerRequest("engineer5@test.com");
-        String superToken = jwtProvider.generateAccessToken(superUser.getId(), superUser.getEmail(), "AGENCY");
+        String superToken = jwtProvider.generateAccessToken(superUser.getId(), superUser.getEmail(), "AGENCY", null);
 
         mockMvc.perform(post("/api/account-requests/engineer/rejection")
                         .header("Authorization", "Bearer " + superToken)

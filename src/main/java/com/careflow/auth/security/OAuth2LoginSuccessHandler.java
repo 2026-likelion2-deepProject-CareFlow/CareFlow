@@ -25,7 +25,7 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
     @Override
     public void onAuthenticationSuccess(HttpServletRequest request, HttpServletResponse response,
                                         Authentication authentication) throws IOException {
-
+        System.out.println("OAuth2LoginSuccessHandler 실행");
         CustomOAuth2User customOAuth2User = (CustomOAuth2User) authentication.getPrincipal();
         User user = customOAuth2User.getUser();
 
@@ -36,6 +36,8 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
                 .queryParam("code", code)
                 .build()
                 .toUriString();
+        System.out.println("targetUrl = " + targetUrl);
+        System.out.println("redirectUri = " + redirectUri);
 
         response.sendRedirect(targetUrl);
     }
