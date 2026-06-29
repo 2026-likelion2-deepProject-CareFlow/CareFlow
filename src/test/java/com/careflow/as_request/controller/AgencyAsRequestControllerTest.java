@@ -58,7 +58,7 @@ class AgencyAsRequestControllerTest {
     @BeforeEach
     void setUpAuth() {
         CustomUserDetails userDetails = new CustomUserDetails(
-                AGENCY_USER_ID, "agency@test.com", "pw", "AGENCY");
+                AGENCY_USER_ID, "agency@test.com", "pw", "AGENCY", null);
         UsernamePasswordAuthenticationToken auth =
                 new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
         SecurityContextHolder.getContext().setAuthentication(auth);

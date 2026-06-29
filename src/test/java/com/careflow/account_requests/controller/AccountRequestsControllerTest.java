@@ -85,7 +85,7 @@ class AccountRequestsControllerTest {
 
     // SecurityContext 에 CustomUserDetails 를 직접 주입하는 헬퍼
     private RequestPostProcessor buildAuth(Long userId, String email, String role) {
-        CustomUserDetails userDetails = new CustomUserDetails(userId, email, "", role);
+        CustomUserDetails userDetails = new CustomUserDetails(userId, email, "", role, null);
         return SecurityMockMvcRequestPostProcessors.authentication(
                 new UsernamePasswordAuthenticationToken(
                         userDetails, null, List.of(new SimpleGrantedAuthority(role))
