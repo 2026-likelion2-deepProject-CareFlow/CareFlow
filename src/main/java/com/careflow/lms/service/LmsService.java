@@ -1,5 +1,7 @@
 package com.careflow.lms.service;
 
+import com.careflow.appliance.entity.ApplianceCategory;
+import com.careflow.appliance.repository.ApplianceCategoryRepository;
 import com.careflow.common.enums.Role;
 import com.careflow.engineer.domain.entity.EngineerProfile;
 import com.careflow.engineer.repository.EngineerProfileRepository;
@@ -30,6 +32,7 @@ public class LmsService {
     private final LmsConfirmationRepository lmsConfirmationRepository;
     private final EngineerProfileRepository engineerProfileRepository;
     private final UserRepository            userRepository;
+    private final ApplianceCategoryRepository  applianceCategoryRepository;
 
     // ─────────────────────────────────────────────
     // 기사용
@@ -156,45 +159,53 @@ public class LmsService {
      * [관리자] 콘텐츠 등록 (M-13)
      */
     @Transactional
-    public LmsContent createContent(LmsContentCreateDto dto, Long adminUserId) {
+    public LmsContentResponseDto createContent(LmsContentCreateDto dto, Long adminUserId) {
         User admin = getUserOrThrow(adminUserId);
+        ApplianceCategory category = applianceCategoryRepository.findById(dto.categoryId())
+                .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 카테고리입니다."));
 
         LmsContent content = LmsContent.builder()
-                .category(dto.category())
+                .category(category)
                 .title(dto.title())
                 .body(dto.body())
                 .requiredLevel(dto.requiredLevel())
-                .contentType(LmsContent.ContentType.TEXT) // MVP: TEXT 고정
+                .contentType(LmsContent.ContentType.TEXT)
                 .version(dto.version())
                 .isActive(true)
                 .createdBy(admin)
                 .build();
 
-        return lmsContentRepository.save(content);
+        return LmsContentResponseDto.from(lmsContentRepository.save(content));
     }
-
 
 
     // 콘텐츠 단 건 조회
     @Transactional(readOnly = true)
-    public LmsContent getContent(Long contentId) {
-        return getContentOrThrow(contentId);
+    public LmsContentResponseDto getContent(Long contentId) {
+        return LmsContentResponseDto.from(getContentOrThrow(contentId));
     }
 
     // 콘텐츠 전체 조회
     @Transactional(readOnly = true)
-    public List<LmsContent> getAllContents() {
-        return lmsContentRepository.findAllByOrderByCategoryCategoryIdAscRequiredLevelAscContentIdAsc();
+    public List<LmsContentResponseDto> getAllContents() {
+        return lmsContentRepository
+                .findAllByOrderByCategoryCategoryIdAscRequiredLevelAscContentIdAsc()
+                .stream()
+                .map(LmsContentResponseDto::from)
+                .toList();
     }
 
     // 콘텐츠 필터링 조회
     @Transactional(readOnly = true)
-    public List<LmsContent> getContentsByFilters(
+    public List<LmsContentResponseDto> getContentsByFilters(
             Integer categoryId,
             LmsContent.RequiredLevel requiredLevel,
             Boolean isActive
     ) {
-        return lmsContentRepository.findByFilters(categoryId, requiredLevel, isActive);
+        return lmsContentRepository.findByFilters(categoryId, requiredLevel, isActive)
+                .stream()
+                .map(LmsContentResponseDto::from)
+                .toList();
     }
 
     /**
