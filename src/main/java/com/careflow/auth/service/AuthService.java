@@ -84,6 +84,7 @@ public class AuthService {
         return issueTokenResponse(user);
     }
 
+    @Transactional(readOnly = true)
     public TokenResponse reissue(String refreshToken) {
         if (!jwtProvider.validateToken(refreshToken)) {
             throw new IllegalArgumentException("유효하지 않은 refresh token입니다.");
@@ -102,7 +103,8 @@ public class AuthService {
             throw new IllegalStateException("정지되었거나 비활성화된 계정입니다.");
         }
 
-        String newAccessToken = jwtProvider.generateAccessToken(user.getId(), user.getEmail(), user.getRole().name());
+        String newAccessToken = jwtProvider.generateAccessToken(
+                user.getId(), user.getEmail(), user.getRole().name(), resolveAgencyId(user));
 
         return TokenResponse.builder()
                 .accessToken(newAccessToken)
@@ -130,13 +132,27 @@ public class AuthService {
     }
 
     /**
+     * role별 agencyId 결정
+     * - AGENCY : 본인 담당 대행사 ID
+     * - ENGINEER : 소속 대행사 ID (users.agency_id가 동일 필드에 저장됨)
+     * - CUSTOMER / ADMIN : null
+     */
+    private Long resolveAgencyId(User user) {
+        if (user.getRole() == Role.AGENCY || user.getRole() == Role.ENGINEER) {
+            return user.getAgency() != null ? user.getAgency().getId() : null;
+        }
+        return null;
+    }
+
+    /**
      * 로그인/구글로그인 공통: JWT 발급 + Redis에 refreshToken 저장
      */
     @Transactional
     public TokenResponse issueTokenResponse(User user) {
         user.updateLastLogin();
 
-        String accessToken = jwtProvider.generateAccessToken(user.getId(), user.getEmail(), user.getRole().name());
+        String accessToken = jwtProvider.generateAccessToken(
+                user.getId(), user.getEmail(), user.getRole().name(), resolveAgencyId(user));
         String refreshToken = jwtProvider.generateRefreshToken(user.getId());
 
         redisTemplate.opsForValue().set(

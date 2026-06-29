@@ -113,7 +113,7 @@ class AccountRequestsControllerIntegrationTest {
                 .region(region).status(AccountRequestsStatus.APPROVED).build());
 
         String superToken = jwtProvider.generateAccessToken(
-                superUser.getId(), superUser.getEmail(), "AGENCY");
+                superUser.getId(), superUser.getEmail(), "AGENCY", null);
 
         // [HTTP 검증] 슈퍼 계정 식별 + PENDING 2건만 반환, APPROVED 1건 제외
         mockMvc.perform(get("/api/account-requests/agencylist")
@@ -148,7 +148,7 @@ class AccountRequestsControllerIntegrationTest {
                 "010-1111-2222", AccountRequestsRole.AGENCY, "상세주소", region));
 
         String adminToken = jwtProvider.generateAccessToken(
-                adminUser.getId(), adminUser.getEmail(), "ADMIN");
+                adminUser.getId(), adminUser.getEmail(), "ADMIN", null);
 
         mockMvc.perform(post("/api/account-requests/agency/approval")
                         .header("Authorization", "Bearer " + adminToken)
@@ -190,7 +190,7 @@ class AccountRequestsControllerIntegrationTest {
                 "010-3333-4444", AccountRequestsRole.AGENCY, "상세주소", region));
 
         String superToken = jwtProvider.generateAccessToken(
-                superUser.getId(), superUser.getEmail(), "AGENCY");
+                superUser.getId(), superUser.getEmail(), "AGENCY", null);
 
         mockMvc.perform(post("/api/account-requests/agency/approval")
                         .header("Authorization", "Bearer " + superToken)
@@ -227,7 +227,7 @@ class AccountRequestsControllerIntegrationTest {
                 pendingD, "new@agencyD.com", "hashed", "새사람",
                 "010-4444-5555", AccountRequestsRole.AGENCY, "상세주소", region));
 
-        String superCToken = jwtProvider.generateAccessToken(superC.getId(), superC.getEmail(), "AGENCY");
+        String superCToken = jwtProvider.generateAccessToken(superC.getId(), superC.getEmail(), "AGENCY", null);
 
         mockMvc.perform(post("/api/account-requests/agency/approval")
                         .header("Authorization", "Bearer " + superCToken)
@@ -260,7 +260,7 @@ class AccountRequestsControllerIntegrationTest {
                 agencyF, "manager@agencyF.com", "hashed", "매니저F",
                 "010-6666-7777", AccountRequestsRole.AGENCY, "상세주소", region));
 
-        String superEToken = jwtProvider.generateAccessToken(superE.getId(), superE.getEmail(), "AGENCY");
+        String superEToken = jwtProvider.generateAccessToken(superE.getId(), superE.getEmail(), "AGENCY", null);
 
         mockMvc.perform(post("/api/account-requests/agency/approval")
                         .header("Authorization", "Bearer " + superEToken)
@@ -275,7 +275,7 @@ class AccountRequestsControllerIntegrationTest {
     @DisplayName("[approval] 실패: 존재하지 않는 요청 ID 승인 시도 — 404 Not Found")
     void approve_notFound_404() throws Exception {
         String adminToken = jwtProvider.generateAccessToken(
-                adminUser.getId(), adminUser.getEmail(), "ADMIN");
+                adminUser.getId(), adminUser.getEmail(), "ADMIN", null);
 
         mockMvc.perform(post("/api/account-requests/agency/approval")
                         .header("Authorization", "Bearer " + adminToken)
@@ -299,7 +299,7 @@ class AccountRequestsControllerIntegrationTest {
                         .region(region).status(AccountRequestsStatus.APPROVED).build());
 
         String adminToken = jwtProvider.generateAccessToken(
-                adminUser.getId(), adminUser.getEmail(), "ADMIN");
+                adminUser.getId(), adminUser.getEmail(), "ADMIN", null);
 
         mockMvc.perform(post("/api/account-requests/agency/approval")
                         .header("Authorization", "Bearer " + adminToken)
@@ -323,7 +323,7 @@ class AccountRequestsControllerIntegrationTest {
                 "010-7777-8888", AccountRequestsRole.AGENCY, "상세주소", region));
 
         String adminToken = jwtProvider.generateAccessToken(
-                adminUser.getId(), adminUser.getEmail(), "ADMIN");
+                adminUser.getId(), adminUser.getEmail(), "ADMIN", null);
 
         mockMvc.perform(post("/api/account-requests/agency/rejection")
                         .header("Authorization", "Bearer " + adminToken)
@@ -356,7 +356,7 @@ class AccountRequestsControllerIntegrationTest {
                 approvedH, "manager@agencyH.com", "hashed", "매니저H",
                 "010-8888-9999", AccountRequestsRole.AGENCY, "상세주소", region));
 
-        String superToken = jwtProvider.generateAccessToken(superH.getId(), superH.getEmail(), "AGENCY");
+        String superToken = jwtProvider.generateAccessToken(superH.getId(), superH.getEmail(), "AGENCY", null);
 
         mockMvc.perform(post("/api/account-requests/agency/rejection")
                         .header("Authorization", "Bearer " + superToken)
@@ -388,7 +388,7 @@ class AccountRequestsControllerIntegrationTest {
                         .region(region).status(AccountRequestsStatus.APPROVED).build());
 
         String adminToken = jwtProvider.generateAccessToken(
-                adminUser.getId(), adminUser.getEmail(), "ADMIN");
+                adminUser.getId(), adminUser.getEmail(), "ADMIN", null);
 
         mockMvc.perform(post("/api/account-requests/agency/rejection")
                         .header("Authorization", "Bearer " + adminToken)
@@ -413,7 +413,7 @@ class AccountRequestsControllerIntegrationTest {
                         .region(region).status(AccountRequestsStatus.REJECTED).build());
 
         String adminToken = jwtProvider.generateAccessToken(
-                adminUser.getId(), adminUser.getEmail(), "ADMIN");
+                adminUser.getId(), adminUser.getEmail(), "ADMIN", null);
 
         mockMvc.perform(post("/api/account-requests/agency/rejection")
                         .header("Authorization", "Bearer " + adminToken)
@@ -434,7 +434,7 @@ class AccountRequestsControllerIntegrationTest {
                 "010-9999-1111", AccountRequestsRole.AGENCY, "상세주소", region));
 
         String adminToken = jwtProvider.generateAccessToken(
-                adminUser.getId(), adminUser.getEmail(), "ADMIN");
+                adminUser.getId(), adminUser.getEmail(), "ADMIN", null);
 
         mockMvc.perform(post("/api/account-requests/agency/rejection")
                         .header("Authorization", "Bearer " + adminToken)
