@@ -29,4 +29,10 @@ public class AuthController {
     public ResponseEntity<TokenResponse> refresh(@Valid @RequestBody RefreshRequest request) {
         return ResponseEntity.ok(authService.reissue(request.getRefreshToken()));
     }
+
+    // OAuth2 로그인 완료 후 프론트엔드가 1회용 코드를 실제 토큰으로 교환하는 엔드포인트
+    @PostMapping("/oauth2/exchange")
+    public ResponseEntity<TokenResponse> exchangeOAuth2Code(@Valid @RequestBody OAuth2ExchangeRequest request) {
+        return ResponseEntity.ok(authService.exchangeOAuth2Code(request.code()));
+    }
 }
