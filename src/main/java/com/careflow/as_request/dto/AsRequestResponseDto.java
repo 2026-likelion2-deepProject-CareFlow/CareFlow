@@ -22,6 +22,8 @@ public class AsRequestResponseDto {
     private final AsStatus status;
     private final String cancelReason;
     private final LocalDateTime createdAt;
+    private final String brand;
+    private final String modelName;
 
     public AsRequestResponseDto(AsRequest entity) {
         this.requestId = entity.getId();
@@ -37,5 +39,7 @@ public class AsRequestResponseDto {
         this.status = entity.getStatus();
         this.cancelReason = entity.getCancelReason();
         this.createdAt = entity.getCreatedAt();
+        this.brand = entity.getAppliance().getBrand();
+        this.modelName = entity.getAppliance().getModelName();
     }
 }
