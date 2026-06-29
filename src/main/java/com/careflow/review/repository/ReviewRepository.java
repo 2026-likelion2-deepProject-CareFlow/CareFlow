@@ -19,6 +19,19 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
     List<Review> findByEngineer_Id(Long engineerId);
 
     /**
+     * 특정 기사의 공개 리뷰 목록 조회 (최신순)
+     * GET /api/agency/engineers/{id}/reviews 에서 사용
+     */
+    @Query("""
+            SELECT r FROM Review r
+            JOIN FETCH r.customer
+            WHERE r.engineer.id = :engineerId
+              AND r.isVisible = true
+            ORDER BY r.createdAt DESC
+            """)
+    List<Review> findVisibleByEngineerId(@Param("engineerId") Long engineerId);
+
+    /**
      * 특정 기사들의 해당 월 평균 평점 조회
      * - 기사 ID 목록과 날짜 범위를 기준으로 그룹핑
      * - 해당 기간에 리뷰가 없는 기사는 결과에 포함되지 않음 (JOIN 방식으로 처리)

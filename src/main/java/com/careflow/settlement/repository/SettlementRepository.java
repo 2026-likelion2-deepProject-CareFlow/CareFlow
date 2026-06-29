@@ -87,6 +87,18 @@ public interface SettlementRepository extends JpaRepository<Settlement, Long> {
             @Param("to") LocalDateTime to);
 
     /**
+     * 특정 기사의 정산 내역 전체 조회 (최신순)
+     * GET /api/agency/engineers/{id}/settlements 에서 사용
+     */
+    @Query("""
+            SELECT s FROM Settlement s
+            JOIN FETCH s.asRequest
+            WHERE s.engineer.id = :engineerId
+            ORDER BY s.createdAt DESC
+            """)
+    List<Settlement> findByEngineerIdWithRequest(@Param("engineerId") Long engineerId);
+
+    /**
      * 합산 집계 결과를 받을 인터페이스 프로젝션
      */
     interface MonthlySummaryProjection {

@@ -60,6 +60,12 @@ class AgencyEngineerServiceTest {
     @Mock private EngineerScheduleRepository engineerScheduleRepository;
     @Mock private ApplianceCategoryRepository categoryRepository;
     @Mock private RegionRepository regionRepository;
+    // 추가 API 구현으로 신규 추가된 의존성 (기존 테스트와 독립적으로 동작)
+    @Mock private com.careflow.assignment.repository.AsAssignmentRepository asAssignmentRepository;
+    @Mock private com.careflow.as_request.repository.AsRequestRepository asRequestRepository;
+    @Mock private com.careflow.settlement.repository.SettlementRepository settlementRepository;
+    @Mock private com.careflow.review.repository.ReviewRepository reviewRepository;
+    @Mock private com.careflow.lms.repository.LmsConfirmationRepository lmsConfirmationRepository;
 
     // ─── 공통 ID 상수 ───────────────────────────────────────────────────
     private static final Long AGENCY_USER_ID   = 1L;
