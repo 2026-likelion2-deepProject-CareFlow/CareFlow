@@ -2,6 +2,7 @@ package com.careflow.as_request.dto;
 
 import com.careflow.as_request.entity.AsRequest;
 import com.careflow.common.enums.AsStatus;
+import com.careflow.report.domain.entity.WorkReport;
 import lombok.Getter;
 
 import java.time.LocalDate;
@@ -24,6 +25,7 @@ public class AsRequestResponseDto {
     private final LocalDateTime createdAt;
     private final String brand;
     private final String modelName;
+    private final Long reportId;
 
     public AsRequestResponseDto(AsRequest entity) {
         this.requestId = entity.getId();
@@ -41,5 +43,7 @@ public class AsRequestResponseDto {
         this.createdAt = entity.getCreatedAt();
         this.brand = entity.getAppliance().getBrand();
         this.modelName = entity.getAppliance().getModelName();
+        WorkReport report = entity.getWorkReport();
+        this.reportId = report != null ? report.getReportId() : null;
     }
 }
