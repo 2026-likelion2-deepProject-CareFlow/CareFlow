@@ -37,12 +37,6 @@ public class OAuth2LoginSuccessHandler implements AuthenticationSuccessHandler {
                 .queryParam("refreshToken", tokenResponse.getRefreshToken())
                 .build()
                 .toUriString();
-        System.out.println("accessToken = "
-                + tokenResponse.getAccessToken());
-
-        System.out.println("refreshToken = "
-                + tokenResponse.getRefreshToken());
-
         System.out.println("targetUrl = " + targetUrl);
         System.out.println("redirectUri = " + redirectUri);
 
