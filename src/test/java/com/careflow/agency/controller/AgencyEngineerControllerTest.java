@@ -3,6 +3,11 @@ package com.careflow.agency.controller;
 import com.careflow.agency.dto.request.AgencyEngineerProfileUpdateRequest;
 import com.careflow.agency.dto.response.AgencyEngineerDetailResponse;
 import com.careflow.agency.dto.response.AgencyEngineerSummaryResponse;
+import com.careflow.agency.dto.response.EngineerLmsStatusResponse;
+import com.careflow.agency.dto.response.EngineerRealtimeStatusResponse;
+import com.careflow.agency.dto.response.EngineerRecommendResponse;
+import com.careflow.agency.dto.response.EngineerReviewListResponse;
+import com.careflow.agency.dto.response.EngineerSettlementResponse;
 import com.careflow.agency.service.AgencyEngineerService;
 import com.careflow.auth.security.CustomOAuth2UserService;
 import com.careflow.auth.security.CustomUserDetails;
@@ -32,6 +37,7 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.lang.reflect.Constructor;
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.NoSuchElementException;
 
@@ -365,6 +371,290 @@ class AgencyEngineerControllerTest {
         }
     }
 
+    // ══════════════════════════════════════════════════════════════
+    //  5. GET /api/agency/engineers/recommended — 추천 기사 목록
+    // ══════════════════════════════════════════════════════════════
+    @Nested
+    @DisplayName("GET /api/agency/engineers/recommended — 추천 기사 목록 조회")
+    class GetRecommendedEngineers {
+
+        @Test
+        @DisplayName("성공: 추천 기사 2명 — 200 OK, JSON 배열 반환")
+        void success_200_returnsList() throws Exception {
+            given(agencyEngineerService.getRecommendedEngineers(AGENCY_USER_ID, 1L))
+                    .willReturn(List.of(
+                            stubRecommend(10L, "홍길동", "LG 전문", "강남구", 4.9),
+                            stubRecommend(11L, "이수리", "삼성 전문", "서초구", 4.7)));
+
+            mockMvc.perform(get("/api/agency/engineers/recommended").param("requestId", "1"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.length()").value(2))
+                    .andExpect(jsonPath("$[0].id").value(10))
+                    .andExpect(jsonPath("$[0].name").value("홍길동"))
+                    .andExpect(jsonPath("$[0].brand").value("LG 전문"))
+                    .andExpect(jsonPath("$[0].isLmsCompleted").value(true));
+        }
+
+        @Test
+        @DisplayName("성공: 조건 맞는 기사 없음 — 200 OK, 빈 배열 반환")
+        void success_200_emptyList() throws Exception {
+            given(agencyEngineerService.getRecommendedEngineers(AGENCY_USER_ID, 1L))
+                    .willReturn(List.of());
+
+            mockMvc.perform(get("/api/agency/engineers/recommended").param("requestId", "1"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.length()").value(0));
+        }
+
+        @Test
+        @DisplayName("실패: 존재하지 않는 requestId — 404 Not Found")
+        void fail_notFoundRequest_404() throws Exception {
+            given(agencyEngineerService.getRecommendedEngineers(AGENCY_USER_ID, 999L))
+                    .willThrow(new NoSuchElementException("해당 A/S 요청이 존재하지 않습니다."));
+
+            mockMvc.perform(get("/api/agency/engineers/recommended").param("requestId", "999"))
+                    .andExpect(status().isNotFound());
+        }
+
+        @Test
+        @DisplayName("실패: 인증 없음 — 401 Unauthorized")
+        void fail_noAuth_401() throws Exception {
+            mockMvc.perform(get("/api/agency/engineers/recommended")
+                            .with(anonymous())
+                            .param("requestId", "1"))
+                    .andExpect(status().isUnauthorized());
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  6. GET /api/agency/engineers/realtime-status — 실시간 배정 현황
+    // ══════════════════════════════════════════════════════════════
+    @Nested
+    @DisplayName("GET /api/agency/engineers/realtime-status — 실시간 배정 현황 조회")
+    class GetEngineersRealtimeStatus {
+
+        @Test
+        @DisplayName("성공: 기사 2명 현황 반환 — 200 OK")
+        void success_200_returnsList() throws Exception {
+            given(agencyEngineerService.getEngineersRealtimeStatus(AGENCY_USER_ID))
+                    .willReturn(List.of(
+                            stubRealtime(10L, "홍길동", "IN_PROGRESS"),
+                            stubRealtime(11L, "이수리", null)));
+
+            mockMvc.perform(get("/api/agency/engineers/realtime-status"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.length()").value(2))
+                    .andExpect(jsonPath("$[0].id").value(10))
+                    .andExpect(jsonPath("$[0].asStatus").value("IN_PROGRESS"))
+                    .andExpect(jsonPath("$[1].asStatus").doesNotExist());
+        }
+
+        @Test
+        @DisplayName("실패: 인증 없음 — 401 Unauthorized")
+        void fail_noAuth_401() throws Exception {
+            mockMvc.perform(get("/api/agency/engineers/realtime-status").with(anonymous()))
+                    .andExpect(status().isUnauthorized());
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  7. GET /api/agency/engineers/{id}/settlements — 기사 정산 목록
+    // ══════════════════════════════════════════════════════════════
+    @Nested
+    @DisplayName("GET /api/agency/engineers/{id}/settlements — 기사 정산 목록 조회")
+    class GetEngineerSettlements {
+
+        @Test
+        @DisplayName("성공: 정산 1건 반환 — 200 OK")
+        void success_200_returnsList() throws Exception {
+            given(agencyEngineerService.getEngineerSettlements(AGENCY_USER_ID, ENGINEER_USER_ID))
+                    .willReturn(List.of(stubSettlement(1L, 150000, "PAID")));
+
+            mockMvc.perform(get("/api/agency/engineers/{id}/settlements", ENGINEER_USER_ID))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.length()").value(1))
+                    .andExpect(jsonPath("$[0].settlementId").value(1))
+                    .andExpect(jsonPath("$[0].grossAmount").value(150000))
+                    .andExpect(jsonPath("$[0].status").value("PAID"));
+        }
+
+        @Test
+        @DisplayName("성공: 정산 없음 — 200 OK, 빈 배열")
+        void success_200_emptyList() throws Exception {
+            given(agencyEngineerService.getEngineerSettlements(AGENCY_USER_ID, ENGINEER_USER_ID))
+                    .willReturn(List.of());
+
+            mockMvc.perform(get("/api/agency/engineers/{id}/settlements", ENGINEER_USER_ID))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.length()").value(0));
+        }
+
+        @Test
+        @DisplayName("실패: 타 대행사 기사 접근 — 401 Unauthorized")
+        void fail_otherAgency_401() throws Exception {
+            given(agencyEngineerService.getEngineerSettlements(AGENCY_USER_ID, 20L))
+                    .willThrow(new IllegalAccessException("소속 대행사의 기사만 조회/수정할 수 있습니다."));
+
+            mockMvc.perform(get("/api/agency/engineers/{id}/settlements", 20L))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        @Test
+        @DisplayName("실패: 기사 프로필 없음 — 404 Not Found")
+        void fail_notFound_404() throws Exception {
+            given(agencyEngineerService.getEngineerSettlements(AGENCY_USER_ID, 999L))
+                    .willThrow(new NoSuchElementException("해당 기사의 프로필 정보가 존재하지 않습니다."));
+
+            mockMvc.perform(get("/api/agency/engineers/{id}/settlements", 999L))
+                    .andExpect(status().isNotFound());
+        }
+
+        @Test
+        @DisplayName("실패: 인증 없음 — 401 Unauthorized")
+        void fail_noAuth_401() throws Exception {
+            mockMvc.perform(get("/api/agency/engineers/{id}/settlements", ENGINEER_USER_ID)
+                            .with(anonymous()))
+                    .andExpect(status().isUnauthorized());
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  8. GET /api/agency/engineers/{id}/lms — 기사 LMS 이수 현황
+    // ══════════════════════════════════════════════════════════════
+    @Nested
+    @DisplayName("GET /api/agency/engineers/{id}/lms — 기사 LMS 이수 현황 조회")
+    class GetEngineerLmsStatus {
+
+        @Test
+        @DisplayName("성공: LMS 이수 완료 기사 — 200 OK")
+        void success_200_lmsCompleted() throws Exception {
+            EngineerLmsStatusResponse resp = EngineerLmsStatusResponse.builder()
+                    .isLmsCompleted(true)
+                    .currentYear(2026)
+                    .confirmations(List.of(
+                            EngineerLmsStatusResponse.ConfirmationItem.builder()
+                                    .contentId(1L).title("냉장고 수리 기초").requiredLevel("BEGINNER")
+                                    .confirmedAt(LocalDateTime.of(2026, 3, 10, 14, 0))
+                                    .confirmedVersion("1.0").build()))
+                    .build();
+
+            given(agencyEngineerService.getEngineerLmsStatus(AGENCY_USER_ID, ENGINEER_USER_ID))
+                    .willReturn(resp);
+
+            mockMvc.perform(get("/api/agency/engineers/{id}/lms", ENGINEER_USER_ID))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.isLmsCompleted").value(true))
+                    .andExpect(jsonPath("$.currentYear").value(2026))
+                    .andExpect(jsonPath("$.confirmations.length()").value(1))
+                    .andExpect(jsonPath("$.confirmations[0].title").value("냉장고 수리 기초"));
+        }
+
+        @Test
+        @DisplayName("성공: LMS 미이수 기사 — 200 OK, 이수 이력 빈 배열")
+        void success_200_lmsNotCompleted() throws Exception {
+            EngineerLmsStatusResponse resp = EngineerLmsStatusResponse.builder()
+                    .isLmsCompleted(false).currentYear(2026).confirmations(List.of()).build();
+
+            given(agencyEngineerService.getEngineerLmsStatus(AGENCY_USER_ID, ENGINEER_USER_ID))
+                    .willReturn(resp);
+
+            mockMvc.perform(get("/api/agency/engineers/{id}/lms", ENGINEER_USER_ID))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.isLmsCompleted").value(false))
+                    .andExpect(jsonPath("$.confirmations.length()").value(0));
+        }
+
+        @Test
+        @DisplayName("실패: 타 대행사 기사 접근 — 401 Unauthorized")
+        void fail_otherAgency_401() throws Exception {
+            given(agencyEngineerService.getEngineerLmsStatus(AGENCY_USER_ID, 20L))
+                    .willThrow(new IllegalAccessException("소속 대행사의 기사만 조회/수정할 수 있습니다."));
+
+            mockMvc.perform(get("/api/agency/engineers/{id}/lms", 20L))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        @Test
+        @DisplayName("실패: 인증 없음 — 401 Unauthorized")
+        void fail_noAuth_401() throws Exception {
+            mockMvc.perform(get("/api/agency/engineers/{id}/lms", ENGINEER_USER_ID).with(anonymous()))
+                    .andExpect(status().isUnauthorized());
+        }
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    //  9. GET /api/agency/engineers/{id}/reviews — 기사 수신 리뷰
+    // ══════════════════════════════════════════════════════════════
+    @Nested
+    @DisplayName("GET /api/agency/engineers/{id}/reviews — 기사 수신 리뷰 목록 조회")
+    class GetEngineerReviews {
+
+        @Test
+        @DisplayName("성공: 리뷰 2건 반환 — 200 OK")
+        void success_200_returnsList() throws Exception {
+            EngineerReviewListResponse resp = EngineerReviewListResponse.builder()
+                    .totalReviews(2).avgRating(4.5)
+                    .reviews(List.of(
+                            EngineerReviewListResponse.ReviewItem.builder()
+                                    .reviewId(1L).customerName("김고객").rating(5)
+                                    .content("친절했어요").createdAt(LocalDateTime.now()).build(),
+                            EngineerReviewListResponse.ReviewItem.builder()
+                                    .reviewId(2L).customerName("박고객").rating(4)
+                                    .content("빠른 수리").createdAt(LocalDateTime.now()).build()))
+                    .build();
+
+            given(agencyEngineerService.getEngineerReviews(AGENCY_USER_ID, ENGINEER_USER_ID))
+                    .willReturn(resp);
+
+            mockMvc.perform(get("/api/agency/engineers/{id}/reviews", ENGINEER_USER_ID))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.totalReviews").value(2))
+                    .andExpect(jsonPath("$.avgRating").value(4.5))
+                    .andExpect(jsonPath("$.reviews.length()").value(2))
+                    .andExpect(jsonPath("$.reviews[0].customerName").value("김고객"));
+        }
+
+        @Test
+        @DisplayName("성공: 리뷰 없음 — 200 OK, 빈 배열")
+        void success_200_emptyList() throws Exception {
+            given(agencyEngineerService.getEngineerReviews(AGENCY_USER_ID, ENGINEER_USER_ID))
+                    .willReturn(EngineerReviewListResponse.builder()
+                            .totalReviews(0).avgRating(0.0).reviews(List.of()).build());
+
+            mockMvc.perform(get("/api/agency/engineers/{id}/reviews", ENGINEER_USER_ID))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.totalReviews").value(0))
+                    .andExpect(jsonPath("$.reviews.length()").value(0));
+        }
+
+        @Test
+        @DisplayName("실패: 타 대행사 기사 접근 — 401 Unauthorized")
+        void fail_otherAgency_401() throws Exception {
+            given(agencyEngineerService.getEngineerReviews(AGENCY_USER_ID, 20L))
+                    .willThrow(new IllegalAccessException("소속 대행사의 기사만 조회/수정할 수 있습니다."));
+
+            mockMvc.perform(get("/api/agency/engineers/{id}/reviews", 20L))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        @Test
+        @DisplayName("실패: 기사 프로필 없음 — 404 Not Found")
+        void fail_notFound_404() throws Exception {
+            given(agencyEngineerService.getEngineerReviews(AGENCY_USER_ID, 999L))
+                    .willThrow(new NoSuchElementException("해당 기사의 프로필 정보가 존재하지 않습니다."));
+
+            mockMvc.perform(get("/api/agency/engineers/{id}/reviews", 999L))
+                    .andExpect(status().isNotFound());
+        }
+
+        @Test
+        @DisplayName("실패: 인증 없음 — 401 Unauthorized")
+        void fail_noAuth_401() throws Exception {
+            mockMvc.perform(get("/api/agency/engineers/{id}/reviews", ENGINEER_USER_ID).with(anonymous()))
+                    .andExpect(status().isUnauthorized());
+        }
+    }
+
     // ═══════════════════════════════════════════════════════════
     //  픽스처 헬퍼
     // ═══════════════════════════════════════════════════════════
@@ -409,6 +699,31 @@ class AgencyEngineerControllerTest {
                 .timeSlots(List.of())
                 .status(status)
                 .build();
+    }
+
+    private EngineerRecommendResponse stubRecommend(Long id, String name, String brand, String region, double rating) {
+        return EngineerRecommendResponse.builder()
+                .id(id).name(name).brand(brand).region(region)
+                .rating(rating).availableFrom("09:00 이후 가능")
+                .profileImageUrl(null).isLmsCompleted(true).build();
+    }
+
+    private EngineerRealtimeStatusResponse stubRealtime(Long id, String name, String asStatus) {
+        return EngineerRealtimeStatusResponse.builder()
+                .id(id).name(name).specialty("냉장고").region("강남구")
+                .product(asStatus != null ? "LG 냉장고 수리" : null)
+                .timeRange(asStatus != null ? "10:00 ~ 12:00" : null)
+                .progress(asStatus != null ? 50 : null)
+                .isLmsCompleted(true).profileImageUrl(null).asStatus(asStatus).build();
+    }
+
+    private EngineerSettlementResponse stubSettlement(Long settlementId, int grossAmount, String status) {
+        return EngineerSettlementResponse.builder()
+                .settlementId(settlementId).requestId(100L)
+                .scheduledDate(LocalDate.of(2026, 6, 15))
+                .grossAmount(grossAmount).platformFee(15000).agencyFee(7500)
+                .engineerNetAmount(grossAmount - 15000 - 7500)
+                .status(status).createdAt(LocalDateTime.now()).build();
     }
 
     private AgencyEngineerProfileUpdateRequest buildUpdateRequest(

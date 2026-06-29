@@ -3,7 +3,12 @@ package com.careflow.agency.controller;
 import com.careflow.agency.dto.request.AgencyEngineerProfileUpdateRequest;
 import com.careflow.agency.dto.response.AgencyEngineerDetailResponse;
 import com.careflow.agency.dto.response.AgencyEngineerSummaryResponse;
+import com.careflow.agency.dto.response.EngineerLmsStatusResponse;
 import com.careflow.agency.dto.response.EngineerRankResponse;
+import com.careflow.agency.dto.response.EngineerRealtimeStatusResponse;
+import com.careflow.agency.dto.response.EngineerRecommendResponse;
+import com.careflow.agency.dto.response.EngineerReviewListResponse;
+import com.careflow.agency.dto.response.EngineerSettlementResponse;
 import com.careflow.agency.service.AgencyEngineerService;
 import com.careflow.as_request.dto.EngineerTaskScheduleResponse;
 import com.careflow.auth.security.CustomUserDetails;
@@ -117,6 +122,85 @@ public class AgencyEngineerController {
         List<EngineerTaskScheduleResponse> response =
                 agencyEngineerService.getAgencyEngineerTaskSchedule(
                         userDetails.getUserId(), engineerUserId, date);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * A/S 요청 기반 추천 기사 목록 조회
+     * GET /api/agency/engineers/recommended?requestId=
+     *
+     * LMS 이수 완료 + 해당 날짜 AVAILABLE 근무표를 가진 소속 기사를 평점 내림차순으로 반환한다.
+     */
+    @GetMapping("/recommended")
+    public ResponseEntity<List<EngineerRecommendResponse>> getRecommendedEngineers(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @RequestParam Long requestId) {
+
+        List<EngineerRecommendResponse> response =
+                agencyEngineerService.getRecommendedEngineers(userDetails.getUserId(), requestId);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * 소속 기사 실시간 배정 현황 조회
+     * GET /api/agency/engineers/realtime-status
+     *
+     * 소속 기사 전원의 현재 배정 상태(IN_PROGRESS / ASSIGNED / null)와 LMS 이수 여부를 반환한다.
+     */
+    @GetMapping("/realtime-status")
+    public ResponseEntity<List<EngineerRealtimeStatusResponse>> getEngineersRealtimeStatus(
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+
+        List<EngineerRealtimeStatusResponse> response =
+                agencyEngineerService.getEngineersRealtimeStatus(userDetails.getUserId());
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * 소속 기사 정산 내역 조회
+     * GET /api/agency/engineers/{engineerUserId}/settlements
+     *
+     * 기사별 정산 이력 전체를 최신순으로 반환한다. 타 대행사 소속 기사 접근 시 401 반환.
+     */
+    @GetMapping("/{engineerUserId}/settlements")
+    public ResponseEntity<List<EngineerSettlementResponse>> getEngineerSettlements(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long engineerUserId) throws IllegalAccessException {
+
+        List<EngineerSettlementResponse> response =
+                agencyEngineerService.getEngineerSettlements(userDetails.getUserId(), engineerUserId);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * 소속 기사 LMS 이수 현황 조회
+     * GET /api/agency/engineers/{engineerUserId}/lms
+     *
+     * 당해 연도 이수 완료 여부 + 이수 콘텐츠 이력을 반환한다. 타 대행사 소속 기사 접근 시 401 반환.
+     */
+    @GetMapping("/{engineerUserId}/lms")
+    public ResponseEntity<EngineerLmsStatusResponse> getEngineerLmsStatus(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long engineerUserId) throws IllegalAccessException {
+
+        EngineerLmsStatusResponse response =
+                agencyEngineerService.getEngineerLmsStatus(userDetails.getUserId(), engineerUserId);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * 소속 기사 수신 리뷰 목록 조회
+     * GET /api/agency/engineers/{engineerUserId}/reviews
+     *
+     * 공개 리뷰(isVisible=true)만 최신순으로 반환한다. 타 대행사 소속 기사 접근 시 401 반환.
+     */
+    @GetMapping("/{engineerUserId}/reviews")
+    public ResponseEntity<EngineerReviewListResponse> getEngineerReviews(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long engineerUserId) throws IllegalAccessException {
+
+        EngineerReviewListResponse response =
+                agencyEngineerService.getEngineerReviews(userDetails.getUserId(), engineerUserId);
         return ResponseEntity.ok(response);
     }
 

@@ -3,9 +3,17 @@ package com.careflow.agency.service;
 import com.careflow.agency.dto.request.AgencyEngineerProfileUpdateRequest;
 import com.careflow.agency.dto.response.AgencyEngineerDetailResponse;
 import com.careflow.agency.dto.response.AgencyEngineerSummaryResponse;
+import com.careflow.agency.dto.response.EngineerLmsStatusResponse;
 import com.careflow.agency.dto.response.EngineerRankResponse;
+import com.careflow.agency.dto.response.EngineerRealtimeStatusResponse;
+import com.careflow.agency.dto.response.EngineerRecommendResponse;
+import com.careflow.agency.dto.response.EngineerReviewListResponse;
+import com.careflow.agency.dto.response.EngineerSettlementResponse;
 import com.careflow.as_request.dto.EngineerTaskScheduleResponse;
+import com.careflow.as_request.entity.AsRequest;
+import com.careflow.as_request.repository.AsRequestRepository;
 import com.careflow.assignment.dto.EngineerCompletedCount;
+import com.careflow.assignment.entity.AsAssignment;
 import com.careflow.assignment.repository.AsAssignmentRepository;
 import com.careflow.common.enums.AsStatus;
 import com.careflow.appliance.entity.ApplianceCategory;
@@ -20,8 +28,14 @@ import com.careflow.engineer.repository.EngineerExpertBrandRepository;
 import com.careflow.engineer.repository.EngineerProfileRepository;
 import com.careflow.engineer.repository.EngineerScheduleRepository;
 import com.careflow.engineer.repository.EngineerServiceRegionRepository;
+import com.careflow.lms.entity.LmsConfirmation;
+import com.careflow.lms.repository.LmsConfirmationRepository;
 import com.careflow.region.entity.Regions;
 import com.careflow.region.repository.RegionRepository;
+import com.careflow.review.entity.Review;
+import com.careflow.review.repository.ReviewRepository;
+import com.careflow.settlement.entity.Settlement;
+import com.careflow.settlement.repository.SettlementRepository;
 import com.careflow.user.entity.User;
 import com.careflow.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -30,9 +44,11 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.time.Year;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Optional;
 import java.util.concurrent.atomic.AtomicInteger;
 
 @Service
@@ -48,6 +64,10 @@ public class AgencyEngineerService {
     private final ApplianceCategoryRepository categoryRepository;
     private final RegionRepository regionRepository;
     private final AsAssignmentRepository asAssignmentRepository;
+    private final AsRequestRepository asRequestRepository;
+    private final SettlementRepository settlementRepository;
+    private final ReviewRepository reviewRepository;
+    private final LmsConfirmationRepository lmsConfirmationRepository;
 
     /**
      * 소속 기사 목록 조회
@@ -230,6 +250,152 @@ public class AgencyEngineerService {
                         .completedCount(r.getCompletedCount())
                         .build())
                 .toList();
+    }
+
+    /**
+     * A/S 요청 기반 추천 기사 목록 조회
+     * - LMS 이수 완료 기사 + 해당 날짜 AVAILABLE 근무표 보유 기사를 필터링해 반환
+     * - 평점 내림차순 정렬
+     */
+    public List<EngineerRecommendResponse> getRecommendedEngineers(Long agencyUserId, Long requestId) {
+        User agencyUser = findUserById(agencyUserId);
+        Long agencyId = getAgencyId(agencyUser);
+
+        // A/S 요청 존재 여부 확인
+        AsRequest asRequest = asRequestRepository.findById(requestId)
+                .orElseThrow(() -> new NoSuchElementException("해당 A/S 요청이 존재하지 않습니다."));
+
+        LocalDate scheduledDate = asRequest.getScheduledDate();
+
+        // 대행사 소속 기사 전체 조회
+        List<EngineerProfile> profiles = engineerProfileRepository.findByAgencyId(agencyId);
+
+        return profiles.stream()
+                // LMS 이수 완료 기사만 필터
+                .filter(EngineerProfile::isLmsCompleted)
+                // 해당 날짜 AVAILABLE 근무표 보유 기사만 필터
+                .filter(profile -> engineerScheduleRepository
+                        .findByUser_IdAndWorkDateBetweenOrderByWorkDateAsc(
+                                profile.getUser().getId(), scheduledDate, scheduledDate)
+                        .stream()
+                        .anyMatch(s -> s.getStatus() == ScheduleStatus.AVAILABLE))
+                // 평점 내림차순 정렬
+                .sorted((a, b) -> {
+                    double ratingA = a.getAvgRating() != null ? a.getAvgRating().doubleValue() : 0.0;
+                    double ratingB = b.getAvgRating() != null ? b.getAvgRating().doubleValue() : 0.0;
+                    return Double.compare(ratingB, ratingA);
+                })
+                .map(profile -> {
+                    Long engineerUserId = profile.getUser().getId();
+
+                    List<String> expertBrands = expertBrandRepository.findByEngineer_Id(engineerUserId).stream()
+                            .map(EngineerExpertBrand::getBrandName)
+                            .toList();
+
+                    List<String> regionNames = serviceRegionRepository.findByEngineer_Id(engineerUserId).stream()
+                            .map(r -> r.getRegion().getName())
+                            .toList();
+
+                    // 해당 날짜 AVAILABLE 근무표 — 첫 번째 timeSlot startTime 추출용
+                    Optional<EngineerSchedule> availableSchedule = engineerScheduleRepository
+                            .findByUser_IdAndWorkDateBetweenOrderByWorkDateAsc(engineerUserId, scheduledDate, scheduledDate)
+                            .stream()
+                            .filter(s -> s.getStatus() == ScheduleStatus.AVAILABLE)
+                            .findFirst();
+
+                    return EngineerRecommendResponse.from(
+                            profile, expertBrands, regionNames, availableSchedule.orElse(null));
+                })
+                .toList();
+    }
+
+    /**
+     * 소속 기사 실시간 배정 현황 조회
+     * - 소속 기사 전원의 현재 진행 중 배정 상태 + LMS 이수 여부 반환
+     * - REJECTED·COMPLETED 제외한 최신 배정 1건 기준
+     */
+    public List<EngineerRealtimeStatusResponse> getEngineersRealtimeStatus(Long agencyUserId) {
+        User agencyUser = findUserById(agencyUserId);
+        Long agencyId = getAgencyId(agencyUser);
+
+        List<EngineerProfile> profiles = engineerProfileRepository.findByAgencyId(agencyId);
+
+        return profiles.stream()
+                .map(profile -> {
+                    Long engineerUserId = profile.getUser().getId();
+
+                    List<String> regionNames = serviceRegionRepository.findByEngineer_Id(engineerUserId).stream()
+                            .map(r -> r.getRegion().getName())
+                            .toList();
+
+                    // 현재 활성 배정 1건 조회 (최신순 첫 번째)
+                    AsAssignment activeAssignment = asAssignmentRepository
+                            .findActiveByEngineerId(engineerUserId)
+                            .stream()
+                            .findFirst()
+                            .orElse(null);
+
+                    return EngineerRealtimeStatusResponse.from(profile, regionNames, activeAssignment);
+                })
+                .toList();
+    }
+
+    /**
+     * 소속 기사 정산 내역 조회
+     * - 타 대행사 소속 기사 접근 시 IllegalAccessException 발생
+     */
+    public List<EngineerSettlementResponse> getEngineerSettlements(Long agencyUserId, Long engineerUserId)
+            throws IllegalAccessException {
+        User agencyUser = findUserById(agencyUserId);
+        Long agencyId = getAgencyId(agencyUser);
+
+        EngineerProfile profile = engineerProfileRepository.findByUser_Id(engineerUserId)
+                .orElseThrow(() -> new NoSuchElementException("해당 기사의 프로필 정보가 존재하지 않습니다."));
+        validateSameAgency(profile, agencyId);
+
+        return settlementRepository.findByEngineerIdWithRequest(engineerUserId).stream()
+                .map(EngineerSettlementResponse::from)
+                .toList();
+    }
+
+    /**
+     * 소속 기사 LMS 이수 현황 조회
+     * - 당해 연도 이수 완료 여부 + 이수한 콘텐츠 이력 반환
+     * - 타 대행사 소속 기사 접근 시 IllegalAccessException 발생
+     */
+    public EngineerLmsStatusResponse getEngineerLmsStatus(Long agencyUserId, Long engineerUserId)
+            throws IllegalAccessException {
+        User agencyUser = findUserById(agencyUserId);
+        Long agencyId = getAgencyId(agencyUser);
+
+        EngineerProfile profile = engineerProfileRepository.findByUser_Id(engineerUserId)
+                .orElseThrow(() -> new NoSuchElementException("해당 기사의 프로필 정보가 존재하지 않습니다."));
+        validateSameAgency(profile, agencyId);
+
+        int currentYear = Year.now().getValue();
+
+        List<LmsConfirmation> confirmations = lmsConfirmationRepository
+                .findByUserIdAndYear(engineerUserId, currentYear);
+
+        return EngineerLmsStatusResponse.of(profile.isLmsCompleted(), currentYear, confirmations);
+    }
+
+    /**
+     * 소속 기사 수신 리뷰 목록 조회
+     * - 공개(isVisible=true) 리뷰만 반환, 최신순 정렬
+     * - 타 대행사 소속 기사 접근 시 IllegalAccessException 발생
+     */
+    public EngineerReviewListResponse getEngineerReviews(Long agencyUserId, Long engineerUserId)
+            throws IllegalAccessException {
+        User agencyUser = findUserById(agencyUserId);
+        Long agencyId = getAgencyId(agencyUser);
+
+        EngineerProfile profile = engineerProfileRepository.findByUser_Id(engineerUserId)
+                .orElseThrow(() -> new NoSuchElementException("해당 기사의 프로필 정보가 존재하지 않습니다."));
+        validateSameAgency(profile, agencyId);
+
+        List<Review> reviews = reviewRepository.findVisibleByEngineerId(engineerUserId);
+        return EngineerReviewListResponse.of(reviews);
     }
 
     // ──────────────────────────────────────────────────

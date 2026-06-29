@@ -74,6 +74,19 @@ public interface AsAssignmentRepository extends JpaRepository<AsAssignment, Long
             @Param("engineerUserId") Long engineerUserId,
             @Param("date") LocalDate date);
 
+    /**
+     * 기사의 현재 활성 배정 조회 (실시간 현황용)
+     * REJECTED·COMPLETED 상태 제외, 배정 일시 최신 기준 1건
+     * GET /api/agency/engineers/realtime-status 에서 사용
+     */
+    @Query("SELECT a FROM AsAssignment a " +
+           "JOIN FETCH a.asRequest r " +
+           "JOIN FETCH r.appliance " +
+           "WHERE a.engineer.id = :engineerId " +
+           "AND a.status NOT IN ('REJECTED', 'COMPLETED') " +
+           "ORDER BY a.assignedAt DESC")
+    List<AsAssignment> findActiveByEngineerId(@Param("engineerId") Long engineerId);
+
     // 날짜·상태 동적 필터 조회 — 두 파라미터 모두 null 허용 (null = 해당 조건 미적용)
     // JOIN FETCH 로 as_requests·symptom·engineer 를 한 번에 로딩해 N+1 방지
     @Query("SELECT DISTINCT a FROM AsAssignment a " +
