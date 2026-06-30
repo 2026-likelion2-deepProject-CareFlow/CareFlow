@@ -61,6 +61,10 @@ public interface AsRequestRepository extends JpaRepository<AsRequest, Long> {
     @Query("SELECT COUNT(r) FROM AsRequest r WHERE r.agency.id = :agencyId")
     long countByAgencyId(@Param("agencyId") Long agencyId);
 
+    // 대행사로부터 A/S를 받은 고객 user_id DISTINCT 목록 (알림 수신 대상 범위 산정용)
+    @Query("SELECT DISTINCT r.customer.id FROM AsRequest r WHERE r.agency.id = :agencyId")
+    List<Long> findDistinctCustomerIdsByAgencyId(@Param("agencyId") Long agencyId);
+
     // 대행사 소속 A/S 요청 중 특정 날짜 범위 + 상태 조건 건수 집계
     // created_at 범위 조건(startOfDay 이상, endOfDay 미만)으로 H2·MySQL 양쪽 호환
     @Query("SELECT COUNT(r) FROM AsRequest r " +

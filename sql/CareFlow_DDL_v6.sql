@@ -1,6 +1,11 @@
 -- ============================================================
--- CareFlow DDL v5
--- DB명세서 v19 기준 / 모든 FK를 CREATE TABLE 내부 CONSTRAINT로 정의
+-- CareFlow DDL v6
+-- DB명세서 v20 기준 / 모든 FK를 CREATE TABLE 내부 CONSTRAINT로 정의
+--
+-- ※ v6 변경 사항
+--   - notifications.is_read (BOOLEAN NOT NULL DEFAULT FALSE) 컬럼 신규 추가
+--     · GET /api/agency/notifications API에서 사용자/기사별 읽음·안읽음 갯수 집계용
+--   - notifications 인덱스 idx_notif_user_read (user_id, is_read) 신규 추가
 --
 -- ※ 유일한 예외: users ↔ agencies 순환참조
 --   agencies.representative_user_id → users (users가 먼저 생성되어야 함)
@@ -579,6 +584,9 @@ CREATE TABLE `settlements` (
 
 -- ============================================================
 -- 24. notifications
+-- [v6 변경] is_read 컬럼 신규 추가
+--   - GET /api/agency/notifications: 사용자/기사별 읽음·안읽음 갯수 집계용
+--   - 1알림 row = 1수신자(user_id) 구조이므로 boolean 플래그로 충분 (브로드캐스트 공지 아님)
 -- ============================================================
 CREATE TABLE `notifications` (
     `notification_id` BIGINT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT '알림 ID',
@@ -587,13 +595,15 @@ CREATE TABLE `notifications` (
     `title`           VARCHAR(200)    NOT NULL                            COMMENT '알림 제목',
     `body`            TEXT            NOT NULL                            COMMENT '알림 내용',
     `channel`         ENUM('SSE','PUSH','SMS','KAKAO') NOT NULL DEFAULT 'SSE' COMMENT '발송 채널',
+    `is_read`         BOOLEAN         NOT NULL DEFAULT FALSE              COMMENT '[v6 신규] 읽음 여부 — 사용자/기사별 읽음·안읽음 갯수 집계용',
     `created_at`      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT '생성일',
 
     CONSTRAINT FK_users_TO_notifications
         FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`),
 
     INDEX idx_notif_user (user_id, created_at),
-    INDEX idx_notif_type (type)
+    INDEX idx_notif_type (type),
+    INDEX idx_notif_user_read (user_id, is_read)
 );
 
 -- ============================================================
