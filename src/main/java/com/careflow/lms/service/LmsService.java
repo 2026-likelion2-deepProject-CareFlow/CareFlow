@@ -48,7 +48,6 @@ public class LmsService {
     public List<LmsContentWithStatusDto> getRequiredContentsWithStatus(Long engineerUserId) {
         EngineerProfile profile = getEngineerProfile(engineerUserId);
         RequiredLevel requiredLevel = RequiredLevel.valueOf(profile.getSkillLevel().name());
-
         int currentYear = LocalDate.now().getYear();
 
         List<LmsContent> required = lmsContentRepository.findRequiredContents(
@@ -56,7 +55,6 @@ public class LmsService {
                 requiredLevel
         );
 
-        // Set<Long> → Map<Long, LocalDateTime> 으로 변경
         Map<Long, LocalDateTime> confirmedAtMap = lmsConfirmationRepository
                 .findByUserIdAndYear(engineerUserId, currentYear)
                 .stream()
@@ -67,7 +65,7 @@ public class LmsService {
 
         return required.stream()
                 .map(c -> new LmsContentWithStatusDto(
-                        c,
+                        LmsContentResponseDto.from(c),
                         confirmedAtMap.containsKey(c.getContentId()),
                         confirmedAtMap.get(c.getContentId())
                 ))
@@ -237,11 +235,16 @@ public class LmsService {
      * [관리자] 기사별 연도별 이수 현황 조회 (M-14)
      */
     @Transactional(readOnly = true)
-    public List<LmsConfirmation> getEngineerConfirmations(Long engineerUserId, Integer year) {
+    public List<LmsConfirmationResponseDto> getEngineerConfirmations(Long engineerUserId, Integer year) {
+        List<LmsConfirmation> confirmations;
         if (year != null) {
-            return lmsConfirmationRepository.findByUserIdAndYear(engineerUserId, year);
+            confirmations = lmsConfirmationRepository.findByUserIdAndYear(engineerUserId, year);
+        } else {
+            confirmations = lmsConfirmationRepository.findAllByUserIdWithContent(engineerUserId);
         }
-        return lmsConfirmationRepository.findAllByUserIdWithContent(engineerUserId);
+        return confirmations.stream()
+                .map(LmsConfirmationResponseDto::from)
+                .toList();
     }
 
 
