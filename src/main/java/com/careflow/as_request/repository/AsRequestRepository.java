@@ -76,4 +76,15 @@ public interface AsRequestRepository extends JpaRepository<AsRequest, Long> {
             @Param("startOfDay") LocalDateTime startOfDay,
             @Param("endOfDay") LocalDateTime endOfDay,
             @Param("status") AsStatus status);
+
+    // 특정 고객이 특정 대행사로 접수한 A/S 요청 전체 이력 — 상태 필터 없음(취소/완료 포함 전체)
+    // GET /api/agency/customers/{userId}/as-requests 용 — appliance·symptom·visitRegion JOIN FETCH로 N+1 방지
+    @Query("SELECT r FROM AsRequest r " +
+           "JOIN FETCH r.appliance " +
+           "JOIN FETCH r.symptom " +
+           "JOIN FETCH r.visitRegion " +
+           "WHERE r.customer.id = :customerId AND r.agency.id = :agencyId " +
+           "ORDER BY r.createdAt DESC")
+    List<AsRequest> findByCustomerIdAndAgencyId(
+            @Param("customerId") Long customerId, @Param("agencyId") Long agencyId);
 }

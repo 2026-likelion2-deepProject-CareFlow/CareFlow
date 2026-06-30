@@ -123,4 +123,10 @@ public interface AsAssignmentRepository extends JpaRepository<AsAssignment, Long
             @Param("agencyId") Long agencyId,
             @Param("date") LocalDate date,
             @Param("status") String status);
+
+    // 대행사 소속 기사에게 COMPLETED 서비스를 1회 이상 받은 고객 user_id DISTINCT 목록
+    // GET /api/agency/customers (고객 관리 목록 모수 산정용)
+    @Query("SELECT DISTINCT a.asRequest.customer.id FROM AsAssignment a " +
+           "WHERE a.agency.id = :agencyId AND a.status = 'COMPLETED'")
+    List<Long> findDistinctCompletedCustomerIdsByAgencyId(@Param("agencyId") Long agencyId);
 }
