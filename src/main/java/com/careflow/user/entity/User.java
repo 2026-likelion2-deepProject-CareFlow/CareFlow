@@ -87,4 +87,16 @@ public class User {
     public void updateLastLogin() {
         this.lastLoginAt = LocalDateTime.now();
     }
+
+    /**
+     * 사용자 프로필 수정 — null 필드는 기존 값 유지 (PATCH 의미론)
+     * region은 이미 조회된 Regions 엔티티를 받아 처리
+     */
+    public void updateProfile(String name, String phone, Regions region, String addressDetail) {
+        if (name != null) this.name = name;
+        if (phone != null) this.phone = phone;
+        if (region != null) this.regionId = region;
+        if (addressDetail != null) this.addressDetail = addressDetail;
+        this.updatedAt = LocalDateTime.now();
+    }
 }

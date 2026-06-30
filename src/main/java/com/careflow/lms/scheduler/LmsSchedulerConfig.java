@@ -3,6 +3,7 @@ package com.careflow.lms.scheduler;
 
 import lombok.RequiredArgsConstructor;
 import org.quartz.*;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -28,7 +29,7 @@ public class LmsSchedulerConfig {
      *       초 분 시 일 월 요일 연도
      */
     @Bean
-    public Trigger lmsResetTrigger(JobDetail lmsResetJobDetail) {
+    public Trigger lmsResetTrigger(@Qualifier("lmsResetDetail") JobDetail lmsResetJobDetail) {
         return TriggerBuilder.newTrigger()
                 .forJob(lmsResetJobDetail)
                 .withIdentity("lmsResetTrigger", "lms")

@@ -157,7 +157,7 @@ public class LmsController {
      */
     @GetMapping("/admin/engineers/{engineerUserId}/confirmations")
     @PreAuthorize("hasAnyRole('ADMIN','AGENCY')")
-    public ResponseEntity<List<LmsConfirmation>> getEngineerConfirmations(
+    public ResponseEntity<List<LmsConfirmationResponseDto>> getEngineerConfirmations(
             @PathVariable Long engineerUserId,
             @RequestParam(required = false) Integer year
     ) {
