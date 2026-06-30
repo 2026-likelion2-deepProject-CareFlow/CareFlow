@@ -72,7 +72,7 @@ class AgencyStatisticsControllerTest {
         @DisplayName("성공: AGENCY 인증 + 유효 날짜 → 200 + 응답 JSON 필드 존재")
         void success() throws Exception {
             AgencyStatisticsSummaryResponse stub = new AgencyStatisticsSummaryResponse(
-                    100, 10.0, 80, 8.0, 80.0, 2.0, 2.4, -0.3, 4.8, 0.2, 5000000L, 12.0);
+                    100, 80, 80.0, 2.4, 4.8, 5000000L, 10.0, 8.0, 0.2, 12.0);
             given(statisticsService.getSummary(eq(10L), any())).willReturn(stub);
 
             mockMvc.perform(get("/api/agency/statistics/summary")
@@ -80,7 +80,7 @@ class AgencyStatisticsControllerTest {
                             .param("dateTo", "2024-06-18")
                             .with(user(agencyUser())))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.totalReceipts").value(100))
+                    .andExpect(jsonPath("$.totalReceiptCount").value(100))
                     .andExpect(jsonPath("$.completedCount").value(80))
                     .andExpect(jsonPath("$.avgRating").value(4.8));
         }
@@ -125,7 +125,7 @@ class AgencyStatisticsControllerTest {
         @DisplayName("성공: AGENCY 인증 + 유효 날짜 → 200 + JSON 배열")
         void success() throws Exception {
             given(statisticsService.getDailyTrend(eq(10L), any()))
-                    .willReturn(List.of(new AgencyStatisticsDailyTrendResponse("06.01", 38, 32)));
+                    .willReturn(List.of(new AgencyStatisticsDailyTrendResponse("2024-06-01", 38, 32)));
 
             mockMvc.perform(get("/api/agency/statistics/daily-trend")
                             .param("dateFrom", "2024-06-01")
@@ -166,14 +166,14 @@ class AgencyStatisticsControllerTest {
         @DisplayName("성공: AGENCY 인증 + 유효 날짜 → 200 + 8개 슬롯")
         void success() throws Exception {
             List<AgencyStatisticsHourlyResponse> stub = List.of(
-                    new AgencyStatisticsHourlyResponse("00-03시", 5),
-                    new AgencyStatisticsHourlyResponse("03-06시", 12),
-                    new AgencyStatisticsHourlyResponse("06-09시", 65),
-                    new AgencyStatisticsHourlyResponse("09-12시", 98),
-                    new AgencyStatisticsHourlyResponse("12-15시", 110),
-                    new AgencyStatisticsHourlyResponse("15-18시", 85),
-                    new AgencyStatisticsHourlyResponse("18-21시", 45),
-                    new AgencyStatisticsHourlyResponse("21-24시", 8)
+                    new AgencyStatisticsHourlyResponse("00-03", 5),
+                    new AgencyStatisticsHourlyResponse("03-06", 12),
+                    new AgencyStatisticsHourlyResponse("06-09", 65),
+                    new AgencyStatisticsHourlyResponse("09-12", 98),
+                    new AgencyStatisticsHourlyResponse("12-15", 110),
+                    new AgencyStatisticsHourlyResponse("15-18", 85),
+                    new AgencyStatisticsHourlyResponse("18-21", 45),
+                    new AgencyStatisticsHourlyResponse("21-24", 8)
             );
             given(statisticsService.getHourly(eq(10L), any())).willReturn(stub);
 
@@ -237,14 +237,14 @@ class AgencyStatisticsControllerTest {
         @DisplayName("성공: AGENCY 인증 + 유효 날짜 → 200 + JSON 배열")
         void success() throws Exception {
             given(statisticsService.getStatusCount(eq(10L), any()))
-                    .willReturn(List.of(new AgencyStatisticsStatusCountResponse("접수", 10, 100.0)));
+                    .willReturn(List.of(new AgencyStatisticsStatusCountResponse("PENDING", 10, 100.0)));
 
             mockMvc.perform(get("/api/agency/statistics/status-count")
                             .param("dateFrom", "2024-06-01")
                             .param("dateTo", "2024-06-18")
                             .with(user(agencyUser())))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$[0].statusLabel").value("접수"));
+                    .andExpect(jsonPath("$[0].status").value("PENDING"));
         }
 
         @Test
@@ -297,19 +297,21 @@ class AgencyStatisticsControllerTest {
     class MonthlySummary {
 
         @Test
-        @DisplayName("성공: AGENCY 인증 → 200 + 4개 필드 존재")
+        @DisplayName("성공: AGENCY 인증 → 200 + 6개 필드 존재")
         void success() throws Exception {
             AgencyStatisticsMonthlySummaryResponse stub = new AgencyStatisticsMonthlySummaryResponse(
-                    "금요일 (212건)", "10-11시 (186건)", "김현수 기사 (4.9)", 86.3);
+                    "금요일", 212, "10-11시", 186, "김현수", 4.9);
             given(statisticsService.getMonthlySummary(10L)).willReturn(stub);
 
             mockMvc.perform(get("/api/agency/statistics/monthly-summary")
                             .with(user(agencyUser())))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.topDayOfWeek").value("금요일 (212건)"))
-                    .andExpect(jsonPath("$.topHourSlot").exists())
-                    .andExpect(jsonPath("$.topRatedEngineerName").exists())
-                    .andExpect(jsonPath("$.customerSatisfactionRate").exists());
+                    .andExpect(jsonPath("$.topReceiptDayOfWeek").value("금요일"))
+                    .andExpect(jsonPath("$.topReceiptDayCount").value(212))
+                    .andExpect(jsonPath("$.topReceiptHour").value("10-11시"))
+                    .andExpect(jsonPath("$.topReceiptHourCount").value(186))
+                    .andExpect(jsonPath("$.topRatingEngineerName").value("김현수"))
+                    .andExpect(jsonPath("$.topRatingEngineerScore").value(4.9));
         }
 
         @Test

@@ -1,7 +1,7 @@
 package com.careflow.agency.dto.response;
 
 public record AgencyStatisticsStatusCountResponse(
-        String statusLabel,
+        String status,
         long count,
         double percentage
 ) {}
