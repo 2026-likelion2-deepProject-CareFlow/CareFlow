@@ -277,24 +277,4 @@ public class AgencyStatisticsQueryRepository {
                 .getResultList();
         return rows.isEmpty() ? null : rows.get(0);
     }
-
-    /**
-     * 고객 만족도: 평점 4점 이상 리뷰 수 / 전체 리뷰 수
-     * 반환: Object[] { Long satisfiedCount, Long totalCount }
-     */
-    public Object[] findSatisfactionStats(Long agencyId, LocalDateTime from, LocalDateTime to) {
-        @SuppressWarnings("unchecked")
-        List<Object[]> rows = em.createNativeQuery(
-                "SELECT COUNT(CASE WHEN r.rating >= 4 THEN 1 END) AS satisfied, " +
-                "       COUNT(*) AS total " +
-                "FROM reviews r " +
-                "JOIN as_requests ar ON r.request_id = ar.request_id " +
-                "WHERE ar.agency_id = :agencyId AND r.is_visible = 1 " +
-                "AND r.created_at >= :from AND r.created_at < :to")
-                .setParameter("agencyId", agencyId)
-                .setParameter("from", from)
-                .setParameter("to", to)
-                .getResultList();
-        return rows.isEmpty() ? null : rows.get(0);
-    }
 }

@@ -178,7 +178,7 @@ class AgencyStatisticsIntegrationTest {
                             .param("dateTo", "2024-06-30")
                             .with(user(agencyPrincipal())))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.totalReceipts").value(3))
+                    .andExpect(jsonPath("$.totalReceiptCount").value(3))
                     .andExpect(jsonPath("$.completedCount").value(2));
         }
 
@@ -190,7 +190,7 @@ class AgencyStatisticsIntegrationTest {
                             .param("dateTo", "2020-01-31")
                             .with(user(agencyPrincipal())))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.totalReceipts").value(0))
+                    .andExpect(jsonPath("$.totalReceiptCount").value(0))
                     .andExpect(jsonPath("$.completedCount").value(0));
         }
 
@@ -213,7 +213,7 @@ class AgencyStatisticsIntegrationTest {
                             .param("dateTo", "2024-06-30")
                             .with(user(agencyPrincipal())))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.totalReceipts").value(0));
+                    .andExpect(jsonPath("$.totalReceiptCount").value(0));
         }
     }
 
@@ -243,9 +243,9 @@ class AgencyStatisticsIntegrationTest {
                             .with(user(agencyPrincipal())))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.length()").value(2))
-                    .andExpect(jsonPath("$[0].date").value("06.01"))
+                    .andExpect(jsonPath("$[0].date").value("2024-06-01"))
                     .andExpect(jsonPath("$[0].receiptCount").value(1))
-                    .andExpect(jsonPath("$[1].date").value("06.02"))
+                    .andExpect(jsonPath("$[1].date").value("2024-06-02"))
                     .andExpect(jsonPath("$[1].receiptCount").value(2));
         }
 
@@ -302,11 +302,11 @@ class AgencyStatisticsIntegrationTest {
                             .with(user(agencyPrincipal())))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.length()").value(8))
-                    .andExpect(jsonPath("$[3].timeSlot").value("09-12시"))
+                    .andExpect(jsonPath("$[3].timeRange").value("09-12"))
                     .andExpect(jsonPath("$[3].count").value(1))
-                    .andExpect(jsonPath("$[4].timeSlot").value("12-15시"))
+                    .andExpect(jsonPath("$[4].timeRange").value("12-15"))
                     .andExpect(jsonPath("$[4].count").value(1))
-                    .andExpect(jsonPath("$[6].timeSlot").value("18-21시"))
+                    .andExpect(jsonPath("$[6].timeRange").value("18-21"))
                     .andExpect(jsonPath("$[6].count").value(1))
                     .andExpect(jsonPath("$[0].count").value(0));
         }
@@ -409,15 +409,16 @@ class AgencyStatisticsIntegrationTest {
                             .param("dateTo", "2024-06-30")
                             .with(user(agencyPrincipal())))
                     .andExpect(status().isOk())
-                    // 총 4건
-                    .andExpect(jsonPath("$[0].statusLabel").value("접수"))
-                    .andExpect(jsonPath("$[0].count").value(4))
-                    // 작업 완료 1건
-                    .andExpect(jsonPath("$[3].statusLabel").value("작업 완료"))
-                    .andExpect(jsonPath("$[3].count").value(1))
-                    // 취소 1건
-                    .andExpect(jsonPath("$[4].statusLabel").value("취소"))
-                    .andExpect(jsonPath("$[4].count").value(1));
+                    // AsStatus enum 순서: PENDING(0), AGENCY_RECEIVED(1) ... COMPLETED(7) ... CANCELLED(9)
+                    // saveRequest()는 assignAgency() 호출로 AGENCY_RECEIVED 상태가 됨 (r1, r2 → 2건)
+                    .andExpect(jsonPath("$[1].status").value("AGENCY_RECEIVED"))
+                    .andExpect(jsonPath("$[1].count").value(2))
+                    // COMPLETED 1건 (r3)
+                    .andExpect(jsonPath("$[7].status").value("COMPLETED"))
+                    .andExpect(jsonPath("$[7].count").value(1))
+                    // CANCELLED 1건 (r4)
+                    .andExpect(jsonPath("$[9].status").value("CANCELLED"))
+                    .andExpect(jsonPath("$[9].count").value(1));
         }
     }
 
@@ -489,20 +490,22 @@ class AgencyStatisticsIntegrationTest {
     class MonthlySummary {
 
         @Test
-        @DisplayName("H2: 데이터 없음 → 모든 필드 기본값(데이터 없음 / 0.0)")
+        @DisplayName("H2: 데이터 없음 → 모든 필드 기본값(데이터 없음 / 0건 / 0.0)")
         void noData() throws Exception {
             mockMvc.perform(get("/api/agency/statistics/monthly-summary")
                             .with(user(agencyPrincipal())))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.topDayOfWeek").value("데이터 없음"))
-                    .andExpect(jsonPath("$.topHourSlot").value("데이터 없음"))
-                    .andExpect(jsonPath("$.topRatedEngineerName").value("데이터 없음"))
-                    .andExpect(jsonPath("$.customerSatisfactionRate").value(0.0));
+                    .andExpect(jsonPath("$.topReceiptDayOfWeek").value("데이터 없음"))
+                    .andExpect(jsonPath("$.topReceiptDayCount").value(0))
+                    .andExpect(jsonPath("$.topReceiptHour").value("데이터 없음"))
+                    .andExpect(jsonPath("$.topReceiptHourCount").value(0))
+                    .andExpect(jsonPath("$.topRatingEngineerName").value("데이터 없음"))
+                    .andExpect(jsonPath("$.topRatingEngineerScore").value(0.0));
         }
 
         @Test
-        @DisplayName("H2: 리뷰 5건 중 4건이 4점 이상 → satisfactionRate=80.0")
-        void satisfactionRate() throws Exception {
+        @DisplayName("H2: 리뷰 5건(4점x4, 2점x1) → 최고 평점 기사 평균 3.6")
+        void topRatingEngineer() throws Exception {
             Appliance appliance = saveAppliance();
 
             // 이번 달 as_request 5건 생성 후 리뷰 작성
@@ -514,7 +517,7 @@ class AgencyStatisticsIntegrationTest {
                 req.assignAgency(agency);
                 AsRequest saved = asRequestRepository.save(req);
 
-                // 리뷰: 4건 4점, 1건 2점
+                // 리뷰: 4건 4점, 1건 2점 → 평균 3.6
                 int rating = (i < 4) ? 4 : 2;
                 Review review = Review.create(saved, customerUser, engineerUser, rating, "테스트 리뷰");
                 reviewRepository.save(review);
@@ -523,7 +526,8 @@ class AgencyStatisticsIntegrationTest {
             mockMvc.perform(get("/api/agency/statistics/monthly-summary")
                             .with(user(agencyPrincipal())))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.customerSatisfactionRate").value(80.0));
+                    .andExpect(jsonPath("$.topRatingEngineerName").value("기사"))
+                    .andExpect(jsonPath("$.topRatingEngineerScore").value(3.6));
         }
     }
 }

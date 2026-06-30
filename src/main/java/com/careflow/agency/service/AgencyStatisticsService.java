@@ -58,18 +58,16 @@ public class AgencyStatisticsService {
         double prevRatingVal      = prevAvgRating == null  ? 0.0 : round1(prevAvgRating);
 
         return new AgencyStatisticsSummaryResponse(
-                totalReceipts,
-                changeRate(totalReceipts, prevReceipts),
-                completedCount,
-                changeRate(completedCount, prevCompleted),
-                completionRate,
-                round1(completionRate - prevCompletionRate),
-                avgProcessingTimeHours,
-                round1(avgProcessingTimeHours - prevAvgHours),
-                avgRatingVal,
-                round1(avgRatingVal - prevRatingVal),
-                totalSettlementAmount,
-                changeRate(totalSettlementAmount, prevSettlement)
+                totalReceipts,                                  // totalReceiptCount
+                completedCount,                                 // completedCount
+                completionRate,                                 // completionRate
+                avgProcessingTimeHours,                         // avgProcessingHours
+                avgRatingVal,                                   // avgRating
+                totalSettlementAmount,                          // totalSettlementAmount
+                changeRate(totalReceipts, prevReceipts),        // prevMonthReceiptDiff
+                changeRate(completedCount, prevCompleted),      // prevMonthCompletedDiff
+                round1(avgRatingVal - prevRatingVal),           // prevMonthRatingDiff (절대 차이)
+                changeRate(totalSettlementAmount, prevSettlement) // prevMonthAmountDiff
         );
     }
 
@@ -86,7 +84,7 @@ public class AgencyStatisticsService {
 
         List<Object[]> rows = statsRepo.findDailyTrend(agencyId, from, to);
         List<AgencyStatisticsDailyTrendResponse> result = new ArrayList<>();
-        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("MM.dd");
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd");
 
         for (Object[] row : rows) {
             // row[0]: java.sql.Date or String depending on driver
@@ -121,7 +119,7 @@ public class AgencyStatisticsService {
             }
         }
 
-        String[] labels = {"00-03시","03-06시","06-09시","09-12시","12-15시","15-18시","18-21시","21-24시"};
+        String[] labels = {"00-03","03-06","06-09","09-12","12-15","15-18","18-21","21-24"};
         List<AgencyStatisticsHourlyResponse> result = new ArrayList<>(8);
         for (int i = 0; i < 8; i++) {
             result.add(new AgencyStatisticsHourlyResponse(labels[i], slotCounts[i]));
@@ -176,18 +174,12 @@ public class AgencyStatisticsService {
 
         long total = countMap.values().stream().mapToLong(Long::longValue).sum();
 
-        // 배차 완료 이상 상태 합산
-        long assigned = sum(countMap, "ASSIGNED","ACCEPTED","ENGINEER_DEPARTED","ENGINEER_ARRIVED","IN_PROGRESS","COMPLETED","PAID");
-        long inProgress = countMap.getOrDefault("IN_PROGRESS", 0L);
-        long completed  = sum(countMap, "COMPLETED","PAID");
-        long cancelled  = countMap.getOrDefault("CANCELLED", 0L);
-
+        // AsStatus enum 코드값 기준으로 건수/비율 집계
         List<AgencyStatisticsStatusCountResponse> result = new ArrayList<>();
-        result.add(new AgencyStatisticsStatusCountResponse("접수",      total,      total == 0 ? 0.0 : 100.0));
-        result.add(new AgencyStatisticsStatusCountResponse("배차 완료", assigned,   pct(assigned, total)));
-        result.add(new AgencyStatisticsStatusCountResponse("작업 중",   inProgress, pct(inProgress, total)));
-        result.add(new AgencyStatisticsStatusCountResponse("작업 완료", completed,  pct(completed, total)));
-        result.add(new AgencyStatisticsStatusCountResponse("취소",      cancelled,  pct(cancelled, total)));
+        for (com.careflow.common.enums.AsStatus status : com.careflow.common.enums.AsStatus.values()) {
+            long count = countMap.getOrDefault(status.name(), 0L);
+            result.add(new AgencyStatisticsStatusCountResponse(status.name(), count, pct(count, total)));
+        }
         return result;
     }
 
@@ -227,25 +219,26 @@ public class AgencyStatisticsService {
 
         // 최다 접수 요일
         Object[] topDay = statsRepo.findTopDayOfWeek(agencyId, from, to);
-        String topDayOfWeek = formatTopDay(topDay);
+        String topReceiptDayOfWeek = topDayName(topDay);
+        long topReceiptDayCount    = topDay == null ? 0L : ((Number) topDay[1]).longValue();
 
         // 최다 접수 시간대
         Object[] topHour = statsRepo.findTopHourSlot(agencyId, from, to);
-        String topHourSlot = formatTopHour(topHour);
+        String topReceiptHour      = topHourLabel(topHour);
+        long topReceiptHourCount   = topHour == null ? 0L : ((Number) topHour[1]).longValue();
 
         // 최고 평점 기사
         Object[] topEngineer = statsRepo.findTopRatedEngineer(agencyId, from, to);
-        String topRatedEngineerName = formatTopEngineer(topEngineer);
-
-        // 고객 만족도
-        Object[] satisfaction = statsRepo.findSatisfactionStats(agencyId, from, to);
-        double satisfactionRate = calcSatisfactionRate(satisfaction);
+        String topRatingEngineerName = topEngineer == null ? "데이터 없음" : (String) topEngineer[0];
+        double topRatingEngineerScore = topEngineer == null ? 0.0 : round1(((Number) topEngineer[1]).doubleValue());
 
         return new AgencyStatisticsMonthlySummaryResponse(
-                topDayOfWeek,
-                topHourSlot,
-                topRatedEngineerName,
-                satisfactionRate
+                topReceiptDayOfWeek,
+                topReceiptDayCount,
+                topReceiptHour,
+                topReceiptHourCount,
+                topRatingEngineerName,
+                topRatingEngineerScore
         );
     }
 
@@ -275,41 +268,17 @@ public class AgencyStatisticsService {
         return total == 0 ? 0.0 : round1((double) part / total * 100);
     }
 
-    /** 여러 status key 합산 */
-    private long sum(java.util.Map<String, Long> map, String... keys) {
-        long total = 0;
-        for (String key : keys) total += map.getOrDefault(key, 0L);
-        return total;
-    }
-
     private static final String[] DAY_NAMES = {"","일요일","월요일","화요일","수요일","목요일","금요일","토요일"};
 
-    private String formatTopDay(Object[] row) {
+    private String topDayName(Object[] row) {
         if (row == null) return "데이터 없음";
-        int dow   = ((Number) row[0]).intValue();      // 1=일, ..., 7=토
-        long cnt  = ((Number) row[1]).longValue();
-        String name = (dow >= 1 && dow <= 7) ? DAY_NAMES[dow] : "알 수 없음";
-        return name + " (" + cnt + "건)";
+        int dow = ((Number) row[0]).intValue();      // 1=일, ..., 7=토
+        return (dow >= 1 && dow <= 7) ? DAY_NAMES[dow] : "알 수 없음";
     }
 
-    private String formatTopHour(Object[] row) {
+    private String topHourLabel(Object[] row) {
         if (row == null) return "데이터 없음";
-        int hr   = ((Number) row[0]).intValue();
-        long cnt = ((Number) row[1]).longValue();
-        return String.format("%02d-%02d시 (%d건)", hr, hr + 1, cnt);
-    }
-
-    private String formatTopEngineer(Object[] row) {
-        if (row == null) return "데이터 없음";
-        String name   = (String) row[0];
-        double rating = round1(((Number) row[1]).doubleValue());
-        return name + " 기사 (" + rating + ")";
-    }
-
-    private double calcSatisfactionRate(Object[] row) {
-        if (row == null) return 0.0;
-        long satisfied = ((Number) row[0]).longValue();
-        long total     = ((Number) row[1]).longValue();
-        return total == 0 ? 0.0 : round1((double) satisfied / total * 100);
+        int hr = ((Number) row[0]).intValue();
+        return String.format("%02d-%02d시", hr, hr + 1);
     }
 }
