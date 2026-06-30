@@ -72,7 +72,7 @@ public class AsRequestController {
      * 고객용: A/S 취소 API
      * PENDING 또는 AGENCY_RECEIVED 상태일 때만 취소 가능
      */
-    @PutMapping("/{asRequestId}/cancel")
+    @PatchMapping("/{asRequestId}/cancel")
     public ResponseEntity<Void> cancelAsRequest(
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @PathVariable Long asRequestId,
