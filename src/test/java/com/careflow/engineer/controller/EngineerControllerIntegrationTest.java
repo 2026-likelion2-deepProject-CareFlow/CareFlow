@@ -68,13 +68,13 @@ class EngineerControllerIntegrationTest {
     }
 
     // ─────────────────────────────────────────────
-    //  POST /api/engineers/signup
+    //  POST /api/engineer/signup
     // ─────────────────────────────────────────────
 
     @Test
     @DisplayName("성공: APPROVED 대행사에 계정 요청 → account_requests 에 ENGINEER 역할 데이터 저장")
     void signup_approvedAgency_dbUpdated() throws Exception {
-        mockMvc.perform(post("/api/engineers/signup")
+        mockMvc.perform(post("/api/engineer/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request("engineer@test.com", "BIZ-APPROVED"))))
                 .andExpect(status().isCreated());
@@ -90,7 +90,7 @@ class EngineerControllerIntegrationTest {
     @Test
     @DisplayName("실패: 존재하지 않는 사업자 등록번호 — 404 Not Found")
     void signup_unknownBizNumber_404() throws Exception {
-        mockMvc.perform(post("/api/engineers/signup")
+        mockMvc.perform(post("/api/engineer/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request("engineer@test.com", "BIZ-UNKNOWN"))))
                 .andExpect(status().isNotFound());
@@ -104,7 +104,7 @@ class EngineerControllerIntegrationTest {
                 .agencyAddress("서울").agencyFeeRate(5.0)
                 .approvalStatus(AgencyStatus.PENDING).build());
 
-        mockMvc.perform(post("/api/engineers/signup")
+        mockMvc.perform(post("/api/engineer/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request("engineer2@test.com", "BIZ-PENDING"))))
                 .andExpect(status().isForbidden());
@@ -120,7 +120,7 @@ class EngineerControllerIntegrationTest {
                 .agencyAddress("서울").agencyFeeRate(5.0)
                 .approvalStatus(AgencyStatus.REJECTED).build());
 
-        mockMvc.perform(post("/api/engineers/signup")
+        mockMvc.perform(post("/api/engineer/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request("engineer3@test.com", "BIZ-REJECTED"))))
                 .andExpect(status().isForbidden());
@@ -135,7 +135,7 @@ class EngineerControllerIntegrationTest {
                 .email("duplicate@test.com").passwordHash("hashed")
                 .name("기존회원").role(Role.ENGINEER).build());
 
-        mockMvc.perform(post("/api/engineers/signup")
+        mockMvc.perform(post("/api/engineer/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request("duplicate@test.com", "BIZ-APPROVED"))))
                 .andExpect(status().isBadRequest());
@@ -149,7 +149,7 @@ class EngineerControllerIntegrationTest {
                 approvedAgency, "dup-req@test.com", "hashed", "홍길동",
                 "010-1111-2222", AccountRequestsRole.ENGINEER, "상세주소", region));
 
-        mockMvc.perform(post("/api/engineers/signup")
+        mockMvc.perform(post("/api/engineer/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(request("dup-req@test.com", "BIZ-APPROVED"))))
                 .andExpect(status().isBadRequest());
@@ -163,7 +163,7 @@ class EngineerControllerIntegrationTest {
                 "존재하지않는지역", "상세주소 101호", "BIZ-APPROVED"
         );
 
-        mockMvc.perform(post("/api/engineers/signup")
+        mockMvc.perform(post("/api/engineer/signup")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content(objectMapper.writeValueAsString(badRegion)))
                 .andExpect(status().isNotFound());
