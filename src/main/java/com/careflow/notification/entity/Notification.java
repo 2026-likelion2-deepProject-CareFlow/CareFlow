@@ -45,6 +45,11 @@ public class Notification {
             columnDefinition = "ENUM('SSE','PUSH','SMS','KAKAO') DEFAULT 'SSE'")
     private String channel;
 
+    // columnDefinition 삭제하지 말아주세요(H2 DB 테스트에 필요)
+    @Column(name = "is_read", nullable = false,
+            columnDefinition = "TINYINT(1) NOT NULL DEFAULT 0")
+    private boolean isRead = false;
+
     @Column(name = "created_at", nullable = false, updatable = false,
             columnDefinition = "DATETIME DEFAULT CURRENT_TIMESTAMP")
     private LocalDateTime createdAt = LocalDateTime.now();
@@ -56,6 +61,12 @@ public class Notification {
         this.title   = title;
         this.body    = body;
         this.channel = (channel != null) ? channel : "SSE";
+        this.isRead  = false;
+    }
+
+    // 알림 읽음 처리 — Setter 대신 명시적 도메인 메서드로 상태 변경
+    public void markAsRead() {
+        this.isRead = true;
     }
 
     public static Notification createAsStatusNotification(User recipient, String title, String body) {
