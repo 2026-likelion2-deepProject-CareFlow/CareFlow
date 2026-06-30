@@ -20,6 +20,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.Duration;
+import java.util.Date;
 import java.util.NoSuchElementException;
 import java.util.UUID;
 
@@ -29,6 +30,7 @@ public class AuthService {
 
     private static final String REFRESH_KEY_PREFIX = "refresh:token:";
     private static final String OAUTH2_EXCHANGE_PREFIX = "oauth2:exchange:";
+    public static final String BLACKLIST_KEY_PREFIX = "blacklist:access:";
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
@@ -178,6 +180,27 @@ public class AuthService {
                 .tokenType("Bearer")
                 .expiresIn(jwtProvider.getAccessTokenExpiration())
                 .build();
+    }
+
+    /**
+     * 로그아웃 처리
+     * 1. refresh token → Redis에서 삭제 (재발급 원천 차단)
+     * 2. access token → Redis 블랙리스트 등록 (남은 만료 시간만큼 TTL 설정)
+     */
+    public void logout(Long userId, String accessToken) {
+        // refresh token 삭제
+        redisTemplate.delete(REFRESH_KEY_PREFIX + userId);
+
+        // access token 블랙리스트 등록 — 만료 전까지만 유효하면 되므로 남은 TTL 계산
+        Date expiration = jwtProvider.getClaims(accessToken).getExpiration();
+        long remainingMs = expiration.getTime() - System.currentTimeMillis();
+        if (remainingMs > 0) {
+            redisTemplate.opsForValue().set(
+                    BLACKLIST_KEY_PREFIX + accessToken,
+                    "1",
+                    Duration.ofMillis(remainingMs)
+            );
+        }
     }
 
     /**

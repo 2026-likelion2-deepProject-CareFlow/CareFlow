@@ -76,6 +76,7 @@ public class SecurityConfig {
                         .requestMatchers("/api/agencies/signup").permitAll()
                         .requestMatchers("/api/agencies/agency").permitAll()
                         .requestMatchers("/api/engineer/signup").permitAll()
+                        .requestMatchers("/api/auth/logout").authenticated() // 로그아웃은 인증 필수
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
                         // 대행사 설정 — AGENCY 역할만 접근 가능

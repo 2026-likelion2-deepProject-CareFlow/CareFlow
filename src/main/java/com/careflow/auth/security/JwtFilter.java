@@ -1,10 +1,12 @@
 package com.careflow.auth.security;
 
+import com.careflow.auth.service.AuthService;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Component;
@@ -17,6 +19,7 @@ import java.io.IOException;
 public class JwtFilter extends OncePerRequestFilter {
 
     private final JwtProvider jwtProvider;
+    private final StringRedisTemplate redisTemplate;
 
     @Override
     protected void doFilterInternal(HttpServletRequest request, HttpServletResponse response, FilterChain filterChain)
@@ -24,7 +27,9 @@ public class JwtFilter extends OncePerRequestFilter {
 
         String token = resolveToken(request);
 
-        if (token != null && jwtProvider.validateToken(token)) {
+        // 블랙리스트에 등록된 토큰(로그아웃된 access token)은 인증 거부
+        if (token != null && jwtProvider.validateToken(token)
+                && !Boolean.TRUE.equals(redisTemplate.hasKey(AuthService.BLACKLIST_KEY_PREFIX + token))) {
             Long userId = jwtProvider.getUserId(token);
             String email = jwtProvider.getEmail(token);
             String role = jwtProvider.getRole(token);
