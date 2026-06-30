@@ -384,7 +384,7 @@ class AsRequestControllerIntegrationTest {
         void cancel_pending_success() throws Exception {
             AsRequest req = saveAsRequest(AsStatus.PENDING);
 
-            mockMvc.perform(put("/api/as-requests/" + req.getId() + "/cancel")
+            mockMvc.perform(patch("/api/as-requests/" + req.getId() + "/cancel")
                             .header("Authorization", "Bearer " + customerToken)
                             .param("cancelReason", "단순 변심"))
                     .andExpect(status().isOk());
@@ -400,7 +400,7 @@ class AsRequestControllerIntegrationTest {
         void cancel_assigned_403() throws Exception {
             AsRequest req = saveAsRequest(AsStatus.ASSIGNED);
 
-            mockMvc.perform(put("/api/as-requests/" + req.getId() + "/cancel")
+            mockMvc.perform(patch("/api/as-requests/" + req.getId() + "/cancel")
                             .header("Authorization", "Bearer " + customerToken))
                     .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.success").value(false))
@@ -424,7 +424,7 @@ class AsRequestControllerIntegrationTest {
                     .scheduledDate(SCHEDULED_DATE).scheduledTime("14:00").build());
 
             // 현재 로그인 고객(customer)이 타인의 요청을 취소 시도
-            mockMvc.perform(put("/api/as-requests/" + otherReq.getId() + "/cancel")
+            mockMvc.perform(patch("/api/as-requests/" + otherReq.getId() + "/cancel")
                             .header("Authorization", "Bearer " + customerToken))
                     .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.success").value(false));
@@ -437,7 +437,7 @@ class AsRequestControllerIntegrationTest {
         @Test
         @DisplayName("실패: 존재하지 않는 requestId → 400 Bad Request")
         void cancel_notFound_400() throws Exception {
-            mockMvc.perform(put("/api/as-requests/999999/cancel")
+            mockMvc.perform(patch("/api/as-requests/999999/cancel")
                             .header("Authorization", "Bearer " + customerToken))
                     .andExpect(status().isBadRequest())
                     .andExpect(jsonPath("$.success").value(false))

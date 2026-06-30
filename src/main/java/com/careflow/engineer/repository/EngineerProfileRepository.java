@@ -231,4 +231,24 @@ public interface EngineerProfileRepository extends JpaRepository<EngineerProfile
     WHERE ep.user.agency.id = :agencyId
     """)
     List<EngineerProfile> findByAgencyId(@Param("agencyId") Long agencyId);
+
+    /**
+     * 고객용 수동 배정 - 후보 기사 조회 (대행사 제한 없음, 전체 소속 기사 대상)
+     * 서비스 지역 + LMS 이수 완료 + 소속 대행사 보유를 기본 조건으로 하고,
+     * brand/skill 은 선택 필터(null 이면 미적용)
+     */
+    @Query("SELECT DISTINCT ep FROM EngineerProfile ep " +
+           "JOIN ep.user u " +
+           "JOIN EngineerServiceRegion esr ON esr.engineer = u " +
+           "WHERE esr.region.id = :regionId " +
+           "AND ep.isLmsCompleted = true " +
+           "AND u.agency IS NOT NULL " +
+           "AND (:brand IS NULL OR EXISTS (SELECT 1 FROM EngineerExpertBrand eb WHERE eb.engineer = u AND eb.brandName = :brand)) " +
+           "AND (:skill IS NULL OR ep.category.name = :skill) " +
+           "ORDER BY ep.avgRating DESC")
+    List<EngineerProfile> findAvailableForCustomer(
+            @Param("regionId") Integer regionId,
+            @Param("brand") String brand,
+            @Param("skill") String skill
+    );
 }
