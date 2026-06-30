@@ -280,6 +280,8 @@ public class LmsService {
                     return new LmsEngineerStatusDto(
                             userId,
                             profile.getUser().getName(),
+                            profile.getCategory().getCategoryId(),
+                            profile.getSkillLevel().name(),
                             totalCount,
                             completedCount,
                             profile.isLmsCompleted()
