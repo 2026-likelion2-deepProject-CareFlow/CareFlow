@@ -20,6 +20,9 @@ public interface EngineerProfileRepository extends JpaRepository<EngineerProfile
     boolean existsByUser_Id(Long userId);
     Optional<EngineerProfile> findByUser_Id(Long userId);
 
+    // 배정 목록 조회 N+1 방지 — 기사 user_id 복수 배치 조회
+    List<EngineerProfile> findByUser_IdIn(List<Long> userIds);
+
     /**
      * AUTO 배정 - Fallback 0: 스케줄 + 브랜드 + 카테고리 + 서비스 지역 (4가지 조건 모두)
      * LMS 교육 이수 완료 기사만 대상 (isLmsCompleted = true)

@@ -1,13 +1,7 @@
 package com.careflow.assignment.controller;
 
-import com.careflow.assignment.dto.AssignmentDetailResponse;
-import com.careflow.assignment.dto.AssignmentFilterResponse;
-import com.careflow.assignment.dto.AssignmentReassignResponse;
-import com.careflow.assignment.dto.AssignmentResponse;
-import com.careflow.assignment.service.AgenciesAssignmentService;
-import com.careflow.assignment.service.AssignmentDetailService;
-import com.careflow.assignment.service.AssignmentFilterService;
-import com.careflow.assignment.service.AssignmentReassignService;
+import com.careflow.assignment.dto.*;
+import com.careflow.assignment.service.*;
 import com.careflow.auth.security.CustomOAuth2UserService;
 import com.careflow.auth.security.CustomUserDetails;
 import com.careflow.auth.security.JwtProvider;
@@ -57,6 +51,16 @@ class AssignmentControllerTest {
     private AssignmentFilterService assignmentFilterService;
     @MockitoBean
     private AssignmentReassignService assignmentReassignService;
+    @MockitoBean
+    private AssignmentInProgressService assignmentInProgressService;
+    @MockitoBean
+    private AssignmentCompletedService assignmentCompletedService;
+    @MockitoBean
+    private AssignmentChangeEngineerService assignmentChangeEngineerService;
+    @MockitoBean
+    private AssignmentScheduleService assignmentScheduleService;
+    @MockitoBean
+    private AssignmentCancelService assignmentCancelService;
     @MockitoBean
     private JwtProvider jwtProvider;
     @MockitoBean

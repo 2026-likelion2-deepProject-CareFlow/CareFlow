@@ -8,6 +8,7 @@ import org.springframework.stereotype.Repository;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 
 @Repository
 public interface ReviewRepository extends JpaRepository<Review, Long> {
@@ -17,6 +18,13 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
 
     // 특정 기사가 받은 리뷰 목록 조회
     List<Review> findByEngineer_Id(Long engineerId);
+
+    // request_id 단건 조회 (완료 목록 상세용)
+    Optional<Review> findByAsRequest_Id(Long requestId);
+
+    // request_id 복수 조회 — 완료 배정 목록 N+1 방지 배치용
+    @Query("SELECT r FROM Review r WHERE r.asRequest.id IN :requestIds")
+    List<Review> findByAsRequestIdIn(@Param("requestIds") List<Long> requestIds);
 
     /**
      * 특정 기사의 공개 리뷰 목록 조회 (최신순)

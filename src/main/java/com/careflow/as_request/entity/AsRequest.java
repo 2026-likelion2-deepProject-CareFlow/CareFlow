@@ -192,4 +192,17 @@ public class AsRequest {
         this.status = AsStatus.PAID;
         this.updatedAt = LocalDateTime.now();
     }
+
+    // 대행사 관리자가 배정을 취소할 때 — ASSIGNED → AGENCY_RECEIVED(재배정 대기)로 되돌림
+    public void revertToAgencyReceived() {
+        this.status = AsStatus.AGENCY_RECEIVED;
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    // 대행사 관리자가 방문 일정을 변경할 때
+    public void updateSchedule(LocalDate scheduledDate, String scheduledTime) {
+        this.scheduledDate = scheduledDate;
+        this.scheduledTime = scheduledTime;
+        this.updatedAt = LocalDateTime.now();
+    }
 }

@@ -87,6 +87,28 @@ public interface AsAssignmentRepository extends JpaRepository<AsAssignment, Long
            "ORDER BY a.assignedAt DESC")
     List<AsAssignment> findActiveByEngineerId(@Param("engineerId") Long engineerId);
 
+    // 진행 중(ACCEPTED) 배정 목록 — as_requests·appliance·customer·engineer JOIN FETCH, N+1 방지
+    @Query("SELECT DISTINCT a FROM AsAssignment a " +
+           "JOIN FETCH a.asRequest r " +
+           "JOIN FETCH r.appliance ap " +
+           "JOIN FETCH r.customer c " +
+           "JOIN FETCH a.engineer e " +
+           "WHERE a.agency.id = :agencyId " +
+           "AND a.status = 'ACCEPTED' " +
+           "ORDER BY r.scheduledDate ASC, a.assignedAt ASC")
+    List<AsAssignment> findInProgressByAgencyId(@Param("agencyId") Long agencyId);
+
+    // 완료(COMPLETED) 배정 목록 — as_requests·appliance·customer·engineer JOIN FETCH
+    @Query("SELECT DISTINCT a FROM AsAssignment a " +
+           "JOIN FETCH a.asRequest r " +
+           "JOIN FETCH r.appliance ap " +
+           "JOIN FETCH r.customer c " +
+           "JOIN FETCH a.engineer e " +
+           "WHERE a.agency.id = :agencyId " +
+           "AND a.status = 'COMPLETED' " +
+           "ORDER BY a.assignedAt DESC")
+    List<AsAssignment> findCompletedByAgencyId(@Param("agencyId") Long agencyId);
+
     // 날짜·상태 동적 필터 조회 — 두 파라미터 모두 null 허용 (null = 해당 조건 미적용)
     // JOIN FETCH 로 as_requests·symptom·engineer 를 한 번에 로딩해 N+1 방지
     @Query("SELECT DISTINCT a FROM AsAssignment a " +

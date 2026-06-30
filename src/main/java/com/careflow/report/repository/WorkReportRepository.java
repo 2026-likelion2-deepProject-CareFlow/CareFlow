@@ -1,7 +1,7 @@
 package com.careflow.report.repository;
+
 import com.careflow.report.domain.entity.WorkReport;
 import org.springframework.data.jpa.repository.JpaRepository;
-import java.util.List;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -10,6 +10,10 @@ import java.util.Optional;
 
 public interface WorkReportRepository extends JpaRepository<WorkReport, Long> {
     boolean existsByAsRequest_Id(Long requestId);   // 해당 A/S 건에 대한 보고서가 이미 존재하는지 선검사 (중복 제출 방어용)
+
+    // request_id 복수 조회 — 완료 배정 목록 N+1 방지 배치용
+    @Query("SELECT w FROM WorkReport w WHERE w.asRequest.id IN :requestIds")
+    List<WorkReport> findByAsRequestIdIn(@Param("requestIds") List<Long> requestIds);
 
     // requestId(AsRequest PK)로 수리 보고서 단건 조회
     Optional<WorkReport> findByAsRequest_Id(Long requestId);
