@@ -67,7 +67,7 @@ class EngineerControllerTest {
     //  POST /api/engineers/signup
     // ─────────────────────────────────────────────
     @Nested
-    @DisplayName("POST /api/engineers/signup — 수리기사 계정 생성 요청")
+    @DisplayName("POST /api/engineer/signup — 수리기사 계정 생성 요청")
     class EngineerSignup {
 
         @Test
@@ -75,7 +75,7 @@ class EngineerControllerTest {
         void signup_success_201() throws Exception {
             given(engineerService.requestEngineerAccount(any())).willReturn(1L);
 
-            mockMvc.perform(post("/api/engineers/signup")
+            mockMvc.perform(post("/api/engineer/signup")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(validRequest())))
                     .andExpect(status().isCreated());
@@ -87,7 +87,7 @@ class EngineerControllerTest {
             given(engineerService.requestEngineerAccount(any()))
                     .willThrow(new NoSuchElementException("입력받은 대행사 정보가 존재하지 않습니다."));
 
-            mockMvc.perform(post("/api/engineers/signup")
+            mockMvc.perform(post("/api/engineer/signup")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(validRequest())))
                     .andExpect(status().isNotFound());
@@ -99,7 +99,7 @@ class EngineerControllerTest {
             given(engineerService.requestEngineerAccount(any()))
                     .willThrow(new IllegalStateException("아직 등록 대기중인 대행사입니다. 등록이 승인된 이후 다시 요청해주세요"));
 
-            mockMvc.perform(post("/api/engineers/signup")
+            mockMvc.perform(post("/api/engineer/signup")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(validRequest())))
                     .andExpect(status().isForbidden());
@@ -111,7 +111,7 @@ class EngineerControllerTest {
             given(engineerService.requestEngineerAccount(any()))
                     .willThrow(new IllegalStateException("등록이 거부된 대행사입니다. 관리자에게 문의해주세요."));
 
-            mockMvc.perform(post("/api/engineers/signup")
+            mockMvc.perform(post("/api/engineer/signup")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(validRequest())))
                     .andExpect(status().isForbidden());
@@ -123,7 +123,7 @@ class EngineerControllerTest {
             given(engineerService.requestEngineerAccount(any()))
                     .willThrow(new IllegalArgumentException("이미 가입된 이메일입니다."));
 
-            mockMvc.perform(post("/api/engineers/signup")
+            mockMvc.perform(post("/api/engineer/signup")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(validRequest())))
                     .andExpect(status().isBadRequest());
@@ -142,7 +142,7 @@ class EngineerControllerTest {
                     "BIZ-001"
             );
 
-            mockMvc.perform(post("/api/engineers/signup")
+            mockMvc.perform(post("/api/engineer/signup")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(invalid)))
                     .andExpect(status().isBadRequest());
@@ -161,7 +161,7 @@ class EngineerControllerTest {
                     "BIZ-001"
             );
 
-            mockMvc.perform(post("/api/engineers/signup")
+            mockMvc.perform(post("/api/engineer/signup")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(invalid)))
                     .andExpect(status().isBadRequest());
@@ -180,7 +180,7 @@ class EngineerControllerTest {
                     "BIZ-001"
             );
 
-            mockMvc.perform(post("/api/engineers/signup")
+            mockMvc.perform(post("/api/engineer/signup")
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(invalid)))
                     .andExpect(status().isBadRequest());
