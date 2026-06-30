@@ -45,9 +45,13 @@ import org.springframework.test.web.servlet.MockMvc;
 
 import java.time.LocalDate;
 
+import com.careflow.review.entity.Review;
+import com.careflow.review.repository.ReviewRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import org.springframework.http.MediaType;
+
 import static org.assertj.core.api.Assertions.assertThat;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @SpringBootTest
@@ -74,6 +78,8 @@ class AssignmentControllerIntegrationTest {
     @Autowired private WorkReportRepository workReportRepository;
     @Autowired private EngineerProfileRepository engineerProfileRepository;
     @Autowired private NotificationRepository notificationRepository;
+    @Autowired private ReviewRepository reviewRepository;
+    @Autowired private ObjectMapper objectMapper;
 
     // ── 공통 픽스처 ──
     private Agencies agency;
@@ -88,6 +94,9 @@ class AssignmentControllerIntegrationTest {
     private AsAssignment assignment;
 
     private String agencyToken;
+    // JWT의 agencyId 클레임이 채워진 토큰 — JwtFilter는 DB 재조회 없이 토큰 클레임만으로 agencyId를 신뢰하므로
+    // 대행사 소속 검증이 필요한 신규 API(진행중/완료/기사변경/일정변경/취소) 테스트에서는 이 토큰을 사용해야 함
+    private String agencyTokenWithAgencyId;
     private String customerToken;
 
     @BeforeEach
@@ -108,6 +117,8 @@ class AssignmentControllerIntegrationTest {
                 .role(Role.AGENCY).agency(agency).build());
         agencyToken = jwtProvider.generateAccessToken(
                 agencyManager.getId(), agencyManager.getEmail(), "AGENCY", null);
+        agencyTokenWithAgencyId = jwtProvider.generateAccessToken(
+                agencyManager.getId(), agencyManager.getEmail(), "AGENCY", agency.getId());
 
         // 4. 수리 기사 (대행사 소속)
         engineer = userRepository.save(User.builder()
@@ -520,6 +531,436 @@ class AssignmentControllerIntegrationTest {
         @DisplayName("실패: 인증 토큰 없음 → 401 Unauthorized")
         void reassign_noToken_401() throws Exception {
             mockMvc.perform(post("/api/agency/as-assignments/" + assignment.getId() + "/reassign"))
+                    .andExpect(status().isUnauthorized());
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    //  GET /api/agency/as-assignments/in-progress
+    // ─────────────────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("GET /api/agency/as-assignments/in-progress — 진행 중 배정 목록 조회")
+    class GetInProgress {
+
+        @Test
+        @DisplayName("성공: ACCEPTED 배정 없음 → 204 No Content")
+        void inProgress_empty_204() throws Exception {
+            // BeforeEach 의 assignment 는 WAITING 상태 → 결과 없음
+            mockMvc.perform(get("/api/agency/as-assignments/in-progress")
+                            .header("Authorization", "Bearer " + agencyTokenWithAgencyId))
+                    .andExpect(status().isNoContent());
+        }
+
+        @Test
+        @DisplayName("성공: ACCEPTED 배정 1건 → 핵심 필드 검증")
+        void inProgress_oneAssignment_200() throws Exception {
+            // WAITING → ACCEPTED 강제 전환
+            asAssignmentRepository.updateStatus(assignment.getId(), "ACCEPTED");
+
+            mockMvc.perform(get("/api/agency/as-assignments/in-progress")
+                            .header("Authorization", "Bearer " + agencyTokenWithAgencyId))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.length()").value(1))
+                    .andExpect(jsonPath("$[0].assignmentId").value(assignment.getId()))
+                    .andExpect(jsonPath("$[0].requestId").value(asRequest.getId()))
+                    .andExpect(jsonPath("$[0].customerName").value("테스트고객"))
+                    .andExpect(jsonPath("$[0].engineerName").value("테스트기사"))
+                    .andExpect(jsonPath("$[0].assignmentStatus").value("ACCEPTED"))
+                    .andExpect(jsonPath("$[0].visitDate").value("2026-07-01"))
+                    .andExpect(jsonPath("$[0].logs").isArray())
+                    .andExpect(jsonPath("$[0].stepTimes").isMap());
+        }
+
+        @Test
+        @DisplayName("성공: 다른 대행사 배정은 결과에 포함되지 않음")
+        void inProgress_otherAgencyExcluded_200() throws Exception {
+            asAssignmentRepository.updateStatus(assignment.getId(), "ACCEPTED");
+
+            // 다른 대행사 배정 추가
+            Agencies other = agenciesRepository.save(Agencies.builder()
+                    .agencyName("다른대행사").businessNumber("OTHER-002")
+                    .agencyAddress("서울 서초구").agencyFeeRate(3.0)
+                    .approvalStatus(com.careflow.common.enums.AgencyStatus.APPROVED).build());
+            User otherEng = userRepository.save(User.builder()
+                    .email("other@eng.com").passwordHash("hash").name("다른기사")
+                    .phone("010-9999-0000").role(Role.ENGINEER).agency(other).build());
+            AsRequest otherReq = saveAsRequest(LocalDate.of(2026, 7, 1));
+            AsAssignment otherA = asAssignmentRepository.save(
+                    AsAssignment.create(otherReq, otherEng, other, AssignType.MANUAL));
+            asAssignmentRepository.updateStatus(otherA.getId(), "ACCEPTED");
+
+            mockMvc.perform(get("/api/agency/as-assignments/in-progress")
+                            .header("Authorization", "Bearer " + agencyTokenWithAgencyId))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.length()").value(1))
+                    .andExpect(jsonPath("$[0].engineerName").value("테스트기사"));
+        }
+
+        @Test
+        @DisplayName("실패: CUSTOMER 권한 → 401 Unauthorized")
+        void inProgress_customerRole_401() throws Exception {
+            mockMvc.perform(get("/api/agency/as-assignments/in-progress")
+                            .header("Authorization", "Bearer " + customerToken))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        @Test
+        @DisplayName("실패: 토큰 없음 → 401 Unauthorized")
+        void inProgress_noToken_401() throws Exception {
+            mockMvc.perform(get("/api/agency/as-assignments/in-progress"))
+                    .andExpect(status().isUnauthorized());
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    //  GET /api/agency/as-assignments/completed
+    // ─────────────────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("GET /api/agency/as-assignments/completed — 완료 배정 목록 조회")
+    class GetCompleted {
+
+        @Test
+        @DisplayName("성공: COMPLETED 배정 없음 → 204 No Content")
+        void completed_empty_204() throws Exception {
+            mockMvc.perform(get("/api/agency/as-assignments/completed")
+                            .header("Authorization", "Bearer " + agencyTokenWithAgencyId))
+                    .andExpect(status().isNoContent());
+        }
+
+        @Test
+        @DisplayName("성공: COMPLETED + 작업보고서 있고 리뷰 없음 → rating null 반환")
+        void completed_withReport_noReview_200() throws Exception {
+            asAssignmentRepository.updateStatus(assignment.getId(), "COMPLETED");
+            workReportRepository.save(WorkReport.builder()
+                    .asRequest(asRequest).engineer(engineer)
+                    .diagnosisResult(DiagnosisResult.REPAIRED)
+                    .workDurationMin(60).finalAmount(80000).memo("수리 완료").build());
+
+            mockMvc.perform(get("/api/agency/as-assignments/completed")
+                            .header("Authorization", "Bearer " + agencyTokenWithAgencyId))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.length()").value(1))
+                    .andExpect(jsonPath("$[0].assignmentId").value(assignment.getId()))
+                    .andExpect(jsonPath("$[0].customerName").value("테스트고객"))
+                    .andExpect(jsonPath("$[0].diagnosisResult").value("REPAIRED"))
+                    .andExpect(jsonPath("$[0].finalAmount").value(80000))
+                    .andExpect(jsonPath("$[0].rating").doesNotExist());
+        }
+
+        @Test
+        @DisplayName("성공: 리뷰 존재 → rating·reviewContent 포함")
+        void completed_withReview_200() throws Exception {
+            asAssignmentRepository.updateStatus(assignment.getId(), "COMPLETED");
+            workReportRepository.save(WorkReport.builder()
+                    .asRequest(asRequest).engineer(engineer)
+                    .diagnosisResult(DiagnosisResult.REPAIRED)
+                    .workDurationMin(60).finalAmount(80000).memo("완료").build());
+            reviewRepository.save(Review.create(asRequest, customer, engineer, 5, "정말 감사합니다"));
+
+            mockMvc.perform(get("/api/agency/as-assignments/completed")
+                            .header("Authorization", "Bearer " + agencyTokenWithAgencyId))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$[0].rating").value(5))
+                    .andExpect(jsonPath("$[0].reviewContent").value("정말 감사합니다"));
+        }
+
+        @Test
+        @DisplayName("성공: 작업보고서 없는 COMPLETED 배정 → 결과에서 제외 → 204 No Content")
+        void completed_noReport_excluded_204() throws Exception {
+            asAssignmentRepository.updateStatus(assignment.getId(), "COMPLETED");
+            // 보고서 저장 안 함
+
+            mockMvc.perform(get("/api/agency/as-assignments/completed")
+                            .header("Authorization", "Bearer " + agencyTokenWithAgencyId))
+                    .andExpect(status().isNoContent());
+        }
+
+        @Test
+        @DisplayName("실패: CUSTOMER 권한 → 401 Unauthorized")
+        void completed_customerRole_401() throws Exception {
+            mockMvc.perform(get("/api/agency/as-assignments/completed")
+                            .header("Authorization", "Bearer " + customerToken))
+                    .andExpect(status().isUnauthorized());
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    //  POST /api/agency/as-assignments/change — 기사 변경
+    // ─────────────────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("POST /api/agency/as-assignments/change — 배정 기사 변경")
+    class ChangeEngineer {
+
+        @Test
+        @DisplayName("성공: WAITING 배정 기사 변경 → 기존 REJECTED, 신규 WAITING 생성, DB 검증")
+        void change_waiting_201() throws Exception {
+            User newEngineer = userRepository.save(User.builder()
+                    .email("new@eng.com").passwordHash("hash").name("신규기사")
+                    .phone("010-5555-6666").role(Role.ENGINEER).agency(agency).build());
+
+            String body = objectMapper.writeValueAsString(
+                    new com.careflow.assignment.dto.AssignmentChangeEngineerRequest(
+                            assignment.getId(), newEngineer.getId()));
+
+            mockMvc.perform(post("/api/agency/as-assignments/change")
+                            .header("Authorization", "Bearer " + agencyTokenWithAgencyId)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.newAssignmentId").isNumber())
+                    .andExpect(jsonPath("$.requestId").value(asRequest.getId()))
+                    .andExpect(jsonPath("$.newEngineerId").value(newEngineer.getId()))
+                    .andExpect(jsonPath("$.newEngineerName").value("신규기사"))
+                    .andExpect(jsonPath("$.assignmentStatus").value("WAITING"));
+
+            // DB 직접 검증: 기존 배정 → REJECTED
+            String oldStatus = asAssignmentRepository.findById(assignment.getId())
+                    .orElseThrow().getStatus();
+            assertThat(oldStatus).isEqualTo("REJECTED");
+        }
+
+        @Test
+        @DisplayName("실패: ACCEPTED 상태 배정은 기사 변경 불가 → 403 Forbidden")
+        void change_accepted_403() throws Exception {
+            asAssignmentRepository.updateStatus(assignment.getId(), "ACCEPTED");
+            User newEng = userRepository.save(User.builder()
+                    .email("new2@eng.com").passwordHash("hash").name("다른기사")
+                    .phone("010-7777-8888").role(Role.ENGINEER).agency(agency).build());
+
+            String body = objectMapper.writeValueAsString(
+                    new com.careflow.assignment.dto.AssignmentChangeEngineerRequest(
+                            assignment.getId(), newEng.getId()));
+
+            mockMvc.perform(post("/api/agency/as-assignments/change")
+                            .header("Authorization", "Bearer " + agencyTokenWithAgencyId)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @DisplayName("실패: 존재하지 않는 assignmentId → 404 Not Found")
+        void change_notFound_404() throws Exception {
+            String body = objectMapper.writeValueAsString(
+                    new com.careflow.assignment.dto.AssignmentChangeEngineerRequest(99999L, engineer.getId()));
+
+            mockMvc.perform(post("/api/agency/as-assignments/change")
+                            .header("Authorization", "Bearer " + agencyTokenWithAgencyId)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body))
+                    .andExpect(status().isNotFound());
+        }
+
+        @Test
+        @DisplayName("실패: 존재하지 않는 newEngineerId → 404 Not Found")
+        void change_engineerNotFound_404() throws Exception {
+            String body = objectMapper.writeValueAsString(
+                    new com.careflow.assignment.dto.AssignmentChangeEngineerRequest(
+                            assignment.getId(), 99999L));
+
+            mockMvc.perform(post("/api/agency/as-assignments/change")
+                            .header("Authorization", "Bearer " + agencyTokenWithAgencyId)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body))
+                    .andExpect(status().isNotFound());
+        }
+
+        @Test
+        @DisplayName("실패: CUSTOMER 권한 → 401 Unauthorized")
+        void change_customerRole_401() throws Exception {
+            String body = objectMapper.writeValueAsString(
+                    new com.careflow.assignment.dto.AssignmentChangeEngineerRequest(
+                            assignment.getId(), engineer.getId()));
+
+            mockMvc.perform(post("/api/agency/as-assignments/change")
+                            .header("Authorization", "Bearer " + customerToken)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body))
+                    .andExpect(status().isUnauthorized());
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    //  PUT /api/agency/as-assignments/{assignmentId}/schedule
+    // ─────────────────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("PUT /api/agency/as-assignments/{id}/schedule — 방문 일정 변경")
+    class UpdateSchedule {
+
+        private String scheduleBody(String date, String time) throws Exception {
+            return objectMapper.writeValueAsString(
+                    new com.careflow.assignment.dto.AssignmentScheduleRequest(
+                            java.time.LocalDate.parse(date), time));
+        }
+
+        @Test
+        @DisplayName("성공: WAITING 상태 → 200 OK, scheduledDate·scheduledTime 응답 검증")
+        void schedule_waiting_200() throws Exception {
+            mockMvc.perform(put("/api/agency/as-assignments/" + assignment.getId() + "/schedule")
+                            .header("Authorization", "Bearer " + agencyTokenWithAgencyId)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(scheduleBody("2026-08-10", "14:00")))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.assignmentId").value(assignment.getId()))
+                    .andExpect(jsonPath("$.requestId").value(asRequest.getId()))
+                    .andExpect(jsonPath("$.scheduledDate").value("2026-08-10"))
+                    .andExpect(jsonPath("$.scheduledTime").value("14:00"));
+        }
+
+        @Test
+        @DisplayName("성공: ACCEPTED 상태도 일정 변경 가능 → 200 OK")
+        void schedule_accepted_200() throws Exception {
+            asAssignmentRepository.updateStatus(assignment.getId(), "ACCEPTED");
+
+            mockMvc.perform(put("/api/agency/as-assignments/" + assignment.getId() + "/schedule")
+                            .header("Authorization", "Bearer " + agencyTokenWithAgencyId)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(scheduleBody("2026-08-15", "10:00")))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.scheduledDate").value("2026-08-15"));
+        }
+
+        @Test
+        @DisplayName("실패: REJECTED 상태 → 403 Forbidden")
+        void schedule_rejected_403() throws Exception {
+            asAssignmentRepository.updateStatus(assignment.getId(), "REJECTED");
+
+            mockMvc.perform(put("/api/agency/as-assignments/" + assignment.getId() + "/schedule")
+                            .header("Authorization", "Bearer " + agencyTokenWithAgencyId)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(scheduleBody("2026-08-10", "14:00")))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @DisplayName("실패: scheduledDate 누락 → 400 Bad Request (Bean Validation)")
+        void schedule_missingDate_400() throws Exception {
+            String body = "{\"scheduledTime\":\"14:00\"}";
+
+            mockMvc.perform(put("/api/agency/as-assignments/" + assignment.getId() + "/schedule")
+                            .header("Authorization", "Bearer " + agencyTokenWithAgencyId)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body))
+                    .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        @DisplayName("실패: 잘못된 시간 형식 → 400 Bad Request (Bean Validation)")
+        void schedule_invalidTime_400() throws Exception {
+            String body = "{\"scheduledDate\":\"2026-08-10\",\"scheduledTime\":\"25:99\"}";
+
+            mockMvc.perform(put("/api/agency/as-assignments/" + assignment.getId() + "/schedule")
+                            .header("Authorization", "Bearer " + agencyTokenWithAgencyId)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body))
+                    .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        @DisplayName("실패: 존재하지 않는 assignmentId → 404 Not Found")
+        void schedule_notFound_404() throws Exception {
+            mockMvc.perform(put("/api/agency/as-assignments/99999/schedule")
+                            .header("Authorization", "Bearer " + agencyTokenWithAgencyId)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(scheduleBody("2026-08-10", "14:00")))
+                    .andExpect(status().isNotFound());
+        }
+
+        @Test
+        @DisplayName("실패: CUSTOMER 권한 → 401 Unauthorized")
+        void schedule_customerRole_401() throws Exception {
+            mockMvc.perform(put("/api/agency/as-assignments/" + assignment.getId() + "/schedule")
+                            .header("Authorization", "Bearer " + customerToken)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(scheduleBody("2026-08-10", "14:00")))
+                    .andExpect(status().isUnauthorized());
+        }
+    }
+
+    // ─────────────────────────────────────────────────────────────
+    //  DELETE /api/agency/as-assignments/{assignmentId}
+    // ─────────────────────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("DELETE /api/agency/as-assignments/{id} — 배정 취소")
+    class CancelAssignment {
+
+        @Test
+        @DisplayName("성공: WAITING 배정 취소 → 200 OK, DB: assignment REJECTED · asRequest AGENCY_RECEIVED")
+        void cancel_waiting_200() throws Exception {
+            mockMvc.perform(delete("/api/agency/as-assignments/" + assignment.getId())
+                            .header("Authorization", "Bearer " + agencyTokenWithAgencyId))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.assignmentId").value(assignment.getId()))
+                    .andExpect(jsonPath("$.requestId").value(asRequest.getId()))
+                    .andExpect(jsonPath("$.cancelledStatus").value("REJECTED"))
+                    .andExpect(jsonPath("$.message").isString());
+
+            // DB 직접 검증
+            String assignStatus = asAssignmentRepository.findById(assignment.getId())
+                    .orElseThrow().getStatus();
+            assertThat(assignStatus).isEqualTo("REJECTED");
+
+            String requestStatus = asRequestRepository.findById(asRequest.getId())
+                    .orElseThrow().getStatus().name();
+            assertThat(requestStatus).isEqualTo("AGENCY_RECEIVED");
+        }
+
+        @Test
+        @DisplayName("성공: ACCEPTED 배정도 취소 가능 → 200 OK")
+        void cancel_accepted_200() throws Exception {
+            asAssignmentRepository.updateStatus(assignment.getId(), "ACCEPTED");
+
+            mockMvc.perform(delete("/api/agency/as-assignments/" + assignment.getId())
+                            .header("Authorization", "Bearer " + agencyTokenWithAgencyId))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.cancelledStatus").value("REJECTED"));
+        }
+
+        @Test
+        @DisplayName("실패: 이미 REJECTED 상태 → 403 Forbidden")
+        void cancel_alreadyRejected_403() throws Exception {
+            asAssignmentRepository.updateStatus(assignment.getId(), "REJECTED");
+
+            mockMvc.perform(delete("/api/agency/as-assignments/" + assignment.getId())
+                            .header("Authorization", "Bearer " + agencyTokenWithAgencyId))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @DisplayName("실패: 이미 COMPLETED 상태 → 403 Forbidden")
+        void cancel_completed_403() throws Exception {
+            asAssignmentRepository.updateStatus(assignment.getId(), "COMPLETED");
+
+            mockMvc.perform(delete("/api/agency/as-assignments/" + assignment.getId())
+                            .header("Authorization", "Bearer " + agencyTokenWithAgencyId))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @DisplayName("실패: 존재하지 않는 assignmentId → 404 Not Found")
+        void cancel_notFound_404() throws Exception {
+            mockMvc.perform(delete("/api/agency/as-assignments/99999")
+                            .header("Authorization", "Bearer " + agencyTokenWithAgencyId))
+                    .andExpect(status().isNotFound());
+        }
+
+        @Test
+        @DisplayName("실패: CUSTOMER 권한 → 401 Unauthorized")
+        void cancel_customerRole_401() throws Exception {
+            mockMvc.perform(delete("/api/agency/as-assignments/" + assignment.getId())
+                            .header("Authorization", "Bearer " + customerToken))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        @Test
+        @DisplayName("실패: 토큰 없음 → 401 Unauthorized")
+        void cancel_noToken_401() throws Exception {
+            mockMvc.perform(delete("/api/agency/as-assignments/" + assignment.getId()))
                     .andExpect(status().isUnauthorized());
         }
     }
