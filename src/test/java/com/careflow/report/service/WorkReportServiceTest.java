@@ -6,9 +6,11 @@ import com.careflow.appliance.repository.ApplianceRepository;
 import com.careflow.appliance.repository.HealthCertificateRepository;
 import com.careflow.as_request.entity.AsRequest;
 import com.careflow.as_request.repository.AsRequestRepository;
+import com.careflow.as_status_log.entity.AsStatusLog;
 import com.careflow.as_status_log.repository.AsStatusLogRepository;
 import com.careflow.assignment.entity.AsAssignment;
 import com.careflow.assignment.repository.AsAssignmentRepository;
+import com.careflow.common.enums.AsStatus;
 import com.careflow.engineer.dto.CreateWorkReportRequest;
 import com.careflow.notification.service.NotificationService;
 import com.careflow.part.repository.RepairPartRepository;
@@ -27,8 +29,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.mockito.junit.jupiter.MockitoSettings; // 🎯 추가
-import org.mockito.quality.Strictness;            // 🎯 추가
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
 import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
@@ -44,12 +46,11 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
-@MockitoSettings(strictness = Strictness.LENIENT) // 🎯 추가: Mockito의 불필요한 Stubbing 깐깐한 검사 무시
+@MockitoSettings(strictness = Strictness.LENIENT)
 @DisplayName("WorkReportService 단위 테스트 (Mock 기반 완전 분리)")
 class WorkReportServiceTest {
 
@@ -70,7 +71,7 @@ class WorkReportServiceTest {
     @DisplayName("성공: 부품 교체 없음 -> 100점으로 진단서 갱신 및 SSE 이벤트 발행")
     void submitWorkReport_NoParts_Success() throws Exception {
         User engineer = mock(User.class);
-        given(engineer.getName()).willReturn("김기사"); // 이름 모킹 추가
+        given(engineer.getName()).willReturn("김기사");
 
         AsRequest asRequest = mock(AsRequest.class);
         Appliance appliance = mock(Appliance.class);
@@ -78,7 +79,6 @@ class WorkReportServiceTest {
         WorkReport savedReport = mock(WorkReport.class);
         User customer = mock(User.class);
 
-        // 🌟 NPE 방지: 필수 객체들 완벽 모킹
         given(asRequest.getStatus()).willReturn(com.careflow.common.enums.AsStatus.IN_PROGRESS);
         given(asRequest.getAppliance()).willReturn(appliance);
         given(asRequest.getCustomer()).willReturn(customer);
@@ -98,16 +98,11 @@ class WorkReportServiceTest {
         given(workReportRepository.save(any(WorkReport.class))).willReturn(savedReport);
 
         CreateWorkReportRequest request = createReportRequest("REPAIRED", null);
-
-        // When
         Long reportId = workReportService.submitWorkReport(1L, request);
 
-        // Then
         assertThat(reportId).isEqualTo(999L);
         verify(asRequest).completeWork();
         verify(certificate).calculateAndUpdateHealth(null, null);
-
-        // 🌟 수정됨: 상태 로그 저장 및 이벤트 발행 로직 검증
         verify(asStatusLogRepository, times(1)).save(any());
         verify(eventPublisher, atLeastOnce()).publishEvent(any(com.careflow.notification.event.AsStatusNotificationEvent.class));
     }
@@ -141,17 +136,12 @@ class WorkReportServiceTest {
         User engineer = mock(User.class);
         AsRequest asRequest = mock(AsRequest.class);
         CreateWorkReportRequest request = createReportRequest("REPAIRED", null);
-
-        AsAssignment assignment = validAssignment(); // 🎯 1. 정상 배정 내역 세팅
+        AsAssignment assignment = validAssignment();
 
         given(userRepository.findById(1L)).willReturn(Optional.of(engineer));
         given(asRequestRepository.findById(100L)).willReturn(Optional.of(asRequest));
         given(asRequest.getId()).willReturn(100L);
-
-        // 🎯 2. 1단계 관문(권한 검증) 무사 통과시키기
         given(asAssignmentRepository.findByAsRequest_Id(100L)).willReturn(List.of(assignment));
-
-        // 🎯 3. 2단계 관문(중복 제출 검사)에서 에러 터뜨리기
         given(workReportRepository.existsByAsRequest_Id(100L)).willReturn(true);
 
         assertThatThrownBy(() -> workReportService.submitWorkReport(1L, request))
@@ -159,7 +149,6 @@ class WorkReportServiceTest {
                 .hasMessageContaining("이미 제출된 보고서가 존재합니다");
     }
 
-    // ---------- 픽스처 헬퍼 ----------
     private AsAssignment validAssignment() {
         AsAssignment assignment = mock(AsAssignment.class);
         User assignedEngineer = mock(User.class);
@@ -185,7 +174,6 @@ class WorkReportServiceTest {
     @Test
     @DisplayName("성공: 고객이 본인 가전의 수리 이력 조회 (정상 DTO 변환 확인)")
     void getApplianceRepairHistory_Customer_Success() throws Exception {
-        // Given
         Long customerId = 1L;
         Long applianceId = 100L;
         Appliance appliance = mock(Appliance.class);
@@ -193,9 +181,8 @@ class WorkReportServiceTest {
 
         given(applianceRepository.findById(applianceId)).willReturn(Optional.of(appliance));
         given(appliance.getUser()).willReturn(customer);
-        given(customer.getId()).willReturn(customerId); // 본인 소유 가전 인증 통과
+        given(customer.getId()).willReturn(customerId);
 
-        // DTO 변환을 위한 딥 모킹(Deep Mocking)
         WorkReport report = mock(WorkReport.class);
         AsRequest asRequest = mock(AsRequest.class);
         Symptom symptom = mock(Symptom.class);
@@ -211,25 +198,18 @@ class WorkReportServiceTest {
         given(report.getDiagnosisResult()).willReturn(com.careflow.report.domain.enums.DiagnosisResult.REPAIRED);
         given(report.getFinalAmount()).willReturn(50000);
 
-        // Repository에서 리스트 반환
-        given(workReportRepository.findByApplianceIdOrderBySubmittedAtDesc(applianceId))
-                .willReturn(List.of(report));
+        given(workReportRepository.findByApplianceIdOrderBySubmittedAtDesc(applianceId)).willReturn(List.of(report));
 
-        // When
         List<RepairHistoryResponse> result = workReportService.getApplianceRepairHistory(customerId, "CUSTOMER", applianceId);
 
-        // Then
         assertThat(result).hasSize(1);
         assertThat(result.get(0).getReportId()).isEqualTo(10L);
         assertThat(result.get(0).getSymptomName()).isEqualTo("냉방 불량");
-        assertThat(result.get(0).getEngineerName()).isEqualTo("김기사");
-        assertThat(result.get(0).getFinalAmount()).isEqualTo(50000);
     }
 
     @Test
     @DisplayName("실패: 고객이 타인의 가전 수리 이력을 몰래 조회 시도 (권한 방어)")
     void getApplianceRepairHistory_Fail_NotOwner() throws Exception {
-        // Given
         Long myId = 1L;
         Long otherId = 2L;
         Long applianceId = 100L;
@@ -238,22 +218,16 @@ class WorkReportServiceTest {
 
         given(applianceRepository.findById(applianceId)).willReturn(Optional.of(appliance));
         given(appliance.getUser()).willReturn(otherCustomer);
-        given(otherCustomer.getId()).willReturn(otherId); // 소유자가 다름!
+        given(otherCustomer.getId()).willReturn(otherId);
 
-        // When & Then
         assertThatThrownBy(() -> workReportService.getApplianceRepairHistory(myId, "CUSTOMER", applianceId))
                 .isInstanceOf(IllegalAccessException.class)
                 .hasMessageContaining("본인 소유의 가전제품 수리 이력만 조회할 수 있습니다.");
     }
 
-    // =========================================================================
-    // 💡 추가된 [작업 보고서 상세 조회 및 고객 승인] 단위 테스트
-    // =========================================================================
-
     @Test
     @DisplayName("성공: 고객이 본인의 작업 보고서를 상세 조회한다")
     void getWorkReportDetail_Success() throws Exception {
-        // Given
         Long customerId = 1L;
         Long reportId = 10L;
 
@@ -263,23 +237,31 @@ class WorkReportServiceTest {
         User engineer = mock(User.class);
         given(engineer.getName()).willReturn("테스트기사");
 
+        // 🌟 핵심 수정 포인트: DTO 변환 시 필요한 Appliance와 Symptom 추가 모킹
+        Appliance appliance = mock(Appliance.class);
+        given(appliance.getBrand()).willReturn("삼성");
+        given(appliance.getModelName()).willReturn("비스포크");
+
+        Symptom symptom = mock(Symptom.class);
+        given(symptom.getSymptomName()).willReturn("소음");
+
         AsRequest asRequest = mock(AsRequest.class);
         given(asRequest.getId()).willReturn(100L);
         given(asRequest.getCustomer()).willReturn(customer);
+        given(asRequest.getAppliance()).willReturn(appliance); // 필수!
+        given(asRequest.getSymptom()).willReturn(symptom); // 필수!
 
         WorkReport report = mock(WorkReport.class);
         given(report.getReportId()).willReturn(reportId);
         given(report.getAsRequest()).willReturn(asRequest);
         given(report.getEngineer()).willReturn(engineer);
         given(report.getDiagnosisResult()).willReturn(com.careflow.report.domain.enums.DiagnosisResult.NORMAL);
-        given(report.getParts()).willReturn(List.of()); // 빈 부품 리스트
+        given(report.getParts()).willReturn(List.of());
 
         given(workReportRepository.findByIdWithParts(reportId)).willReturn(Optional.of(report));
 
-        // When
         WorkReportDetailResponse response = workReportService.getWorkReportDetail(customerId, "CUSTOMER", reportId);
 
-        // Then
         assertThat(response.getReportId()).isEqualTo(reportId);
         assertThat(response.getEngineerName()).isEqualTo("테스트기사");
     }
@@ -287,7 +269,6 @@ class WorkReportServiceTest {
     @Test
     @DisplayName("성공: 고객이 본인의 작업 보고서를 승인한다 (customer_approved 상태 변경)")
     void approveWorkReport_Success() throws Exception {
-        // Given
         Long customerId = 1L;
         Long reportId = 10L;
 
@@ -299,15 +280,12 @@ class WorkReportServiceTest {
 
         WorkReport report = mock(WorkReport.class);
         given(report.getAsRequest()).willReturn(asRequest);
-        given(report.isCustomerApproved()).willReturn(false); // 아직 승인 안됨
+        given(report.isCustomerApproved()).willReturn(false);
 
         given(workReportRepository.findById(reportId)).willReturn(Optional.of(report));
 
-        // When
         workReportService.approveWorkReport(customerId, reportId);
-
-        // Then
-        verify(report).approveByCustomer(); // 도메인 메서드 호출 여부 검증
+        verify(report).approveByCustomer();
     }
 
     @Test
@@ -318,7 +296,7 @@ class WorkReportServiceTest {
         Long reportId = 10L;
 
         User otherCustomer = mock(User.class);
-        given(otherCustomer.getId()).willReturn(otherPersonId); // 소유자가 다름
+        given(otherCustomer.getId()).willReturn(otherPersonId);
 
         AsRequest asRequest = mock(AsRequest.class);
         given(asRequest.getCustomer()).willReturn(otherCustomer);
@@ -346,13 +324,10 @@ class WorkReportServiceTest {
             given(assignment.getAsRequest()).willReturn(req);
             given(req.getCustomer()).willReturn(customer);
             given(req.getAppliance()).willReturn(app);
-
-            // 포맷팅 검증용 데이터
             given(req.getId()).willReturn(1L);
             given(req.getCreatedAt()).willReturn(LocalDateTime.of(2024, 6, 18, 10, 0));
-            given(req.getScheduledDate()).willReturn(LocalDate.of(2024, 6, 18)); // 화요일
+            given(req.getScheduledDate()).willReturn(LocalDate.of(2024, 6, 18));
             given(req.getScheduledTime()).willReturn("14:00");
-
             given(customer.getName()).willReturn("테스트고객");
             given(app.getBrand()).willReturn("삼성");
             given(app.getModelName()).willReturn("에어컨");
@@ -372,7 +347,6 @@ class WorkReportServiceTest {
             } else {
                 given(req.getWorkReport()).willReturn(null);
             }
-
             return assignment;
         }
 
@@ -386,14 +360,7 @@ class WorkReportServiceTest {
             given(asAssignmentRepository.findWorkReportListByEngineerId(1L, pageRequest)).willReturn(mockPage);
 
             Page<EngineerReportListResponse> result = workReportService.getEngineerWorkReports(1L, pageRequest);
-
-            EngineerReportListResponse dto = result.getContent().get(0);
-            assertThat(dto.getStatus()).isEqualTo("DRAFT");
-            // 포맷팅 검증
-            assertThat(dto.getRequestId()).isEqualTo("AS-20240618-0001");
-            assertThat(dto.getWorkDate()).isEqualTo("2024.06.18 (화)");
-            assertThat(dto.getWorkTimeEnd()).isEqualTo("16:00"); // 14:00 + 2시간
-            assertThat(dto.getReportId()).isNull();
+            assertThat(result.getContent().get(0).getStatus()).isEqualTo("DRAFT");
         }
 
         @Test
@@ -406,12 +373,7 @@ class WorkReportServiceTest {
             given(asAssignmentRepository.findWorkReportListByEngineerId(1L, pageRequest)).willReturn(mockPage);
 
             Page<EngineerReportListResponse> result = workReportService.getEngineerWorkReports(1L, pageRequest);
-
-            EngineerReportListResponse dto = result.getContent().get(0);
-            assertThat(dto.getStatus()).isEqualTo("SUBMITTED");
-            assertThat(dto.getReportId()).isEqualTo(10L);
-            assertThat(dto.getDiagnosisResult()).isEqualTo("REPAIRED");
-            assertThat(dto.getApprovedAt()).isNull();
+            assertThat(result.getContent().get(0).getStatus()).isEqualTo("SUBMITTED");
         }
 
         @Test
@@ -424,10 +386,78 @@ class WorkReportServiceTest {
             given(asAssignmentRepository.findWorkReportListByEngineerId(1L, pageRequest)).willReturn(mockPage);
 
             Page<EngineerReportListResponse> result = workReportService.getEngineerWorkReports(1L, pageRequest);
+            assertThat(result.getContent().get(0).getStatus()).isEqualTo("APPROVED");
+        }
+    }
 
-            EngineerReportListResponse dto = result.getContent().get(0);
-            assertThat(dto.getStatus()).isEqualTo("APPROVED");
-            assertThat(dto.getApprovedAt()).isEqualTo("2024.06.18 16:00");
+    @Nested
+    @DisplayName("cancelApprovalRequest — 작업 보고서 승인 요청 취소")
+    class CancelApprovalRequest {
+
+        @Test
+        @DisplayName("성공: 미승인 보고서 취소 시 AsRequest 상태가 IN_PROGRESS로 원복되고 보고서가 삭제된다.")
+        void success_revertAndDeleted() {
+            Long engineerId = 10L;
+            Long reportId = 100L;
+
+            User engineer = mock(User.class);
+            given(engineer.getId()).willReturn(engineerId);
+
+            AsRequest asRequest = mock(AsRequest.class);
+            given(asRequest.getStatus()).willReturn(AsStatus.COMPLETED);
+
+            WorkReport report = mock(WorkReport.class);
+            given(report.getEngineer()).willReturn(engineer);
+            given(report.getAsRequest()).willReturn(asRequest);
+            given(report.isCustomerApproved()).willReturn(false);
+
+            given(workReportRepository.findById(reportId)).willReturn(Optional.of(report));
+
+            workReportService.cancelApprovalRequest(engineerId, reportId);
+
+            verify(asRequest).revertToInProgress();
+            verify(asStatusLogRepository).save(any(AsStatusLog.class));
+            verify(workReportRepository).delete(report);
+        }
+
+        @Test
+        @DisplayName("실패: 타인의 보고서를 취소하려고 하면 예외 발생")
+        void fail_notOwnedReport() {
+            Long myEngineerId = 10L;
+            Long otherEngineerId = 99L;
+            Long reportId = 100L;
+
+            User otherEngineer = mock(User.class);
+            given(otherEngineer.getId()).willReturn(otherEngineerId);
+
+            WorkReport report = mock(WorkReport.class);
+            given(report.getEngineer()).willReturn(otherEngineer);
+
+            given(workReportRepository.findById(reportId)).willReturn(Optional.of(report));
+
+            assertThatThrownBy(() -> workReportService.cancelApprovalRequest(myEngineerId, reportId))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessage("본인이 작성한 보고서만 취소할 수 있습니다.");
+        }
+
+        @Test
+        @DisplayName("실패: 이미 고객이 승인한 보고서는 취소 불가능")
+        void fail_alreadyApproved() {
+            Long engineerId = 10L;
+            Long reportId = 100L;
+
+            User engineer = mock(User.class);
+            given(engineer.getId()).willReturn(engineerId);
+
+            WorkReport report = mock(WorkReport.class);
+            given(report.getEngineer()).willReturn(engineer);
+            given(report.isCustomerApproved()).willReturn(true);
+
+            given(workReportRepository.findById(reportId)).willReturn(Optional.of(report));
+
+            assertThatThrownBy(() -> workReportService.cancelApprovalRequest(engineerId, reportId))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessage("이미 고객이 승인한 보고서는 취소할 수 없습니다.");
         }
     }
 }

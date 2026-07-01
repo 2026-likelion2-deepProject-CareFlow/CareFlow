@@ -1,3 +1,4 @@
+
 package com.careflow.report.controller;
 
 import com.careflow.auth.security.CustomOAuth2UserService;
@@ -21,10 +22,15 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.jpa.mapping.JpaMetamodelMappingContext;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.http.MediaType;
+import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import java.util.List;
 import java.util.NoSuchElementException;
@@ -32,8 +38,8 @@ import java.util.NoSuchElementException;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willDoNothing;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.anonymous;
-import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -52,22 +58,32 @@ class WorkReportControllerTest {
     @MockitoBean private OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;
     @MockitoBean private ClientRegistrationRepository clientRegistrationRepository;
 
+    @MockitoBean private StringRedisTemplate stringRedisTemplate;
+
     private static final Long ENGINEER_USER_ID = 10L;
     private static final Long CUSTOMER_USER_ID = 1L;
 
     // 기사 권한 픽스처
-    private CustomUserDetails engineerUser() {
-        return new CustomUserDetails(ENGINEER_USER_ID, "engineer@test.com", "pw", "ENGINEER", 100L);
-    }
-
+    private RequestPostProcessor engineerAuth;
     // 고객 권한 픽스처
-    private CustomUserDetails customerUser() {
-        return new CustomUserDetails(CUSTOMER_USER_ID, "customer@test.com", "pw", "CUSTOMER", null);
+    private RequestPostProcessor customerAuth;
+
+    @BeforeEach
+    void setUp() {
+        engineerAuth = SecurityMockMvcRequestPostProcessors.authentication(
+                new UsernamePasswordAuthenticationToken(
+                        new CustomUserDetails(ENGINEER_USER_ID, "engineer@test.com", "pw", "ENGINEER", 100L),
+                        null, List.of(new SimpleGrantedAuthority("ENGINEER"))
+                )
+        );
+        customerAuth = SecurityMockMvcRequestPostProcessors.authentication(
+                new UsernamePasswordAuthenticationToken(
+                        new CustomUserDetails(CUSTOMER_USER_ID, "customer@test.com", "pw", "CUSTOMER", null),
+                        null, List.of(new SimpleGrantedAuthority("CUSTOMER"))
+                )
+        );
     }
 
-    // ─────────────────────────────────────────────
-    //  GET /api/engineer/work-reports (신규 API)
-    // ─────────────────────────────────────────────
     @Nested
     @DisplayName("GET /api/engineer/work-reports — 기사 작업 보고서 목록 조회")
     class GetEngineerWorkReports {
@@ -78,7 +94,6 @@ class WorkReportControllerTest {
             EngineerReportListResponse stubResponse = EngineerReportListResponse.builder()
                     .reportId(1L).requestId("AS-20260701-0001").status("SUBMITTED").build();
 
-            // 백엔드는 0페이지(PageRequest.of(0, 20))로 받을 것을 기대
             PageRequest expectedPageRequest = PageRequest.of(0, 20);
             Page<EngineerReportListResponse> mockPage = new PageImpl<>(List.of(stubResponse), expectedPageRequest, 1);
 
@@ -86,8 +101,8 @@ class WorkReportControllerTest {
                     .willReturn(mockPage);
 
             mockMvc.perform(get("/api/engineer/work-reports")
-                            .with(user(engineerUser()))
-                            .param("page", "1")  // 프론트엔드는 1페이지부터 시작
+                            .with(engineerAuth)
+                            .param("page", "1")
                             .param("size", "20"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.content.length()").value(1))
@@ -103,23 +118,19 @@ class WorkReportControllerTest {
             given(workReportService.getEngineerWorkReports(eq(ENGINEER_USER_ID), eq(expectedPageRequest)))
                     .willReturn(mockPage);
 
-            mockMvc.perform(get("/api/engineer/work-reports")
-                            .with(user(engineerUser())))
+            mockMvc.perform(get("/api/engineer/work-reports").with(engineerAuth))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.content.length()").value(0));
         }
 
         @Test
-        @DisplayName("실패: 인증 토큰 없음 — 401 Unauthorized")
+        @DisplayName("예외 테스트: 인증 토큰 없음 — 401 Unauthorized")
         void fail_noAuth_401() throws Exception {
             mockMvc.perform(get("/api/engineer/work-reports").with(anonymous()))
                     .andExpect(status().isUnauthorized());
         }
     }
 
-    // ─────────────────────────────────────────────
-    //  POST /api/engineer/work-reports
-    // ─────────────────────────────────────────────
     @Nested
     @DisplayName("POST /api/engineer/work-reports — 작업 완료 보고서 제출")
     class SubmitReport {
@@ -127,7 +138,6 @@ class WorkReportControllerTest {
         @Test
         @DisplayName("성공: 보고서 제출 정상 처리 — 201 Created")
         void success_201() throws Exception {
-            // 🌟 픽스처: DTO의 protected 생성자를 우회하기 위해 Raw JSON 문자열을 직접 사용
             String jsonRequest = """
                     {
                         "requestId": 100,
@@ -140,17 +150,16 @@ class WorkReportControllerTest {
             given(workReportService.submitWorkReport(eq(ENGINEER_USER_ID), any())).willReturn(1L);
 
             mockMvc.perform(post("/api/engineer/work-reports")
-                            .with(user(engineerUser()))
+                            .with(engineerAuth)
                             .contentType(MediaType.APPLICATION_JSON)
-                            .content(jsonRequest)) // 객체 직렬화 대신 문자열 바로 주입
+                            .content(jsonRequest))
                     .andExpect(status().isCreated())
                     .andExpect(content().string("작업 완료 보고서가 제출되고, 제품 건강 진단서가 갱신되었습니다. (Report ID: 1)"));
         }
 
         @Test
-        @DisplayName("유효성 실패: 필수 필드 누락 — 400 Bad Request")
+        @DisplayName("예외 테스트: 필수 필드 누락 — 400 Bad Request")
         void fail_validation_400() throws Exception {
-            // 🌟 픽스처: requestId가 누락된 잘못된 JSON 문자열
             String badJsonRequest = """
                     {
                         "diagnosisResult": "REPAIRED",
@@ -160,16 +169,13 @@ class WorkReportControllerTest {
                     """;
 
             mockMvc.perform(post("/api/engineer/work-reports")
-                            .with(user(engineerUser()))
+                            .with(engineerAuth)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(badJsonRequest))
                     .andExpect(status().isBadRequest());
         }
     }
 
-    // ─────────────────────────────────────────────
-    //  GET /api/engineer/work-reports/{reportId}
-    // ─────────────────────────────────────────────
     @Nested
     @DisplayName("GET /api/engineer/work-reports/{reportId} — 보고서 상세 조회")
     class GetReportDetail {
@@ -183,28 +189,23 @@ class WorkReportControllerTest {
             given(workReportService.getWorkReportDetail(eq(ENGINEER_USER_ID), eq("ENGINEER"), eq(1L)))
                     .willReturn(stubResponse);
 
-            mockMvc.perform(get("/api/engineer/work-reports/1")
-                            .with(user(engineerUser())))
+            mockMvc.perform(get("/api/engineer/work-reports/1").with(engineerAuth))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.reportId").value(1))
                     .andExpect(jsonPath("$.engineerName").value("테스트기사"));
         }
 
         @Test
-        @DisplayName("실패: 존재하지 않는 보고서 — 404 Not Found")
+        @DisplayName("예외 테스트: 존재하지 않는 보고서 — 404 Not Found")
         void fail_notFound_404() throws Exception {
             given(workReportService.getWorkReportDetail(any(), any(), eq(999L)))
                     .willThrow(new NoSuchElementException("존재하지 않는 보고서입니다."));
 
-            mockMvc.perform(get("/api/engineer/work-reports/999")
-                            .with(user(engineerUser())))
+            mockMvc.perform(get("/api/engineer/work-reports/999").with(engineerAuth))
                     .andExpect(status().isNotFound());
         }
     }
 
-    // ─────────────────────────────────────────────
-    //  PATCH /api/engineer/work-reports/{reportId}/approve
-    // ─────────────────────────────────────────────
     @Nested
     @DisplayName("PATCH /api/engineer/work-reports/{reportId}/approve — 보고서 고객 승인")
     class ApproveReport {
@@ -212,20 +213,39 @@ class WorkReportControllerTest {
         @Test
         @DisplayName("성공: CUSTOMER 권한으로 승인 — 200 OK")
         void success_200() throws Exception {
-            mockMvc.perform(patch("/api/engineer/work-reports/1/approve")
-                            .with(user(customerUser())))
+            mockMvc.perform(patch("/api/engineer/work-reports/1/approve").with(customerAuth))
                     .andExpect(status().isOk())
                     .andExpect(content().string("작업 보고서가 성공적으로 승인되었습니다. 결제 단계로 이동합니다."));
         }
 
         @Test
-        @DisplayName("실패: ENGINEER 권한으로 승인 시도 시 예외 발생 — 401 Unauthorized")
-        void fail_engineerRole_401() throws Exception {
-            // 컨트롤러 내부에서 !CUSTOMER.equals(...) 로직에 의해 IllegalAccessException 이 발생하고,
-            // GlobalExceptionHandler 가 이를 401 로 매핑합니다.
-            mockMvc.perform(patch("/api/engineer/work-reports/1/approve")
-                            .with(user(engineerUser())))
-                    .andExpect(status().isUnauthorized());
+        @DisplayName("예외 테스트: ENGINEER 권한으로 승인 시도 시 예외 발생 — 403 Forbidden")
+        void fail_engineerRole_403() throws Exception {
+            // 🌟 수정 포인트: 401(isUnauthorized) -> 403(isForbidden)으로 변경 완료!
+            mockMvc.perform(patch("/api/engineer/work-reports/1/approve").with(engineerAuth))
+                    .andExpect(status().isForbidden());
+        }
+    }
+
+    @Nested
+    @DisplayName("DELETE /api/engineer/work-reports/{reportId}/approval-request — 승인 요청 취소")
+    class CancelApprovalRequest {
+
+        @Test
+        @DisplayName("성공: ENGINEER 역할이 승인 요청을 취소하면 200 OK 반환")
+        void success_200() throws Exception {
+            willDoNothing().given(workReportService).cancelApprovalRequest(eq(ENGINEER_USER_ID), eq(1L));
+
+            mockMvc.perform(delete("/api/engineer/work-reports/1/approval-request").with(engineerAuth))
+                    .andExpect(status().isOk())
+                    .andExpect(content().string("보고서 승인 요청이 취소되었습니다."));
+        }
+
+        @Test
+        @DisplayName("예외 테스트: CUSTOMER 권한으로 접근 시 403 Forbidden 반환")
+        void fail_notEngineer_403() throws Exception {
+            mockMvc.perform(delete("/api/engineer/work-reports/1/approval-request").with(customerAuth))
+                    .andExpect(status().isForbidden());
         }
     }
 }

@@ -27,11 +27,12 @@ public class EngineerNotificationController {
     @GetMapping
     public ResponseEntity<Page<NotificationResponse>> getNotifications(
             @AuthenticationPrincipal CustomUserDetails userDetails,
+            @RequestParam(required = false) String type, // 🌟 type 파라미터 추가
             @RequestParam(defaultValue = "0") int page,
             @RequestParam(defaultValue = "10") int size) {
 
-        PageRequest pageRequest = PageRequest.of(page, size);
-        Page<NotificationResponse> response = notificationService.getNotifications(userDetails.getUserId(), pageRequest);
+        PageRequest pageRequest = PageRequest.of(Math.max(0, page), size);
+        Page<NotificationResponse> response = notificationService.getNotifications(userDetails.getUserId(), type, pageRequest);
 
         return ResponseEntity.ok(response);
     }

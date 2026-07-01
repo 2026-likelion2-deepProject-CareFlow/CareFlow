@@ -6,6 +6,7 @@ import com.careflow.common.enums.AssignType;
 import com.careflow.common.enums.AsStatus;
 import com.careflow.region.entity.Regions;
 import com.careflow.report.domain.entity.WorkReport;
+import com.careflow.review.entity.Review;
 import com.careflow.symptom.entity.Symptom;
 import com.careflow.user.entity.User;
 import jakarta.persistence.*;
@@ -92,6 +93,9 @@ public class AsRequest {
 
     @OneToOne(mappedBy ="asRequest", fetch=FetchType.LAZY)
     private WorkReport workReport;
+
+    @OneToOne(mappedBy = "asRequest", fetch = FetchType.LAZY)
+    private Review review;
 
     @Builder
     public AsRequest(User customer, Appliance appliance, Symptom symptom, String symptomDesc,
@@ -203,6 +207,15 @@ public class AsRequest {
     public void updateSchedule(LocalDate scheduledDate, String scheduledTime) {
         this.scheduledDate = scheduledDate;
         this.scheduledTime = scheduledTime;
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    // [기사용] 작업 완료 보고서 승인 요청 취소 시 상태 되돌리기
+    public void revertToInProgress() {
+        if (this.status != AsStatus.COMPLETED) {
+            throw new IllegalStateException("완료(COMPLETED) 상태에서만 진행 중으로 되돌릴 수 있습니다.");
+        }
+        this.status = AsStatus.IN_PROGRESS;
         this.updatedAt = LocalDateTime.now();
     }
 }

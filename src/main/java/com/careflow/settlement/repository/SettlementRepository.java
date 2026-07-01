@@ -212,4 +212,24 @@ public interface SettlementRepository extends JpaRepository<Settlement, Long> {
         Long getTotalAgencyFee();
         Long getTotalEngineerPayout();
     }
+
+    // [대시보드/정산용] 기사의 특정 기간 예상 수익 합산
+    @Query("SELECT COALESCE(SUM(s.engineerNetAmount), 0) FROM Settlement s " +
+            "WHERE s.engineer.id = :engineerId " +
+            "AND s.createdAt >= :start AND s.createdAt < :end")
+    Integer sumExpectedEarningByEngineerIdAndDate(
+            @Param("engineerId") Long engineerId,
+            @Param("start") java.time.LocalDateTime start,
+            @Param("end") java.time.LocalDateTime end);
+
+    // 기사용 정산 내역 페이징 조회 (N+1 방지)
+    @org.springframework.data.jpa.repository.Query(
+            value = "SELECT s FROM Settlement s " +
+                    "JOIN FETCH s.asRequest r " +
+                    "JOIN FETCH r.appliance app " +
+                    "WHERE s.engineer.id = :engineerId " +
+                    "ORDER BY s.createdAt DESC",
+            countQuery = "SELECT COUNT(s) FROM Settlement s WHERE s.engineer.id = :engineerId"
+    )
+    org.springframework.data.domain.Page<Settlement> findPageByEngineerId(@org.springframework.data.repository.query.Param("engineerId") Long engineerId, org.springframework.data.domain.Pageable pageable);
 }

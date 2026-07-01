@@ -11,6 +11,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
@@ -22,6 +23,7 @@ public class WorkReportController {
     private final WorkReportService workReportService;
 
     @PostMapping
+    @PreAuthorize("hasAuthority('ENGINEER')")
     public ResponseEntity<String> submitReport(
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @RequestBody @Valid CreateWorkReportRequest request) {
@@ -36,6 +38,7 @@ public class WorkReportController {
      * 작업 완료 보고서 상세 조회 API (고객/기사 공용)
      */
     @GetMapping("/{reportId}")
+    @PreAuthorize("hasAnyAuthority('ENGINEER', 'CUSTOMER')")
     public ResponseEntity<WorkReportDetailResponse> getReportDetail(
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @PathVariable Long reportId) throws IllegalAccessException {
@@ -52,6 +55,7 @@ public class WorkReportController {
      * 작업 완료 보고서 고객 승인 API
      */
     @PatchMapping("/{reportId}/approve")
+    @PreAuthorize("hasAuthority('CUSTOMER')")
     public ResponseEntity<String> approveReport(
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @PathVariable Long reportId) throws IllegalAccessException {
@@ -71,6 +75,7 @@ public class WorkReportController {
      * GET /api/engineer/work-reports?page=1&size=20
      */
     @GetMapping
+    @PreAuthorize("hasAuthority('ENGINEER')")
     public ResponseEntity<Page<EngineerReportListResponse>> getWorkReports(
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @RequestParam(defaultValue = "1") int page, // 프론트엔드는 1페이지부터 시작
@@ -81,5 +86,16 @@ public class WorkReportController {
         Page<EngineerReportListResponse> response = workReportService.getEngineerWorkReports(userDetails.getUserId(), pageRequest);
 
         return ResponseEntity.ok(response);
+    }
+
+    // 작업 완료 보고서 승인 요청 취소
+    @DeleteMapping("/{reportId}/approval-request")
+    @PreAuthorize("hasAuthority('ENGINEER')")
+    public ResponseEntity<String> cancelApprovalRequest(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long reportId) {
+
+        workReportService.cancelApprovalRequest(userDetails.getUserId(), reportId);
+        return ResponseEntity.ok("보고서 승인 요청이 취소되었습니다.");
     }
 }
