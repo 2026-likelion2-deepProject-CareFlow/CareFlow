@@ -1,11 +1,14 @@
 package com.careflow.notification.service;
 
+import com.careflow.notification.dto.NotificationResponse;
 import com.careflow.notification.entity.Notification;
 import com.careflow.notification.repository.EmitterRepository;
 import com.careflow.notification.repository.NotificationRepository;
 import com.careflow.user.entity.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
@@ -85,5 +88,16 @@ public class NotificationService {
             emitterRepository.deleteById(emitterId);
             log.error("SSE 전송 오류 및 연결 삭제 - emitterId: {}", emitterId, exception);
         }
+    }
+
+    /**
+     * [기사용 API] 알림 수신함 목록 조회 (페이징 지원)
+     */
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public Page<NotificationResponse> getNotifications(Long userId, Pageable pageable) {
+        Page<Notification> notifications = notificationRepository.findByUser_IdOrderByCreatedAtDesc(userId, pageable);
+
+        // 엔티티 Page 객체를 통째로 DTO Page 객체로 매핑 (스프링 데이터 JPA의 강력한 기능!)
+        return notifications.map(NotificationResponse::from);
     }
 }

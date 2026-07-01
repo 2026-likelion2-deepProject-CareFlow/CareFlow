@@ -15,6 +15,8 @@ import java.util.List;
 public interface NotificationRepository extends JpaRepository<Notification, Long> {
     List<Notification> findByUser_IdOrderByCreatedAtDesc(Long userId);
 
+    Page<Notification> findByUser_IdOrderByCreatedAtDesc(Long userId, Pageable pageable);   // 프론트엔드 페이징 처리를 위한 Pageable 지원 메서드
+
     // user_id 목록 범위 내 알림을 최신순으로 페이징 조회 (대행사 알림센터 — 소속 기사/고객 알림 집계)
     // type이 null이면 전체 타입 조회, 값이 있으면 해당 타입만 필터링
     @Query("SELECT n FROM Notification n " +

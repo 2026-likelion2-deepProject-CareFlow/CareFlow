@@ -2,10 +2,13 @@ package com.careflow.report.controller;
 
 import com.careflow.auth.security.CustomUserDetails;
 import com.careflow.engineer.dto.CreateWorkReportRequest;
+import com.careflow.report.dto.EngineerReportListResponse;
 import com.careflow.report.dto.WorkReportDetailResponse;
 import com.careflow.report.service.WorkReportService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -61,5 +64,22 @@ public class WorkReportController {
         workReportService.approveWorkReport(userDetails.getUserId(), reportId);
 
         return ResponseEntity.ok("작업 보고서가 성공적으로 승인되었습니다. 결제 단계로 이동합니다.");
+    }
+
+    /**
+     * [기사용 API] 기사 본인의 작업 보고서 목록 조회 (페이징)
+     * GET /api/engineer/work-reports?page=1&size=20
+     */
+    @GetMapping
+    public ResponseEntity<Page<EngineerReportListResponse>> getWorkReports(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @RequestParam(defaultValue = "1") int page, // 프론트엔드는 1페이지부터 시작
+            @RequestParam(defaultValue = "20") int size) {
+
+        // Spring Data JPA의 Pageable은 0 인덱스부터 시작하므로 (page - 1) 처리
+        PageRequest pageRequest = PageRequest.of(Math.max(0, page - 1), size);
+        Page<EngineerReportListResponse> response = workReportService.getEngineerWorkReports(userDetails.getUserId(), pageRequest);
+
+        return ResponseEntity.ok(response);
     }
 }

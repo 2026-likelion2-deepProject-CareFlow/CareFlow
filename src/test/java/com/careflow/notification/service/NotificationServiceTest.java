@@ -1,17 +1,24 @@
 package com.careflow.notification.service;
 
+import com.careflow.notification.dto.NotificationResponse;
 import com.careflow.notification.entity.Notification;
 import com.careflow.notification.repository.EmitterRepository;
 import com.careflow.notification.repository.NotificationRepository;
 import com.careflow.user.entity.User;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Map;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -21,7 +28,7 @@ import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.*;
 
 @ExtendWith(MockitoExtension.class)
-@DisplayName("NotificationService 단위 테스트 (SSE 알림)")
+@DisplayName("NotificationService 단위 테스트 (SSE 알림 및 수신함 조회)")
 class NotificationServiceTest {
 
     @InjectMocks
@@ -30,6 +37,9 @@ class NotificationServiceTest {
     @Mock private EmitterRepository emitterRepository;
     @Mock private NotificationRepository notificationRepository;
 
+    // ─────────────────────────────────────────────
+    // 기존 테스트: SSE 구독 및 알림 발송
+    // ─────────────────────────────────────────────
     @Test
     @DisplayName("성공: 클라이언트가 SSE 구독을 요청하면 SseEmitter를 반환하고 저장한다.")
     void subscribe_Success() {
@@ -54,7 +64,6 @@ class NotificationServiceTest {
         given(receiver.getId()).willReturn(1L);
 
         SseEmitter mockEmitter = mock(SseEmitter.class);
-        // userId 1L에 연결된 Emitter가 1개 있다고 가정
         given(emitterRepository.findAllEmitterStartWithByUserId("1"))
                 .willReturn(Map.of("1_123456789", mockEmitter));
 
@@ -62,12 +71,51 @@ class NotificationServiceTest {
         notificationService.send(receiver, "AS_STATUS", "상태 업데이트", "출발했습니다.");
 
         // Then
-        // 1. DB에 Notification 객체가 저장되었는지 확인
         verify(notificationRepository, times(1)).save(any(Notification.class));
-
-        // (메모리 누수 방지를 위해 eventCache 저장 로직은 삭제되었으므로 검증 생략!)
-
-        // 2. Emitter를 통해 실제 데이터가 전송되었는지 확인
         verify(mockEmitter, times(1)).send(any(SseEmitter.SseEventBuilder.class));
+    }
+
+    // ─────────────────────────────────────────────
+    // 신규 추가 (Phase 1): 알림 수신함 페이징 조회
+    // ─────────────────────────────────────────────
+    @Nested
+    @DisplayName("getNotifications — 알림 수신함 페이징 조회")
+    class GetNotifications {
+
+        @Test
+        @DisplayName("성공: 엔티티 목록을 받아 포맷팅된 DTO Page로 정상 변환한다")
+        void success_convertsToFormattedDtoPage() {
+            // Given
+            Long userId = 1L;
+            PageRequest pageRequest = PageRequest.of(0, 10);
+
+            Notification noti1 = mock(Notification.class);
+            given(noti1.getId()).willReturn(5L);
+            given(noti1.getType()).willReturn("AS_STATUS");
+            given(noti1.getTitle()).willReturn("배정 알림");
+            given(noti1.getBody()).willReturn("새 작업 배정");
+            given(noti1.getChannel()).willReturn("SSE");
+            // 2024년 6월 18일 09시 30분
+            given(noti1.getCreatedAt()).willReturn(LocalDateTime.of(2024, 6, 18, 9, 30));
+
+            Page<Notification> mockPage = new PageImpl<>(List.of(noti1), pageRequest, 1);
+            given(notificationRepository.findByUser_IdOrderByCreatedAtDesc(userId, pageRequest))
+                    .willReturn(mockPage);
+
+            // When
+            Page<NotificationResponse> result = notificationService.getNotifications(userId, pageRequest);
+
+            // Then
+            assertThat(result.getTotalElements()).isEqualTo(1);
+            assertThat(result.getContent()).hasSize(1);
+
+            NotificationResponse dto = result.getContent().get(0);
+            assertThat(dto.getId()).isEqualTo(5L);
+            // 🌟 ID 포맷팅 검증 (NOT-yyyyMMdd-005)
+            assertThat(dto.getNotificationId()).isEqualTo("NOT-20240618-005");
+            // 🌟 날짜 포맷팅 검증
+            assertThat(dto.getCreatedAt()).isEqualTo("2024.06.18 09:30");
+            assertThat(dto.getType()).isEqualTo("AS_STATUS");
+        }
     }
 }
