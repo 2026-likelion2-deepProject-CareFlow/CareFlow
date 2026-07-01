@@ -1,6 +1,9 @@
 package com.careflow.review.repository;
 
+import com.careflow.agency.dto.response.AgencyReviewListResponse;
 import com.careflow.review.entity.Review;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -66,4 +69,84 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
         Long getEngineerId();
         Double getAvgRating();
     }
+
+    // ─────────────────────────────────────────────────────────────
+    // GET /api/agency/reviews 전용 쿼리
+    // ─────────────────────────────────────────────────────────────
+
+    /**
+     * 대행사 리뷰 목록 조회 (필터 + 페이징)
+     * - as_requests.agency_id 로 대행사 소속 리뷰만 필터링
+     * - keyword: 고객명 / 기사명 / 주문번호(requestId) 부분 일치
+     * - rating / engineerId / isVisible / dateFrom / dateTo 조건 선택적 적용
+     */
+    @Query("""
+            SELECT new com.careflow.agency.dto.response.AgencyReviewListResponse$ReviewSummary(
+                r.id,
+                r.asRequest.id,
+                r.customer.name,
+                r.engineer.id,
+                r.engineer.name,
+                r.asRequest.agency.agencyName,
+                r.asRequest.appliance.brand,
+                r.asRequest.appliance.modelName,
+                CAST(r.asRequest.scheduledDate AS string),
+                r.asRequest.scheduledTime,
+                r.rating,
+                r.content,
+                r.isVisible,
+                r.createdAt
+            )
+            FROM Review r
+            WHERE r.asRequest.agency.id = :agencyId
+              AND (:rating IS NULL OR r.rating = :rating)
+              AND (:engineerId IS NULL OR r.engineer.id = :engineerId)
+              AND (:isVisible IS NULL OR r.isVisible = :isVisible)
+              AND (:dateFrom IS NULL OR r.createdAt >= :dateFrom)
+              AND (:dateTo IS NULL OR r.createdAt < :dateTo)
+              AND (:keyword IS NULL
+                   OR r.customer.name LIKE %:keyword%
+                   OR r.engineer.name LIKE %:keyword%)
+            ORDER BY r.createdAt DESC
+            """)
+    Page<AgencyReviewListResponse.ReviewSummary> findAgencyReviews(
+            @Param("agencyId") Long agencyId,
+            @Param("rating") Integer rating,
+            @Param("engineerId") Long engineerId,
+            @Param("isVisible") Boolean isVisible,
+            @Param("dateFrom") LocalDateTime dateFrom,
+            @Param("dateTo") LocalDateTime dateTo,
+            @Param("keyword") String keyword,
+            Pageable pageable);
+
+    /**
+     * 대행사 전체 리뷰 통계 집계 (stats 용)
+     * - 검색 필터 무관, 항상 전체 모수 기준
+     * - result.get(0): Object[] { totalCount(Long), avgRating(Double), fiveStarCount(Long) }
+     */
+    @Query("""
+            SELECT COUNT(r),
+                   COALESCE(AVG(CAST(r.rating AS double)), 0.0),
+                   SUM(CASE WHEN r.rating = 5 THEN 1L ELSE 0L END)
+            FROM Review r
+            WHERE r.asRequest.agency.id = :agencyId
+            """)
+    List<Object[]> findAgencyReviewStats(@Param("agencyId") Long agencyId);
+
+    /**
+     * 대행사 특정 기간 리뷰 수 및 평균 평점 조회 (stats 이번달/전월 비교용)
+     * - result.get(0): Object[] { count(Long), avgRating(Double) }
+     */
+    @Query("""
+            SELECT COUNT(r),
+                   COALESCE(AVG(CAST(r.rating AS double)), 0.0)
+            FROM Review r
+            WHERE r.asRequest.agency.id = :agencyId
+              AND r.createdAt >= :from
+              AND r.createdAt < :to
+            """)
+    List<Object[]> findAgencyReviewStatsByPeriod(
+            @Param("agencyId") Long agencyId,
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to);
 }

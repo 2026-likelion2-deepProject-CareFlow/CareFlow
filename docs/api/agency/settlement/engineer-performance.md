@@ -1,11 +1,11 @@
-# API 명세: 기사별 실적 리포트 (월 단위 조회)
+# API 명세: 기사별 정산 내역 목록 조회
 
 ## 기본 정보
 
 | 항목 | 내용 |
 |---|---|
 | HTTP Method | GET |
-| URL | `/api/settlements/engineers/performance` |
+| URL | `/api/agency/settlements/engineers/performance` |
 | 인증 | 필수 (JWT) |
 | 허용 역할 | `AGENCY` |
 | 도메인 패키지 | `com.careflow.settlement` |
@@ -18,13 +18,20 @@
 
 | 파라미터 | 타입 | 필수 | 설명 |
 |---|---|---|---|
-| `year` | int | O | 조회 연도 (예: 2026) |
-| `month` | int | O | 조회 월 (1~12) |
+| `year` | int | O | 조회 연도 (예: 2024) |
+| `month` | int | O | 조회 월 (1~12) — 기본 범위 지정용 |
+| `status` | String | X | 상태 필터: `PENDING`(지급 대기) / `PAID`(지급 완료) / `DISPUTED`(보류). null 시 전체 조회 |
+| `keyword` | String | X | 기사명 부분 일치 검색 |
+| `settlementId` | Long | X | 정산 ID 정확히 일치 검색 |
+| `dateFrom` | String | X | 날짜 범위 시작 (`yyyy-MM-dd`). null 시 해당 월 1일 |
+| `dateTo` | String | X | 날짜 범위 종료 (`yyyy-MM-dd`, 해당일 포함). null 시 해당 월 말일 |
+| `page` | int | X | 페이지 번호 (기본값 0) |
+| `size` | int | X | 페이지 당 건수 (기본값 10) |
 
 ### 요청 예시
 
 ```
-GET /api/settlements/engineers/performance?year=2026&month=6
+GET /api/agency/settlements/engineers/performance?year=2024&month=6&status=PAID&keyword=김현수&page=0&size=10
 Authorization: Bearer {accessToken}
 ```
 
@@ -36,24 +43,32 @@ Authorization: Bearer {accessToken}
 
 ```json
 {
-  "year": 2026,
+  "year": 2024,
   "month": 6,
-  "engineers": [
+  "settlements": [
     {
-      "engineerId": 10,
-      "engineerName": "홍길동",
-      "completedCount": 12,
-      "avgRating": 4.75,
-      "totalEarning": 960000
-    },
-    {
-      "engineerId": 11,
-      "engineerName": "이순신",
-      "completedCount": 8,
-      "avgRating": 4.25,
-      "totalEarning": 640000
+      "settlementId": 1,
+      "type": "ENGINEER",
+      "engineerId": 123,
+      "engineerName": "김현수",
+      "engineerPhone": "010-1234-5678",
+      "agencyName": "퀵케어 서비스",
+      "periodStart": "2024-06-01",
+      "periodEnd": "2024-06-30",
+      "grossAmount": 2480000,
+      "platformFeeRate": 10.0,
+      "platformFee": 248000,
+      "agencyFeeRate": 10.0,
+      "agencyFee": 248000,
+      "engineerNetAmount": 1984000,
+      "status": "PAID",
+      "settledAt": "2024-06-18T15:30:00"
     }
-  ]
+  ],
+  "totalElements": 248,
+  "totalPages": 25,
+  "currentPage": 0,
+  "size": 10
 }
 ```
 
@@ -63,11 +78,26 @@ Authorization: Bearer {accessToken}
 |---|---|---|
 | `year` | int | 조회 연도 |
 | `month` | int | 조회 월 |
-| `engineers[].engineerId` | Long | 기사 user_id |
-| `engineers[].engineerName` | String | 기사 이름 |
-| `engineers[].completedCount` | int | 해당 월 완료 정산 건수 |
-| `engineers[].avgRating` | Double | 해당 월 리뷰 평균 평점 (리뷰 없을 경우 null) |
-| `engineers[].totalEarning` | int | 기사 실수령액 합계 (engineer_net_amount 합산) |
+| `settlements[].settlementId` | Long | 정산 고유 ID |
+| `settlements[].type` | String | 정산 유형 (현재 항상 `"ENGINEER"`) |
+| `settlements[].engineerId` | Long | 기사 user_id |
+| `settlements[].engineerName` | String | 기사 이름 |
+| `settlements[].engineerPhone` | String | 기사 연락처 |
+| `settlements[].agencyName` | String | 소속 대행사명 |
+| `settlements[].periodStart` | String | 정산 기준 기간 시작 (해당 월 1일, `yyyy-MM-dd`) |
+| `settlements[].periodEnd` | String | 정산 기준 기간 종료 (해당 월 말일, `yyyy-MM-dd`) |
+| `settlements[].grossAmount` | int | 총 정산 금액 (고객 결제액) |
+| `settlements[].platformFeeRate` | BigDecimal | CareFlow 수수료율 (%) 스냅샷 |
+| `settlements[].platformFee` | int | CareFlow 수수료 (원) |
+| `settlements[].agencyFeeRate` | BigDecimal | 대행사 수수료율 (%) 스냅샷 |
+| `settlements[].agencyFee` | int | 대행사 수수료 (원) |
+| `settlements[].engineerNetAmount` | int | 기사 실지급액 (원) |
+| `settlements[].status` | String | `PENDING` / `PAID` / `APPROVED` / `DISPUTED` |
+| `settlements[].settledAt` | LocalDateTime | 지급 완료 일시 (null: 미지급) |
+| `totalElements` | long | 필터 적용 후 전체 건수 |
+| `totalPages` | int | 전체 페이지 수 |
+| `currentPage` | int | 현재 페이지 번호 (0-based) |
+| `size` | int | 페이지 당 건수 |
 
 ### 실패 응답
 
@@ -75,41 +105,32 @@ Authorization: Bearer {accessToken}
 |---|---|---|
 | JWT 없거나 만료 | 401 | - |
 | AGENCY 역할 아님 | 403 | - |
-| year/month 누락 또는 범위 초과 | 400 | `"월은 1~12 사이여야 합니다."` |
+| year/month 누락 또는 month 범위 초과 | 400 | `"월은 1~12 사이여야 합니다."` |
+| dateFrom/dateTo 형식 오류 | 400 | `"날짜 형식이 올바르지 않습니다. (yyyy-MM-dd)"` |
 
 ---
 
 ## 비즈니스 로직
 
-1. JWT에서 `agency_id`를 추출한다 (`CustomUserDetails` → `users.agency_id`).
-2. `settlements` 테이블에서 `agency_id` + `status = 'PAID'` + `paid_at`이 요청 연월 범위인 레코드를 조회한다.
-3. `engineer_id` 기준으로 그룹핑하여 `completedCount`, `engineer_net_amount` 합산을 계산한다.
-4. 동일 기간·동일 기사의 `reviews.rating` 평균을 별도로 집계하여 합쳐서 응답한다.
-5. 기사 이름은 `users.name`에서 조회한다.
-6. 해당 월에 정산 내역이 없는 기사는 결과에 포함하지 않는다.
+1. JWT에서 `agency_id`를 추출한다 (`CustomUserDetails` → `userRepository` → `agency`).
+2. `year` + `month`로 기본 조회 범위를 계산한다 (해당 월 1일 00:00 ~ 다음 달 1일 00:00).
+3. `dateFrom` / `dateTo`가 제공된 경우 기본 범위 내에서 추가 좁힘 필터로 적용한다.
+4. `settlements` 테이블에서 `agency_id` 일치 + 날짜 범위 + 동적 필터(status / keyword / settlementId)를 적용하여 조회한다.
+5. `paidAt DESC` 정렬, 페이징 적용.
+6. `periodStart` / `periodEnd`는 `createdAt` 기준 해당 월의 1일~말일로 서비스 레이어에서 파생한다.
+7. CSV 다운로드(`/monthly-report/download`)는 기존 집계 방식을 유지하며 이 메서드를 사용하지 않는다.
 
 ---
 
-## 참조 테이블
+## 필터 동작 규칙
 
-```
-settlements
-  - settlement_id, payment_id, request_id
-  - engineer_id (FK → users)
-  - agency_id   (FK → agencies)
-  - gross_amount, platform_fee, agency_fee, engineer_net_amount
-  - status ENUM('PENDING','APPROVED','PAID','DISPUTED')
-  - paid_at
-
-reviews
-  - review_id, request_id
-  - engineer_id (FK → users)
-  - rating (TINYINT 1~5)
-  - created_at
-
-users
-  - user_id, name, role
-```
+| 필터 | null 시 동작 |
+|---|---|
+| `status` | 전체 상태 조회 |
+| `keyword` | 기사명 필터 미적용 |
+| `settlementId` | ID 필터 미적용 |
+| `dateFrom` | 해당 월 1일 기준 |
+| `dateTo` | 해당 월 말일 기준 |
 
 ---
 
@@ -118,69 +139,35 @@ users
 | 파일 | 경로 |
 |---|---|
 | Controller | `settlement/controller/SettlementController.java` |
-| Service | `settlement/service/SettlementService.java` |
-| Repository | `settlement/repository/SettlementRepository.java` |
-| 응답 DTO | `settlement/dto/EngineerPerformanceResponse.java` |
-| 응답 DTO (내부 항목) | `settlement/dto/EngineerPerformanceItem.java` |
-| Entity | `settlement/entity/Settlements.java` |
+| Service | `settlement/service/SettlementService.java` — `getSettlementList()` 메서드 |
+| Repository | `settlement/repository/SettlementRepository.java` — `findSettlementListByAgency()` 추가 |
+| 응답 DTO | `settlement/dto/EngineerSettlementListResponse.java` |
 
 ---
 
 ## 테스트 요구사항
 
-> **이 API를 구현할 때 아래 두 종류의 테스트를 반드시 작성해야 한다.**
-> 테스트 없이 구현 완료로 간주하지 않는다.
+> **단위 테스트(JUnit 5 + Mockito)와 컨트롤러 슬라이스 테스트를 반드시 작성한다.**
 
-### 1. 단위 테스트 (JUnit 5 + Mockito)
+### 1. 단위 테스트 (`SettlementServiceTest`)
 
-**대상**: `SettlementService`
-
-**테스트 클래스**: `src/test/java/com/careflow/settlement/service/SettlementServiceTest.java`
-
-**작성 규칙**:
-- `@ExtendWith(MockitoExtension.class)` 사용
-- `SettlementRepository`, `ReviewRepository` 등 의존성은 `@Mock`으로 처리
-- 검증 대상은 집계 결과의 정확성(건수 합산, 금액 합산, 평점 평균)
-
-**필수 테스트 케이스**:
-
-| 케이스 | 설명 |
-|---|---|
-| 정상 조회 | 해당 월에 정산 데이터가 있는 경우, 기사별 건수·금액·평점이 올바르게 집계되는지 검증 |
-| 빈 결과 | 해당 월에 정산 내역이 없는 경우 빈 리스트를 반환하는지 검증 |
-| 리뷰 없는 기사 | 완료 건수는 있지만 리뷰가 없는 기사의 `avgRating`이 null로 처리되는지 검증 |
-| 유효하지 않은 month | month가 0이나 13인 경우 `IllegalArgumentException`이 발생하는지 검증 |
-
----
-
-### 2. 통합 테스트 (H2 인메모리 DB)
-
-**대상**: `SettlementController` — 실제 HTTP 요청 → H2 DB 왕복 전체 흐름
-
-**테스트 클래스**: `src/test/java/com/careflow/settlement/controller/SettlementControllerTest.java`
-
-**작성 규칙**:
-- `@WebMvcTest(SettlementController.class)` + `@Import(SecurityConfig.class)` 사용
-- `@MockitoBean`으로 서비스 레이어 mocking (Spring Boot 3.4+ 스타일, `@MockBean` 아님)
-- 실제 H2 DB와 연동하는 레포지토리 레벨 통합 테스트가 필요한 경우 `@SpringBootTest` + `@AutoConfigureMockMvc` + `@Transactional`로 별도 클래스 작성
-- JWT 토큰 없이 요청 시 401이 반환되는지 검증하는 시큐리티 테스트 포함
-
-**필수 테스트 케이스**:
-
-| 케이스 | HTTP 상태 | 검증 내용 |
+| TC | 케이스 | 검증 포인트 |
 |---|---|---|
-| 정상 요청 (AGENCY JWT) | 200 | 응답 JSON의 `engineers` 배열 구조 및 집계값 검증 |
+| TC-1 | 필터 없음 — 전체 조회 | `settlements` 리스트 크기, `totalElements` |
+| TC-2 | `status=PAID` 필터 전달 | Repository에 `status="PAID"` 파라미터 전달 여부 |
+| TC-3 | `keyword` 필터 전달 | Repository에 `keyword` 파라미터 전달 여부 |
+| TC-4 | `settlementId` 필터 전달 | Repository에 `settlementId` 파라미터 전달 여부 |
+| TC-5 | `dateFrom`/`dateTo` 정상 파싱 | `LocalDateTime`으로 변환되어 Repository 호출 여부 |
+| TC-6 | 잘못된 날짜 형식 | `IllegalArgumentException` 발생 |
+| TC-7 | 유효하지 않은 month | `IllegalArgumentException("월은 1~12 사이여야 합니다.")` |
+| TC-8 | 결과 0건 | 빈 리스트, `totalElements=0` |
+
+### 2. 컨트롤러 슬라이스 테스트 (`SettlementControllerTest`)
+
+| TC | HTTP 상태 | 검증 포인트 |
+|---|---|---|
+| 정상 요청 (year/month만) | 200 | `settlements` 배열, 페이징 필드 구조 검증 |
+| status 필터 포함 | 200 | 서비스 호출 시 status 파라미터 전달 검증 |
 | JWT 없음 | 401 | 인증 실패 |
-| ENGINEER JWT로 요청 | 403 | 권한 없음 |
-| month=0 요청 | 400 | 유효성 검사 실패 |
-| 데이터 없는 월 | 200 | `engineers` 빈 배열 반환 |
-
----
-
-## 구현 시 주의사항
-
-- `settlements.paid_at` 기준으로 월 필터링할 것 (`created_at` 기준 아님).
-- 집계 쿼리는 JPQL 또는 `@Query` 네이티브 쿼리로 작성하되, 페이징 없이 전체 결과를 반환한다 (한 대행사 소속 기사 수가 많지 않다고 가정).
-- `avgRating`은 `Double`로 소수점 둘째 자리까지 반올림하여 반환한다.
-- 엔티티에 Setter를 추가하지 말고, 집계 결과는 DTO 생성자 또는 record로 직접 매핑한다.
-- 한글 주석으로 비즈니스 로직의 의도와 주의사항을 코드에 남긴다.
+| year 누락 | 400 | 파라미터 오류 |
+| month=0 | 400 | IllegalArgumentException → 400 |

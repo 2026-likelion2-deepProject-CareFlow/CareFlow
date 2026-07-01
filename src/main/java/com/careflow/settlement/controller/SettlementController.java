@@ -27,7 +27,7 @@ public class SettlementController {
      * [기사별 실적 리포트] GET /api/agency/settlements/engineers/performance
      *
      * - AGENCY 역할만 접근 가능 (본인 소속 대행사 기준 자동 필터)
-     * - settlements.paid_at 기준 월 집계: 완료 건수 / 평균 평점 / 기사 실수령액
+     * - settlements.paid_at 기준 월 범위 내 기사별 완료 건수 / 평균 평점 / 실수령액 집계
      *
      * @param year  조회 연도
      * @param month 조회 월 (1~12)

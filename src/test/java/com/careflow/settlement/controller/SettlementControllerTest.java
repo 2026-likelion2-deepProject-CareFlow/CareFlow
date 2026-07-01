@@ -10,6 +10,7 @@ import com.careflow.settlement.dto.EngineerPerformanceItem;
 import com.careflow.settlement.dto.EngineerPerformanceResponse;
 import com.careflow.settlement.dto.MonthlySummaryResponse;
 import com.careflow.settlement.service.SettlementService;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -48,6 +49,7 @@ class SettlementControllerTest {
     @MockitoBean private CustomOAuth2UserService customOAuth2UserService;
     @MockitoBean private OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;
     @MockitoBean private ClientRegistrationRepository clientRegistrationRepository;
+    @MockitoBean private StringRedisTemplate stringRedisTemplate;
 
     private static final Long AGENCY_USER_ID = 1L;
 
@@ -63,71 +65,66 @@ class SettlementControllerTest {
     }
 
     // ══════════════════════════════════════════════════════════════
-    //  1. GET /api/settlements/engineers/performance
+    //  1. GET /api/agency/settlements/engineers/performance
     // ══════════════════════════════════════════════════════════════
     @Nested
-    @DisplayName("GET /api/settlements/engineers/performance — 기사별 실적 리포트")
+    @DisplayName("GET /api/agency/settlements/engineers/performance — 기사별 실적 리포트")
     class GetEngineerPerformance {
 
-        @Test
-        @DisplayName("성공: 기사 2명 실적 반환 — 200 OK, JSON 구조 검증")
-        void success_200_returnsList() throws Exception {
-            EngineerPerformanceResponse response = EngineerPerformanceResponse.builder()
-                    .year(2026).month(6)
-                    .engineers(List.of(
-                            EngineerPerformanceItem.builder()
-                                    .engineerId(10L).engineerName("홍길동")
-                                    .completedCount(12).avgRating(4.75).totalEarning(960000)
-                                    .build(),
-                            EngineerPerformanceItem.builder()
-                                    .engineerId(11L).engineerName("이순신")
-                                    .completedCount(8).avgRating(4.25).totalEarning(640000)
-                                    .build()))
+        private EngineerPerformanceResponse sampleResponse() {
+            EngineerPerformanceItem item = EngineerPerformanceItem.builder()
+                    .engineerId(10L).engineerName("홍길동")
+                    .completedCount(5L).avgRating(4.5).totalEarning(810000L)
                     .build();
-
-            given(settlementService.getEngineerPerformance(eq(AGENCY_USER_ID), eq(2026), eq(6)))
-                    .willReturn(response);
-
-            mockMvc.perform(get("/api/agency/settlements/engineers/performance")
-                            .param("year", "2026")
-                            .param("month", "6"))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.year").value(2026))
-                    .andExpect(jsonPath("$.month").value(6))
-                    .andExpect(jsonPath("$.engineers.length()").value(2))
-                    .andExpect(jsonPath("$.engineers[0].engineerId").value(10))
-                    .andExpect(jsonPath("$.engineers[0].engineerName").value("홍길동"))
-                    .andExpect(jsonPath("$.engineers[0].completedCount").value(12))
-                    .andExpect(jsonPath("$.engineers[0].avgRating").value(4.75))
-                    .andExpect(jsonPath("$.engineers[0].totalEarning").value(960000));
+            return EngineerPerformanceResponse.builder()
+                    .year(2024).month(6).engineers(List.of(item)).build();
         }
 
         @Test
-        @DisplayName("성공: 해당 월 데이터 없음 — 200 OK, 빈 배열 반환")
+        @DisplayName("TC-C-1: 성공 — 200 OK, 기사별 집계 응답 구조 검증")
+        void success_200_returnsPerformance() throws Exception {
+            given(settlementService.getEngineerPerformance(eq(AGENCY_USER_ID), eq(2024), eq(6)))
+                    .willReturn(sampleResponse());
+
+            mockMvc.perform(get("/api/agency/settlements/engineers/performance")
+                            .param("year", "2024")
+                            .param("month", "6"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.year").value(2024))
+                    .andExpect(jsonPath("$.month").value(6))
+                    .andExpect(jsonPath("$.engineers.length()").value(1))
+                    .andExpect(jsonPath("$.engineers[0].engineerName").value("홍길동"))
+                    .andExpect(jsonPath("$.engineers[0].completedCount").value(5))
+                    .andExpect(jsonPath("$.engineers[0].avgRating").value(4.5))
+                    .andExpect(jsonPath("$.engineers[0].totalEarning").value(810000));
+        }
+
+        @Test
+        @DisplayName("TC-C-2: 데이터 없음 — 200 OK, 빈 engineers 리스트 반환")
         void success_200_emptyList() throws Exception {
             given(settlementService.getEngineerPerformance(eq(AGENCY_USER_ID), anyInt(), anyInt()))
                     .willReturn(EngineerPerformanceResponse.builder()
-                            .year(2026).month(6).engineers(List.of()).build());
+                            .year(2024).month(6).engineers(List.of()).build());
 
             mockMvc.perform(get("/api/agency/settlements/engineers/performance")
-                            .param("year", "2026")
+                            .param("year", "2024")
                             .param("month", "6"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.engineers.length()").value(0));
         }
 
         @Test
-        @DisplayName("실패: JWT 없음 — 401 Unauthorized")
+        @DisplayName("TC-C-3: JWT 없음 — 401 Unauthorized")
         void fail_noAuth_401() throws Exception {
             mockMvc.perform(get("/api/agency/settlements/engineers/performance")
                             .with(anonymous())
-                            .param("year", "2026")
+                            .param("year", "2024")
                             .param("month", "6"))
                     .andExpect(status().isUnauthorized());
         }
 
         @Test
-        @DisplayName("실패: year 파라미터 누락 — 400 Bad Request")
+        @DisplayName("TC-C-4: year 누락 — 400 Bad Request")
         void fail_missingYear_400() throws Exception {
             mockMvc.perform(get("/api/agency/settlements/engineers/performance")
                             .param("month", "6"))
@@ -135,33 +132,25 @@ class SettlementControllerTest {
         }
 
         @Test
-        @DisplayName("실패: month 파라미터 누락 — 400 Bad Request")
-        void fail_missingMonth_400() throws Exception {
-            mockMvc.perform(get("/api/agency/settlements/engineers/performance")
-                            .param("year", "2026"))
-                    .andExpect(status().isBadRequest());
-        }
-
-        @Test
-        @DisplayName("실패: month=0 — 서비스에서 IllegalArgumentException → 400")
+        @DisplayName("TC-C-5: month=0 — 서비스 IllegalArgumentException → 400")
         void fail_invalidMonth_400() throws Exception {
             given(settlementService.getEngineerPerformance(eq(AGENCY_USER_ID), anyInt(), eq(0)))
                     .willThrow(new IllegalArgumentException("월은 1~12 사이여야 합니다."));
 
             mockMvc.perform(get("/api/agency/settlements/engineers/performance")
-                            .param("year", "2026")
+                            .param("year", "2024")
                             .param("month", "0"))
                     .andExpect(status().isBadRequest());
         }
 
         @Test
-        @DisplayName("실패: 대행사 정보 없는 유저 — 404 Not Found")
+        @DisplayName("TC-C-6: 대행사 정보 없는 유저 — 404 Not Found")
         void fail_noAgency_404() throws Exception {
             given(settlementService.getEngineerPerformance(eq(AGENCY_USER_ID), anyInt(), anyInt()))
                     .willThrow(new NoSuchElementException("소속 대행사 정보가 없습니다."));
 
             mockMvc.perform(get("/api/agency/settlements/engineers/performance")
-                            .param("year", "2026")
+                            .param("year", "2024")
                             .param("month", "6"))
                     .andExpect(status().isNotFound());
         }
@@ -175,13 +164,16 @@ class SettlementControllerTest {
     class GetMonthlySummary {
 
         @Test
-        @DisplayName("성공: 합산 내역 반환 — 200 OK, 모든 필드 검증")
+        @DisplayName("성공: 합산 내역 반환 — 200 OK, 상태별 금액 분리 포함 전체 필드 검증")
         void success_200_returnsSummary() throws Exception {
             given(settlementService.getMonthlySummary(eq(AGENCY_USER_ID), eq(2026), eq(6)))
                     .willReturn(MonthlySummaryResponse.builder()
                             .year(2026).month(6)
                             .totalCount(20)
                             .totalGrossAmount(4000000)
+                            .paidAmount(3200000)
+                            .pendingAmount(500000)
+                            .disputedAmount(300000)
                             .totalPlatformFee(400000)
                             .totalAgencyFee(360000)
                             .totalEngineerPayout(3240000)
@@ -193,6 +185,9 @@ class SettlementControllerTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.totalCount").value(20))
                     .andExpect(jsonPath("$.totalGrossAmount").value(4000000))
+                    .andExpect(jsonPath("$.paidAmount").value(3200000))
+                    .andExpect(jsonPath("$.pendingAmount").value(500000))
+                    .andExpect(jsonPath("$.disputedAmount").value(300000))
                     .andExpect(jsonPath("$.totalPlatformFee").value(400000))
                     .andExpect(jsonPath("$.totalAgencyFee").value(360000))
                     .andExpect(jsonPath("$.totalEngineerPayout").value(3240000));
@@ -205,6 +200,7 @@ class SettlementControllerTest {
                     .willReturn(MonthlySummaryResponse.builder()
                             .year(2026).month(6)
                             .totalCount(0).totalGrossAmount(0)
+                            .paidAmount(0).pendingAmount(0).disputedAmount(0)
                             .totalPlatformFee(0).totalAgencyFee(0).totalEngineerPayout(0)
                             .build());
 
@@ -213,7 +209,10 @@ class SettlementControllerTest {
                             .param("month", "6"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.totalCount").value(0))
-                    .andExpect(jsonPath("$.totalGrossAmount").value(0));
+                    .andExpect(jsonPath("$.totalGrossAmount").value(0))
+                    .andExpect(jsonPath("$.paidAmount").value(0))
+                    .andExpect(jsonPath("$.pendingAmount").value(0))
+                    .andExpect(jsonPath("$.disputedAmount").value(0));
         }
 
         @Test

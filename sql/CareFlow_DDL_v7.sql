@@ -1,6 +1,15 @@
 -- ============================================================
--- CareFlow DDL v6
--- DB명세서 v20 기준 / 모든 FK를 CREATE TABLE 내부 CONSTRAINT로 정의
+-- CareFlow DDL v7
+-- DB명세서 v21 기준 / 모든 FK를 CREATE TABLE 내부 CONSTRAINT로 정의
+--
+-- ※ v7 변경 사항 (DB명세서 v21 반영)
+--   - bank_accounts 테이블 신규 추가 — 기사(엔지니어) 정산금 지급 계좌 정보 (users 1:1)
+--     · 기사 본인이 아닌 대행사 관리자가 기사 프로필 수정 화면에서 대신 등록/수정
+--     · GET /api/agency/settlements 등 정산 API의 payMethod/bankAccount 응답 필드는
+--       engineer_id 기준으로 bank_accounts를 LEFT JOIN하여 채움
+--     · payments.pg_provider(고객→플랫폼 결제 PG사)와는 무관한 별개 개념
+--       (bank_accounts는 플랫폼/대행사→기사 정산금 지급 방향)
+--     · 등록 주체 감사 컬럼(registered_by)은 논의 후 불필요 판단하여 제외
 --
 -- ※ v6 변경 사항
 --   - notifications.is_read (BOOLEAN NOT NULL DEFAULT FALSE) 컬럼 신규 추가
@@ -583,7 +592,32 @@ CREATE TABLE `settlements` (
 );
 
 -- ============================================================
--- 24. notifications
+-- 24. bank_accounts
+-- [v7 신규] 기사(엔지니어) 정산금 지급 계좌 정보. DB명세서 v21 반영.
+--   - 기사 본인이 아닌 대행사 관리자가 기사 프로필 수정 화면에서 대신 등록/수정
+--   - GET /api/agency/settlements 등 정산 API의 payMethod/bankAccount 응답 필드는
+--     engineer_id 기준으로 본 테이블을 LEFT JOIN하여 채움
+--   - payments.pg_provider(고객→플랫폼 결제 PG사)와는 무관한 별개 개념
+--     (본 테이블은 플랫폼/대행사→기사 정산금 지급 방향)
+-- ============================================================
+CREATE TABLE `bank_accounts` (
+    `bank_account_id` BIGINT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT '계좌 정보 ID',
+    `engineer_id`     BIGINT UNSIGNED NOT NULL                            COMMENT '기사 user_id (users.user_id 참조, 1:1)',
+    `bank_name`       VARCHAR(50)     NOT NULL                            COMMENT '은행명 (예: 국민은행, 신한은행)',
+    `account_number`  VARCHAR(50)     NOT NULL                            COMMENT '계좌번호',
+    `account_holder`  VARCHAR(50)     NOT NULL                            COMMENT '예금주명',
+    `pay_method`      ENUM('BANK_TRANSFER') NOT NULL DEFAULT 'BANK_TRANSFER' COMMENT '지급 방식 (현재 계좌이체 단일 지원, 추후 확장 대비 ENUM화)',
+    `created_at`      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT '등록일',
+    `updated_at`      DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '수정일',
+
+    CONSTRAINT FK_users_TO_bank_accounts
+        FOREIGN KEY (`engineer_id`) REFERENCES `users` (`user_id`),
+
+    UNIQUE uk_bank_accounts_engineer (engineer_id)
+);
+
+-- ============================================================
+-- 25. notifications
 -- [v6 변경] is_read 컬럼 신규 추가
 --   - GET /api/agency/notifications: 사용자/기사별 읽음·안읽음 갯수 집계용
 --   - 1알림 row = 1수신자(user_id) 구조이므로 boolean 플래그로 충분 (브로드캐스트 공지 아님)
@@ -607,7 +641,7 @@ CREATE TABLE `notifications` (
 );
 
 -- ============================================================
--- 25. lms_contents
+-- 26. lms_contents
 -- ============================================================
 CREATE TABLE `lms_contents` (
     `content_id`     BIGINT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT '콘텐츠 ID',
@@ -633,7 +667,7 @@ CREATE TABLE `lms_contents` (
 
 
 -- ============================================================
--- 26. lms_confirmations
+-- 27. lms_confirmations
 -- ============================================================
 CREATE TABLE `lms_confirmations` (
     `confirmation_id`   BIGINT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT '이수 이력 ID',
@@ -657,7 +691,7 @@ CREATE TABLE `lms_confirmations` (
 
 
 -- ============================================================
--- 27. engineer_schedule_slots
+-- 28. engineer_schedule_slots
 -- ============================================================
 CREATE TABLE `engineer_schedule_slots` (
     `slot_id`     BIGINT UNSIGNED  NOT NULL PRIMARY KEY AUTO_INCREMENT,

@@ -5,7 +5,7 @@
 | 항목 | 내용 |
 |---|---|
 | HTTP Method | GET |
-| URL | `/api/settlements/monthly-summary` |
+| URL | `/api/agency/settlements/summary` |
 | 인증 | 필수 (JWT) |
 | 허용 역할 | `AGENCY` |
 | 도메인 패키지 | `com.careflow.settlement` |
@@ -24,7 +24,7 @@
 ### 요청 예시
 
 ```
-GET /api/settlements/monthly-summary?year=2026&month=6
+GET /api/agency/settlements/summary?year=2026&month=6
 Authorization: Bearer {accessToken}
 ```
 
@@ -40,6 +40,9 @@ Authorization: Bearer {accessToken}
   "month": 6,
   "totalCount": 20,
   "totalGrossAmount": 4000000,
+  "paidAmount": 3200000,
+  "pendingAmount": 500000,
+  "disputedAmount": 300000,
   "totalPlatformFee": 400000,
   "totalAgencyFee": 360000,
   "totalEngineerPayout": 3240000
@@ -52,12 +55,16 @@ Authorization: Bearer {accessToken}
 |---|---|---|
 | `year` | int | 조회 연도 |
 | `month` | int | 조회 월 |
-| `totalCount` | int | 해당 월 정산 건수 |
-| `totalGrossAmount` | int | 총 매출 합계 (gross_amount 합산, 원) |
-| `totalPlatformFee` | int | CareFlow 수수료 합계 (platform_fee 합산, 원) |
-| `totalAgencyFee` | int | 대행사 수수료 합계 (agency_fee 합산, 원) |
-| `totalEngineerPayout` | int | 기사 지급액 합계 (engineer_net_amount 합산, 원) |
+| `totalCount` | long | 해당 월 정산 건수 (모든 status 포함) |
+| `totalGrossAmount` | long | 총 매출 합계 (모든 status의 gross_amount 합산, 원) |
+| `paidAmount` | long | 지급 완료 금액 (status = PAID인 gross_amount 합산, 원) |
+| `pendingAmount` | long | 지급 대기 금액 (status IN (PENDING, APPROVED) gross_amount 합산, 원) |
+| `disputedAmount` | long | 보류 금액 (status = DISPUTED인 gross_amount 합산, 원) |
+| `totalPlatformFee` | long | CareFlow 수수료 합계 (platform_fee 합산, 원) |
+| `totalAgencyFee` | long | 대행사 수수료 합계 (agency_fee 합산, 원) |
+| `totalEngineerPayout` | long | 기사 지급액 합계 (engineer_net_amount 합산, 원) |
 
+> `paidAmount + pendingAmount + disputedAmount = totalGrossAmount` 가 항상 성립한다.  
 > 데이터가 없는 월은 모든 금액 필드가 0, `totalCount`가 0인 응답을 반환한다 (404 아님).
 
 ### 실패 응답
@@ -73,14 +80,19 @@ Authorization: Bearer {accessToken}
 ## 비즈니스 로직
 
 1. JWT에서 `agency_id`를 추출한다 (`CustomUserDetails` → `users.agency_id`).
-2. `settlements` 테이블에서 `agency_id` + `status = 'PAID'` + `paid_at`이 요청 연월 범위인 레코드를 필터링한다.
+2. `settlements` 테이블에서 `agency_id` + `created_at`이 요청 연월 범위인 레코드를 필터링한다 (**전체 status 포함**).
 3. 해당 레코드 전체에 대해 아래 항목을 집계한다:
    - `COUNT(*)` → `totalCount`
-   - `SUM(gross_amount)` → `totalGrossAmount`
+   - `SUM(gross_amount)` → `totalGrossAmount` (전체)
+   - `SUM(CASE WHEN status = 'PAID' THEN gross_amount ELSE 0 END)` → `paidAmount`
+   - `SUM(CASE WHEN status IN ('PENDING','APPROVED') THEN gross_amount ELSE 0 END)` → `pendingAmount`
+   - `SUM(CASE WHEN status = 'DISPUTED' THEN gross_amount ELSE 0 END)` → `disputedAmount`
    - `SUM(platform_fee)` → `totalPlatformFee`
    - `SUM(agency_fee)` → `totalAgencyFee`
    - `SUM(engineer_net_amount)` → `totalEngineerPayout`
 4. 집계 결과가 없으면(0건) 모든 금액을 0으로 채운 응답을 반환한다.
+
+> **날짜 기준**: `created_at` 기준으로 월 범위를 필터링한다. PENDING/APPROVED/DISPUTED 상태의 정산은 `paid_at` 이 없으므로 `paid_at` 기준 사용 불가.
 
 ---
 
@@ -99,6 +111,7 @@ settlements
   - engineer_net_amount : 기사 실수령액
   - status ENUM('PENDING','APPROVED','PAID','DISPUTED')
   - paid_at
+  - created_at        ← 월 범위 필터링 기준 컬럼
 
 payments
   - payment_id, request_id, customer_id
@@ -124,63 +137,45 @@ payments
 
 ## 테스트 요구사항
 
-> **이 API를 구현할 때 아래 두 종류의 테스트를 반드시 작성해야 한다.**
-> 테스트 없이 구현 완료로 간주하지 않는다.
-
 ### 1. 단위 테스트 (JUnit 5 + Mockito)
-
-**대상**: `SettlementService`
 
 **테스트 클래스**: `src/test/java/com/careflow/settlement/service/SettlementServiceTest.java`
 
-> `engineer-performance` API와 동일 테스트 클래스에 메서드를 추가한다.
-
-**작성 규칙**:
-- `@ExtendWith(MockitoExtension.class)` 사용
-- `SettlementRepository`는 `@Mock`으로 처리
-- 집계 쿼리 결과를 Mock 객체로 주입하여 합산 로직이 올바른지 검증
-
-**필수 테스트 케이스**:
-
 | 케이스 | 설명 |
 |---|---|
-| 정상 집계 | 여러 건의 settlement Mock 데이터 합산이 올바른지 검증 |
-| 빈 결과 | 정산 내역이 없을 때 모든 금액 필드가 0인지 검증 |
-| 유효하지 않은 month | month=0, month=13 시 `IllegalArgumentException` 발생 검증 |
-| 단일 건 | 1건만 있을 때 합산이 해당 건의 값과 동일한지 검증 |
-
----
+| 정상 집계 | `paidAmount`, `pendingAmount`, `disputedAmount` 분리 집계값 검증 |
+| 빈 결과 | 모든 금액 필드(상태별 포함)가 0인지 검증 |
+| 단일 건(PAID) | `paidAmount = totalGrossAmount`, `pendingAmount/disputedAmount = 0` 검증 |
+| 유효하지 않은 month | month=0 시 `IllegalArgumentException` 발생 검증 |
 
 ### 2. 통합 테스트 (H2 인메모리 DB)
 
-**대상**: `SettlementController` — 실제 HTTP 요청 → H2 DB 왕복 전체 흐름
+**테스트 클래스**: `src/test/java/com/careflow/settlement/service/SettlementServiceIntegrationTest.java`
+
+| 케이스 | 설명 |
+|---|---|
+| PAID 정산 2건 합산 | `paidAmount = totalGrossAmount`, `pendingAmount/disputedAmount = 0` 검증 |
+| 데이터 없는 월 | 모든 금액 0 반환 (상태별 필드 포함) |
+| 타 월 정산 제외 | 7월 정산이 6월 조회에 포함되지 않음 |
+
+### 3. 컨트롤러 슬라이스 테스트 (`@WebMvcTest`)
 
 **테스트 클래스**: `src/test/java/com/careflow/settlement/controller/SettlementControllerTest.java`
 
-> `engineer-performance` API와 동일 테스트 클래스에 메서드를 추가한다.
-
-**작성 규칙**:
-- `@WebMvcTest(SettlementController.class)` + `@Import(SecurityConfig.class)` 사용
-- `@MockitoBean`으로 서비스 레이어 mocking (Spring Boot 3.4+ 스타일)
-- H2 DB 왕복이 필요한 경우 `@SpringBootTest` + `@AutoConfigureMockMvc` + `@Transactional`로 별도 클래스 작성
-
-**필수 테스트 케이스**:
-
 | 케이스 | HTTP 상태 | 검증 내용 |
 |---|---|---|
-| 정상 요청 (AGENCY JWT) | 200 | 응답 JSON의 모든 합산 필드 값 검증 |
+| 정상 요청 (AGENCY JWT) | 200 | 상태별 금액 분리 필드 포함 전체 응답 JSON 검증 |
+| 데이터 없는 월 | 200 | 모든 금액 0 (상태별 포함) |
 | JWT 없음 | 401 | 인증 실패 |
-| ENGINEER JWT로 요청 | 403 | 권한 없음 |
 | month=13 요청 | 400 | 유효성 검사 실패 |
-| 데이터 없는 월 | 200 | 모든 금액 0, `totalCount` 0 반환 |
 
 ---
 
 ## 구현 시 주의사항
 
-- 집계는 `settlements.paid_at` 기준으로 월 필터링할 것 (`created_at` 기준 아님).
+- 집계는 `settlements.created_at` 기준으로 월 필터링할 것 (`paid_at` 기준 아님).
 - `payments.amount`는 참고용으로만 존재하며, 집계는 반드시 `settlements.gross_amount`를 기준으로 한다 (스냅샷 값이 결제 금액과 다를 수 있음).
-- `status = 'PAID'`인 레코드만 집계 대상으로 포함한다. `PENDING`, `APPROVED`, `DISPUTED` 상태는 제외한다.
+- **`status = 'PAID'` 고정 필터를 사용하지 말 것** — 모든 status를 포함하되 CASE WHEN 으로 상태별 합산을 분리한다.
 - 집계 쿼리는 JPQL `@Query`로 작성하며 DB 레벨에서 한 번에 합산한다 (애플리케이션 레벨 루프 집계 금지).
-- 엔티티에 Setter를 추가하지 말고, 집계 결과는 인터페이스 프로젝션 또는 DTO 생성자로 직접 매핑한다.
+- 엔티티에 Setter를 추가하지 말고, 집계 결과는 인터페이스 프로젝션으로 직접 매핑한다.
 - 한글 주석으로 비즈니스 로직의 의도와 주의사항을 코드에 남긴다.

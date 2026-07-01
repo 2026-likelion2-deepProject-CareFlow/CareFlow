@@ -166,8 +166,10 @@ class SettlementServiceIntegrationTest {
         settlement.markPaid();
         settlement = settlementRepository.save(settlement);
 
-        // paid_at 을 지정 일시로 맞추기 위해 JPQL UPDATE 사용
+        // paid_at / created_at 을 지정 일시로 맞추기 위해 JPQL UPDATE 사용
+        // (getMonthlySummary 는 createdAt 기준으로 필터링하므로 두 필드 모두 설정)
         settlementRepository.updatePaidAt(settlement.getId(), paidAt);
+        settlementRepository.updateCreatedAt(settlement.getId(), paidAt);
 
         return settlement;
     }
@@ -290,9 +292,9 @@ class SettlementServiceIntegrationTest {
     class GetMonthlySummary {
 
         @Test
-        @DisplayName("성공: 6월 정산 2건 합산 검증")
+        @DisplayName("성공: 6월 PAID 정산 2건 합산 검증 — paidAmount 포함")
         void success_twoSettlements_summedCorrectly() {
-            // Given — 기사 2명, 각 200000 / 300000
+            // Given — 기사 2명, 각 200000 / 300000 (모두 PAID)
             LocalDateTime june = LocalDateTime.of(2026, 6, 15, 10, 0);
             createPaidSettlement(engineerUser1, 200000, june);
             createPaidSettlement(engineerUser2, 300000, june);
@@ -301,10 +303,15 @@ class SettlementServiceIntegrationTest {
             MonthlySummaryResponse result =
                     settlementService.getMonthlySummary(agencyUser.getId(), 2026, 6);
 
-            // Then
+            // Then — 전체 합산 (모든 status)
             assertThat(result.getTotalCount()).isEqualTo(2L);
             // gross_amount 합 = 500000
             assertThat(result.getTotalGrossAmount()).isEqualTo(500000L);
+            // 모두 PAID 이므로 paidAmount = totalGrossAmount
+            assertThat(result.getPaidAmount()).isEqualTo(500000L);
+            // PENDING/APPROVED/DISPUTED 건 없음
+            assertThat(result.getPendingAmount()).isZero();
+            assertThat(result.getDisputedAmount()).isZero();
             // platform_fee 합: 200000*0.10 + 300000*0.10 = 20000 + 30000 = 50000
             assertThat(result.getTotalPlatformFee()).isEqualTo(50000L);
             // agency_fee 합: 200000*0.09 + 300000*0.09 = 18000 + 27000 = 45000
@@ -319,6 +326,9 @@ class SettlementServiceIntegrationTest {
 
             assertThat(result.getTotalCount()).isZero();
             assertThat(result.getTotalGrossAmount()).isZero();
+            assertThat(result.getPaidAmount()).isZero();
+            assertThat(result.getPendingAmount()).isZero();
+            assertThat(result.getDisputedAmount()).isZero();
             assertThat(result.getTotalPlatformFee()).isZero();
         }
 
@@ -335,6 +345,7 @@ class SettlementServiceIntegrationTest {
 
             // Then
             assertThat(result.getTotalCount()).isZero();
+            assertThat(result.getTotalGrossAmount()).isZero();
         }
     }
 }
