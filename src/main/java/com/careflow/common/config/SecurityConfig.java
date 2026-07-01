@@ -89,7 +89,8 @@ public class SecurityConfig {
                         // 대행사 프로필 수정 (리팩토링된 경로)
                         .requestMatchers("/api/agency/me").hasAuthority("AGENCY")
                         // 관리자용 회원 관리 API — ADMIN 역할만 접근 가능(컨트롤러의 checkAdminRole과 이중 방어)
-                        .requestMatchers("/api/admin/**").hasAuthority("ADMIN")
+                        // CustomUserDetails.getAuthorities()가 "ROLE_" 접두사를 붙이므로 hasRole 사용(hasAuthority 아님)
+                        .requestMatchers("/api/admin/**").hasRole("ADMIN")
                         .anyRequest().authenticated()
                 )
                 .oauth2Login(oauth2 -> oauth2
