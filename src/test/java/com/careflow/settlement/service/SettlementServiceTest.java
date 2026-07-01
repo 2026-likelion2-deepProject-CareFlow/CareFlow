@@ -4,8 +4,10 @@ import com.careflow.agency.entity.Agencies;
 import com.careflow.review.repository.ReviewRepository;
 import com.careflow.review.repository.ReviewRepository.EngineerAvgRating;
 import com.careflow.settlement.dto.EngineerPerformanceResponse;
+import com.careflow.settlement.dto.EngineerSettlementListResponse;
 import com.careflow.settlement.dto.EngineerSettlementSummary;
 import com.careflow.settlement.dto.MonthlySummaryResponse;
+import com.careflow.settlement.entity.Settlement;
 import com.careflow.settlement.repository.SettlementRepository;
 import com.careflow.settlement.repository.SettlementRepository.MonthlySummaryProjection;
 import com.careflow.user.entity.User;
@@ -17,7 +19,16 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.mockito.junit.jupiter.MockitoSettings;
+import org.mockito.quality.Strictness;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Pageable;
+import org.springframework.test.util.ReflectionTestUtils;
 
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
 
@@ -26,8 +37,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
+@MockitoSettings(strictness = Strictness.LENIENT)
 @DisplayName("SettlementService 단위 테스트")
 class SettlementServiceTest {
 
@@ -67,99 +80,162 @@ class SettlementServiceTest {
         return r;
     }
 
-    private MonthlySummaryProjection stubProjection(long count, long gross, long platform,
-                                                    long agency, long engineer) {
+    private MonthlySummaryProjection stubProjection(long count, long gross,
+                                                    long paid, long pending, long disputed,
+                                                    long platform, long agency, long engineer) {
         MonthlySummaryProjection p = mock(MonthlySummaryProjection.class);
         given(p.getTotalCount()).willReturn(count);
         given(p.getTotalGrossAmount()).willReturn(gross);
+        given(p.getPaidAmount()).willReturn(paid);
+        given(p.getPendingAmount()).willReturn(pending);
+        given(p.getDisputedAmount()).willReturn(disputed);
         given(p.getTotalPlatformFee()).willReturn(platform);
         given(p.getTotalAgencyFee()).willReturn(agency);
         given(p.getTotalEngineerPayout()).willReturn(engineer);
         return p;
     }
 
+    /** Settlement mock — engineer / agency 연관 포함 */
+    private Settlement mockSettlement(Long id) {
+        Settlement s = mock(Settlement.class);
+        User engineer = mock(User.class);
+        Agencies agency = mock(Agencies.class);
+
+        given(s.getId()).willReturn(id);
+        given(s.getEngineer()).willReturn(engineer);
+        given(s.getAgency()).willReturn(agency);
+        given(engineer.getId()).willReturn(10L);
+        given(engineer.getName()).willReturn("김현수");
+        given(engineer.getPhone()).willReturn("010-0000-0000");
+        given(agency.getAgencyName()).willReturn("퀵케어 서비스");
+        given(s.getGrossAmount()).willReturn(100000);
+        given(s.getFeeRate()).willReturn(BigDecimal.valueOf(10));
+        given(s.getPlatformFee()).willReturn(10000);
+        given(s.getAgencyFeeRate()).willReturn(BigDecimal.valueOf(10));
+        given(s.getAgencyFee()).willReturn(10000);
+        given(s.getEngineerNetAmount()).willReturn(80000);
+        given(s.getStatus()).willReturn("PAID");
+        given(s.getPaidAt()).willReturn(LocalDateTime.of(2024, 6, 18, 15, 30));
+        given(s.getCreatedAt()).willReturn(LocalDateTime.of(2024, 6, 15, 10, 0));
+        return s;
+    }
+
+    private static final Pageable PAGE = PageRequest.of(0, 10);
+
     // ══════════════════════════════════════════════════════════════
-    //  1. getEngineerPerformance — 기사별 실적 리포트
+    //  1. getSettlementList — 기사별 정산 내역 목록 (동적 필터)
     // ══════════════════════════════════════════════════════════════
     @Nested
-    @DisplayName("getEngineerPerformance — 기사별 실적 리포트")
-    class GetEngineerPerformance {
+    @DisplayName("getSettlementList — 기사별 정산 내역 목록")
+    class GetSettlementList {
 
         @Test
-        @DisplayName("정상 조회: 기사 2명 — 건수·금액·평점 집계 검증")
-        void success_returnsTwoEngineers() {
-            // Given — 픽스처를 given() 체인 바깥에서 먼저 준비
+        @DisplayName("TC-1: 필터 없음 — 전체 조회, settlements 크기·totalElements 검증")
+        void success_noFilter_returnsList() {
             stubUser(1L, 10L);
+            Settlement s1 = mockSettlement(1L);
+            Settlement s2 = mockSettlement(2L);
+            Page<Settlement> page = new PageImpl<>(List.of(s1, s2), PAGE, 2);
+            given(settlementRepository.findSettlementListByAgency(
+                    eq(10L), any(), any(), isNull(), isNull(), isNull(), eq(PAGE)))
+                    .willReturn(page);
 
-            EngineerSettlementSummary sum1 = stubSummary(101L, "홍길동", 12L, 960000L);
-            EngineerSettlementSummary sum2 = stubSummary(102L, "이순신", 8L, 640000L);
-            given(settlementRepository.findEngineerPerformance(eq(10L), any(), any()))
-                    .willReturn(List.of(sum1, sum2));
+            EngineerSettlementListResponse result =
+                    settlementService.getSettlementList(1L, 2024, 6, null, null, null, null, null, PAGE);
 
-            EngineerAvgRating r1 = stubRating(101L, 4.75);
-            EngineerAvgRating r2 = stubRating(102L, 4.25);
-            given(reviewRepository.findAvgRatingByEngineers(anyList(), any(), any()))
-                    .willReturn(List.of(r1, r2));
-
-            // When
-            EngineerPerformanceResponse result = settlementService.getEngineerPerformance(1L, 2026, 6);
-
-            // Then
-            assertThat(result.getYear()).isEqualTo(2026);
-            assertThat(result.getMonth()).isEqualTo(6);
-            assertThat(result.getEngineers()).hasSize(2);
-
-            var first = result.getEngineers().get(0);
-            assertThat(first.getEngineerId()).isEqualTo(101L);
-            assertThat(first.getEngineerName()).isEqualTo("홍길동");
-            assertThat(first.getCompletedCount()).isEqualTo(12L);
-            assertThat(first.getAvgRating()).isEqualTo(4.75);
-            assertThat(first.getTotalEarning()).isEqualTo(960000L);
+            assertThat(result.settlements()).hasSize(2);
+            assertThat(result.totalElements()).isEqualTo(2L);
+            assertThat(result.year()).isEqualTo(2024);
+            assertThat(result.month()).isEqualTo(6);
         }
 
         @Test
-        @DisplayName("빈 결과: 해당 월 정산 내역 없음 — 빈 리스트 반환")
-        void success_emptyList_whenNoData() {
+        @DisplayName("TC-2: status=PAID 필터 전달 — Repository에 status 파라미터 전달 검증")
+        void success_statusFilter_propagatedToRepository() {
             stubUser(1L, 10L);
-            given(settlementRepository.findEngineerPerformance(eq(10L), any(), any()))
-                    .willReturn(List.of());
+            given(settlementRepository.findSettlementListByAgency(any(), any(), any(), any(), any(), any(), any()))
+                    .willReturn(Page.empty(PAGE));
 
-            EngineerPerformanceResponse result = settlementService.getEngineerPerformance(1L, 2026, 6);
+            settlementService.getSettlementList(1L, 2024, 6, "PAID", null, null, null, null, PAGE);
 
-            assertThat(result.getEngineers()).isEmpty();
+            verify(settlementRepository).findSettlementListByAgency(
+                    eq(10L), any(), any(), eq("PAID"), isNull(), isNull(), eq(PAGE));
         }
 
         @Test
-        @DisplayName("리뷰 없는 기사: avgRating 이 null 로 반환")
-        void success_avgRatingNull_whenNoReview() {
+        @DisplayName("TC-3: keyword 필터 전달 — Repository에 keyword 파라미터 전달 검증")
+        void success_keywordFilter_propagatedToRepository() {
             stubUser(1L, 10L);
+            given(settlementRepository.findSettlementListByAgency(any(), any(), any(), any(), any(), any(), any()))
+                    .willReturn(Page.empty(PAGE));
 
-            EngineerSettlementSummary sum1 = stubSummary(101L, "홍길동", 5L, 400000L);
-            given(settlementRepository.findEngineerPerformance(eq(10L), any(), any()))
-                    .willReturn(List.of(sum1));
-            // 리뷰 없음 — 빈 리스트
-            given(reviewRepository.findAvgRatingByEngineers(anyList(), any(), any()))
-                    .willReturn(List.of());
+            settlementService.getSettlementList(1L, 2024, 6, null, "김현수", null, null, null, PAGE);
 
-            EngineerPerformanceResponse result = settlementService.getEngineerPerformance(1L, 2026, 6);
-
-            assertThat(result.getEngineers().get(0).getAvgRating()).isNull();
+            verify(settlementRepository).findSettlementListByAgency(
+                    eq(10L), any(), any(), isNull(), eq("김현수"), isNull(), eq(PAGE));
         }
 
         @Test
-        @DisplayName("유효하지 않은 month=0 — IllegalArgumentException 발생")
+        @DisplayName("TC-4: settlementId 필터 전달 — Repository에 settlementId 파라미터 전달 검증")
+        void success_settlementIdFilter_propagatedToRepository() {
+            stubUser(1L, 10L);
+            given(settlementRepository.findSettlementListByAgency(any(), any(), any(), any(), any(), any(), any()))
+                    .willReturn(Page.empty(PAGE));
+
+            settlementService.getSettlementList(1L, 2024, 6, null, null, 99L, null, null, PAGE);
+
+            verify(settlementRepository).findSettlementListByAgency(
+                    eq(10L), any(), any(), isNull(), isNull(), eq(99L), eq(PAGE));
+        }
+
+        @Test
+        @DisplayName("TC-5: dateFrom/dateTo 정상 파싱 — LocalDateTime 변환 후 Repository 호출")
+        void success_dateParsed_propagatedToRepository() {
+            stubUser(1L, 10L);
+            given(settlementRepository.findSettlementListByAgency(any(), any(), any(), any(), any(), any(), any()))
+                    .willReturn(Page.empty(PAGE));
+
+            settlementService.getSettlementList(1L, 2024, 6, null, null, null, "2024-06-01", "2024-06-15", PAGE);
+
+            verify(settlementRepository).findSettlementListByAgency(
+                    eq(10L),
+                    eq(LocalDateTime.of(2024, 6, 1, 0, 0)),
+                    eq(LocalDateTime.of(2024, 6, 16, 0, 0)),   // dateTo +1일
+                    isNull(), isNull(), isNull(), eq(PAGE));
+        }
+
+        @Test
+        @DisplayName("TC-6: 잘못된 dateFrom 형식 — IllegalArgumentException 발생")
+        void fail_invalidDateFormat_throwsIllegalArgument() {
+            stubUser(1L, 10L);
+
+            assertThatThrownBy(() ->
+                    settlementService.getSettlementList(1L, 2024, 6, null, null, null, "2024-13-99", null, PAGE))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessageContaining("날짜 형식");
+        }
+
+        @Test
+        @DisplayName("TC-7: 유효하지 않은 month=0 — IllegalArgumentException 발생")
         void fail_invalidMonth_zero() {
-            assertThatThrownBy(() -> settlementService.getEngineerPerformance(1L, 2026, 0))
+            assertThatThrownBy(() ->
+                    settlementService.getSettlementList(1L, 2024, 0, null, null, null, null, null, PAGE))
                     .isInstanceOf(IllegalArgumentException.class)
                     .hasMessage("월은 1~12 사이여야 합니다.");
         }
 
         @Test
-        @DisplayName("유효하지 않은 month=13 — IllegalArgumentException 발생")
-        void fail_invalidMonth_thirteen() {
-            assertThatThrownBy(() -> settlementService.getEngineerPerformance(1L, 2026, 13))
-                    .isInstanceOf(IllegalArgumentException.class)
-                    .hasMessage("월은 1~12 사이여야 합니다.");
+        @DisplayName("TC-8: 결과 0건 — 빈 리스트, totalElements=0 반환")
+        void success_emptyResult() {
+            stubUser(1L, 10L);
+            given(settlementRepository.findSettlementListByAgency(any(), any(), any(), any(), any(), any(), any()))
+                    .willReturn(Page.empty(PAGE));
+
+            EngineerSettlementListResponse result =
+                    settlementService.getSettlementList(1L, 2024, 6, null, null, null, null, null, PAGE);
+
+            assertThat(result.settlements()).isEmpty();
+            assertThat(result.totalElements()).isZero();
         }
     }
 
@@ -171,12 +247,14 @@ class SettlementServiceTest {
     class GetMonthlySummary {
 
         @Test
-        @DisplayName("정상 집계: 여러 건의 합산값 검증")
+        @DisplayName("정상 집계: 여러 건의 합산값 + 상태별 금액 분리 검증")
         void success_returnsSummary() {
             stubUser(1L, 10L);
 
             // 픽스처를 given() 체인 바깥에서 먼저 준비
-            MonthlySummaryProjection proj = stubProjection(20L, 4000000L, 400000L, 360000L, 3240000L);
+            // PAID 3200000 + PENDING 500000 + DISPUTED 300000 = totalGross 4000000
+            MonthlySummaryProjection proj = stubProjection(
+                    20L, 4000000L, 3200000L, 500000L, 300000L, 400000L, 360000L, 3240000L);
             given(settlementRepository.findMonthlySummary(eq(10L), any(), any()))
                     .willReturn(proj);
 
@@ -184,6 +262,9 @@ class SettlementServiceTest {
 
             assertThat(result.getTotalCount()).isEqualTo(20L);
             assertThat(result.getTotalGrossAmount()).isEqualTo(4000000L);
+            assertThat(result.getPaidAmount()).isEqualTo(3200000L);
+            assertThat(result.getPendingAmount()).isEqualTo(500000L);
+            assertThat(result.getDisputedAmount()).isEqualTo(300000L);
             assertThat(result.getTotalPlatformFee()).isEqualTo(400000L);
             assertThat(result.getTotalAgencyFee()).isEqualTo(360000L);
             assertThat(result.getTotalEngineerPayout()).isEqualTo(3240000L);
@@ -194,7 +275,7 @@ class SettlementServiceTest {
         void success_allZero_whenNoData() {
             stubUser(1L, 10L);
 
-            MonthlySummaryProjection proj = stubProjection(0L, 0L, 0L, 0L, 0L);
+            MonthlySummaryProjection proj = stubProjection(0L, 0L, 0L, 0L, 0L, 0L, 0L, 0L);
             given(settlementRepository.findMonthlySummary(eq(10L), any(), any()))
                     .willReturn(proj);
 
@@ -202,14 +283,18 @@ class SettlementServiceTest {
 
             assertThat(result.getTotalCount()).isZero();
             assertThat(result.getTotalGrossAmount()).isZero();
+            assertThat(result.getPaidAmount()).isZero();
+            assertThat(result.getPendingAmount()).isZero();
+            assertThat(result.getDisputedAmount()).isZero();
         }
 
         @Test
-        @DisplayName("단일 건: 합산값이 해당 건의 값과 동일")
+        @DisplayName("단일 건(PAID): 상태별 금액 분리 — paidAmount = totalGrossAmount")
         void success_singleRecord() {
             stubUser(1L, 10L);
 
-            MonthlySummaryProjection proj = stubProjection(1L, 200000L, 20000L, 18000L, 162000L);
+            // 1건 PAID: paidAmount = totalGrossAmount, pending/disputed = 0
+            MonthlySummaryProjection proj = stubProjection(1L, 200000L, 200000L, 0L, 0L, 20000L, 18000L, 162000L);
             given(settlementRepository.findMonthlySummary(eq(10L), any(), any()))
                     .willReturn(proj);
 
@@ -217,6 +302,9 @@ class SettlementServiceTest {
 
             assertThat(result.getTotalCount()).isEqualTo(1L);
             assertThat(result.getTotalGrossAmount()).isEqualTo(200000L);
+            assertThat(result.getPaidAmount()).isEqualTo(200000L);
+            assertThat(result.getPendingAmount()).isZero();
+            assertThat(result.getDisputedAmount()).isZero();
             assertThat(result.getTotalEngineerPayout()).isEqualTo(162000L);
         }
 

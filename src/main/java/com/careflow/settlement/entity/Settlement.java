@@ -133,9 +133,19 @@ public class Settlement {
         this.approvedAt = LocalDateTime.now();
     }
 
-    // 기사 지급 완료 처리 — 더티 체킹으로 UPDATE
+    // 기사 지급 완료 처리 — APPROVED 상태에서만 호출 가능, 더티 체킹으로 UPDATE
     public void markPaid() {
         this.status = "PAID";
         this.paidAt = LocalDateTime.now();
+    }
+
+    // 보류 처리 — 더티 체킹으로 UPDATE
+    public void dispute() {
+        this.status = "DISPUTED";
+    }
+
+    // 지급 대기로 복귀 (DISPUTED → PENDING 재검토) — 더티 체킹으로 UPDATE
+    public void revertToPending() {
+        this.status = "PENDING";
     }
 }

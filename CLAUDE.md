@@ -65,7 +65,7 @@ src/main/resources/
 ```
 
 ## Database Schema
-- 메인 스키마 정의 파일 : `sql/CareFlow_DDL_v6.sql`
+- 메인 스키마 정의 파일 : `sql/CareFlow_DDL_v7.sql`
 - 데이터베이스 수정 사항이나 쿼리를 작성할 때는 위 파일의 테이블 구조를 항상 참고하세요.
 
 새로운 도메인을 추가할 때는 위와 동일하게 `도메인명/{controller,service,repository,entity,dto}` 패턴을 따르세요. 비어있는 패키지(`review`, `settlement`, `work_report`, `scheduler`, `repair_cost`, `payment`, `notification`, `lms`, `certificate`, `appliance`, `assignment`, `admin`)는 향후 구현을 위해 미리 만들어둔 자리이므로, 해당 기능 작업 시 그 패키지를 활용하세요.

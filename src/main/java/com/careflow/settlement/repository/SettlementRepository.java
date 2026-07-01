@@ -2,6 +2,8 @@ package com.careflow.settlement.repository;
 
 import com.careflow.settlement.dto.EngineerSettlementSummary;
 import com.careflow.settlement.entity.Settlement;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
@@ -27,6 +29,16 @@ public interface SettlementRepository extends JpaRepository<Settlement, Long> {
                       @Param("paidAt") LocalDateTime paidAt);
 
     /**
+     * 통합 테스트에서 created_at 을 지정 일시로 직접 설정하기 위한 UPDATE 쿼리
+     * (findMonthlySummary 는 createdAt 기준으로 월 범위를 필터링하므로 테스트 제어에 필요)
+     */
+    @Modifying
+    @Transactional
+    @Query("UPDATE Settlement s SET s.createdAt = :createdAt WHERE s.id = :settlementId")
+    void updateCreatedAt(@Param("settlementId") Long settlementId,
+                         @Param("createdAt") LocalDateTime createdAt);
+
+    /**
      * 특정 대행사의 해당 월 기사별 실적 집계
      * - status = 'PAID' + paid_at 범위 필터링
      * - engineer_id 기준 그룹핑하여 완료 건수 / 수령액 합산
@@ -50,20 +62,23 @@ public interface SettlementRepository extends JpaRepository<Settlement, Long> {
 
     /**
      * 특정 대행사의 해당 월 정산 합산 집계
-     * - status = 'PAID' + paid_at 범위 필터링
+     * - createdAt 범위 기준으로 전체 status 포함 집계 (PENDING/APPROVED/PAID/DISPUTED 모두)
+     * - CASE WHEN 으로 상태별 gross 합산 분리 (UI 통계카드 대응)
      * - 전체 합산을 DB 레벨에서 한 번에 처리
      */
     @Query("""
             SELECT COUNT(s.id) AS totalCount,
                    COALESCE(SUM(s.grossAmount), 0) AS totalGrossAmount,
+                   COALESCE(SUM(CASE WHEN s.status = 'PAID' THEN s.grossAmount ELSE 0 END), 0) AS paidAmount,
+                   COALESCE(SUM(CASE WHEN s.status IN ('PENDING','APPROVED') THEN s.grossAmount ELSE 0 END), 0) AS pendingAmount,
+                   COALESCE(SUM(CASE WHEN s.status = 'DISPUTED' THEN s.grossAmount ELSE 0 END), 0) AS disputedAmount,
                    COALESCE(SUM(s.platformFee), 0) AS totalPlatformFee,
                    COALESCE(SUM(s.agencyFee), 0) AS totalAgencyFee,
                    COALESCE(SUM(s.engineerNetAmount), 0) AS totalEngineerPayout
             FROM Settlement s
             WHERE s.agency.id = :agencyId
-              AND s.status = 'PAID'
-              AND s.paidAt >= :from
-              AND s.paidAt < :to
+              AND s.createdAt >= :from
+              AND s.createdAt < :to
             """)
     MonthlySummaryProjection findMonthlySummary(
             @Param("agencyId") Long agencyId,
@@ -98,12 +113,101 @@ public interface SettlementRepository extends JpaRepository<Settlement, Long> {
             """)
     List<Settlement> findByEngineerIdWithRequest(@Param("engineerId") Long engineerId);
 
+    // ─────────────────────────────────────────────────────────────
+    // GET /api/agency/settlements 전용 쿼리
+    // ─────────────────────────────────────────────────────────────
+
+    /**
+     * 대행사 정산 목록 조회 (필터 + 페이징)
+     * - JOIN FETCH로 N+1 방지 (engineer, agency)
+     * - status / dateFrom / dateTo 조건 선택적 적용
+     * - keyword 분기:
+     *   - nameKeyword: 기사명 부분 일치 (LIKE) — 숫자가 아닌 문자열 입력 시
+     *   - settlementId: 정산 ID 정확히 일치 — 숫자 문자열 입력 시
+     *   (둘 다 null이면 조건 미적용)
+     * - createdAt DESC 정렬
+     */
+    @Query("""
+            SELECT s FROM Settlement s
+            JOIN FETCH s.engineer
+            JOIN FETCH s.agency
+            WHERE s.agency.id = :agencyId
+              AND (:status IS NULL OR s.status = :status)
+              AND (:dateFrom IS NULL OR s.createdAt >= :dateFrom)
+              AND (:dateTo IS NULL OR s.createdAt < :dateTo)
+              AND (:nameKeyword IS NULL OR s.engineer.name LIKE %:nameKeyword%)
+              AND (:settlementId IS NULL OR s.id = :settlementId)
+            ORDER BY s.createdAt DESC
+            """)
+    Page<Settlement> findAgencySettlements(
+            @Param("agencyId") Long agencyId,
+            @Param("status") String status,
+            @Param("dateFrom") LocalDateTime dateFrom,
+            @Param("dateTo") LocalDateTime dateTo,
+            @Param("nameKeyword") String nameKeyword,
+            @Param("settlementId") Long settlementId,
+            Pageable pageable);
+
+    /**
+     * 대행사 정산 통계 집계 (stats 용, 특정 기간)
+     * - 전체 건수 / 총 gross_amount / PAID 합계 / PENDING+APPROVED 합계 / DISPUTED 합계
+     * - result.get(0): Object[] { count, totalGross, paidGross, pendingGross, disputedGross }
+     */
+    @Query("""
+            SELECT COUNT(s),
+                   COALESCE(SUM(s.grossAmount), 0L),
+                   COALESCE(SUM(CASE WHEN s.status = 'PAID'     THEN s.grossAmount ELSE 0 END), 0L),
+                   COALESCE(SUM(CASE WHEN s.status IN ('PENDING','APPROVED') THEN s.grossAmount ELSE 0 END), 0L),
+                   COALESCE(SUM(CASE WHEN s.status = 'DISPUTED' THEN s.grossAmount ELSE 0 END), 0L)
+            FROM Settlement s
+            WHERE s.agency.id = :agencyId
+              AND s.createdAt >= :from
+              AND s.createdAt < :to
+            """)
+    List<Object[]> findAgencySettlementStatsByPeriod(
+            @Param("agencyId") Long agencyId,
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to);
+
+    /**
+     * 기사별 정산 목록 조회 (GET /api/agency/settlements/engineers/performance)
+     *
+     * 동적 필터:
+     *   - status / keyword(기사명 LIKE) / settlementId(정확히 일치) 모두 null 허용
+     *   - 날짜 범위는 paidAt 기준 (null 이면 해당 월 전체)
+     * JOIN FETCH 로 engineer / agency N+1 방지
+     */
+    @Query("""
+            SELECT s FROM Settlement s
+            JOIN FETCH s.engineer
+            JOIN FETCH s.agency
+            WHERE s.agency.id = :agencyId
+              AND s.paidAt >= :from
+              AND s.paidAt < :to
+              AND (:status IS NULL OR s.status = :status)
+              AND (:keyword IS NULL OR s.engineer.name LIKE %:keyword%)
+              AND (:settlementId IS NULL OR s.id = :settlementId)
+            ORDER BY s.paidAt DESC
+            """)
+    Page<Settlement> findSettlementListByAgency(
+            @Param("agencyId") Long agencyId,
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to,
+            @Param("status") String status,
+            @Param("keyword") String keyword,
+            @Param("settlementId") Long settlementId,
+            Pageable pageable);
+
     /**
      * 합산 집계 결과를 받을 인터페이스 프로젝션
+     * - 상태별 gross 합산(paidAmount/pendingAmount/disputedAmount)은 CASE WHEN 쿼리 결과와 매핑
      */
     interface MonthlySummaryProjection {
         Long getTotalCount();
         Long getTotalGrossAmount();
+        Long getPaidAmount();
+        Long getPendingAmount();
+        Long getDisputedAmount();
         Long getTotalPlatformFee();
         Long getTotalAgencyFee();
         Long getTotalEngineerPayout();
