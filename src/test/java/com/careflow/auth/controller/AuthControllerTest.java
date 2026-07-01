@@ -53,10 +53,10 @@ class AuthControllerTest {
         final String password = "12345678";
         final String name = "서호준";
         final String phoneNumber = "010-1234-5678";
-        final String regionName = "부산 광역시 사상구";
+        final Integer regionId = 1;
         final String addressDetail = "부산 광역시 사상구";
 
-        return new SignUpRequest(email, password, name, phoneNumber, regionName, addressDetail);
+        return new SignUpRequest(email, password, name, phoneNumber, regionId, addressDetail);
     }
 
     @Test
