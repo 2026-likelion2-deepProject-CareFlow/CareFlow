@@ -228,4 +228,37 @@ public class WorkReportService {
 
         return assignments.map(EngineerReportListResponse::from);
     }
+
+    @Transactional
+    public void cancelApprovalRequest(Long engineerId, Long reportId) {
+        WorkReport report = workReportRepository.findById(reportId)
+                .orElseThrow(() -> new java.util.NoSuchElementException("보고서를 찾을 수 없습니다."));
+
+        if (!report.getEngineer().getId().equals(engineerId)) {
+            throw new IllegalStateException("본인이 작성한 보고서만 취소할 수 있습니다.");
+        }
+
+        if (report.isCustomerApproved()) {
+            throw new IllegalStateException("이미 고객이 승인한 보고서는 취소할 수 없습니다.");
+        }
+
+        AsRequest request = report.getAsRequest();
+        String oldStatusStr = request.getStatus().name();
+
+        // 1. A/S 요청 상태 원복 (COMPLETED -> IN_PROGRESS)
+        request.revertToInProgress();
+
+        // 2. 상태 변경 로그 기록
+        AsStatusLog statusLog = AsStatusLog.builder()
+                .asRequest(request)
+                .changedBy(report.getEngineer())
+                .fromStatus(oldStatusStr)
+                .toStatus("IN_PROGRESS")
+                .memo("보고서 제출이 취소되어 작업 중 상태로 변경되었습니다.")
+                .build();
+        asStatusLogRepository.save(statusLog);
+
+        // 3. 작업 보고서 물리 삭제 (다시 작성할 수 있도록)
+        workReportRepository.delete(report);
+    }
 }

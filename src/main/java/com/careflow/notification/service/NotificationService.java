@@ -91,13 +91,14 @@ public class NotificationService {
     }
 
     /**
-     * [기사용 API] 알림 수신함 목록 조회 (페이징 지원)
+     * [기사용 API] 알림 수신함 목록 조회 (페이징 + 타입 필터 지원)
      */
     @org.springframework.transaction.annotation.Transactional(readOnly = true)
-    public Page<NotificationResponse> getNotifications(Long userId, Pageable pageable) {
-        Page<Notification> notifications = notificationRepository.findByUser_IdOrderByCreatedAtDesc(userId, pageable);
+    public Page<NotificationResponse> getNotifications(Long userId, String type, Pageable pageable) {
+        // type이 빈 문자열("")로 오면 null로 변환하여 전체 검색이 되도록 처리
+        String filterType = (type == null || type.isBlank()) ? null : type;
 
-        // 엔티티 Page 객체를 통째로 DTO Page 객체로 매핑 (스프링 데이터 JPA의 강력한 기능!)
+        Page<Notification> notifications = notificationRepository.findByUserIdAndTypeWithPaging(userId, filterType, pageable);
         return notifications.map(NotificationResponse::from);
     }
 }

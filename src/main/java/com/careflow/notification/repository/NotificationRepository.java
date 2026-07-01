@@ -42,4 +42,14 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
             @Param("userIds") List<Long> userIds,
             @Param("startOfDay") LocalDateTime startOfDay,
             @Param("endOfDay") LocalDateTime endOfDay);
+
+    // [기사용] 알림 목록 페이징 + type 동적 필터링
+    @Query("SELECT n FROM Notification n " +
+            "WHERE n.user.id = :userId " +
+            "AND (:type IS NULL OR n.type = :type) " +
+            "ORDER BY n.createdAt DESC")
+    org.springframework.data.domain.Page<Notification> findByUserIdAndTypeWithPaging(
+            @org.springframework.data.repository.query.Param("userId") Long userId,
+            @org.springframework.data.repository.query.Param("type") String type,
+            org.springframework.data.domain.Pageable pageable);
 }

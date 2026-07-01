@@ -97,4 +97,23 @@ public class AsAssignment {
         this.status = "REJECTED";
         this.rejectedAt = LocalDateTime.now();
     }
+
+    // 기사 배정 수락 처리 (WAITING 상태일 때만 가능)
+    public void accept() {
+        if (!"WAITING".equals(this.status)) {
+            throw new IllegalStateException("대기(WAITING) 상태인 배정만 수락할 수 있습니다. (현재 상태: " + this.status + ")");
+        }
+        this.status = "ACCEPTED";
+        this.acceptedAt = LocalDateTime.now();
+    }
+
+    // 기사 배정 거절 처리 (WAITING 상태일 때만 가능)
+    public void reject(String reason) {
+        if (!"WAITING".equals(this.status)) {
+            throw new IllegalStateException("대기(WAITING) 상태인 배정만 거절할 수 있습니다.");
+        }
+        this.status = "REJECTED";
+        this.rejectReason = reason;
+        this.rejectedAt = LocalDateTime.now();
+    }
 }
