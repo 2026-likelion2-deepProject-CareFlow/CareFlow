@@ -5,13 +5,13 @@ import com.careflow.as_status_log.entity.AsStatusLog;
 import com.careflow.as_status_log.repository.AsStatusLogRepository;
 import com.careflow.assignment.entity.AsAssignment;
 import com.careflow.assignment.repository.AsAssignmentRepository;
+import com.careflow.bank_account.entity.BankAccount;
+import com.careflow.bank_account.repository.BankAccountRepository;
 import com.careflow.engineer.domain.entity.EngineerProfile;
 import com.careflow.engineer.dto.EngineerDashboardResponse;
 import com.careflow.engineer.dto.EngineerSettlementSummaryResponse;
 import com.careflow.engineer.repository.EngineerProfileRepository;
 import com.careflow.notification.repository.NotificationRepository;
-import com.careflow.settlement.entity.BankAccount;
-import com.careflow.settlement.repository.BankAccountRepository;
 import com.careflow.settlement.repository.SettlementRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
@@ -188,7 +188,7 @@ public class EngineerDashboardService {
 
         // 4. 정산 요약 및 계좌 (v21 명세 완벽 반영)
         Integer sumNet = settlementRepository.sumExpectedEarningByEngineerIdAndDate(engineerId, start.atStartOfDay(), end.plusDays(1).atStartOfDay());
-        BankAccount bankAccount = bankAccountRepository.findByEngineer_Id(engineerId).orElse(null);
+        BankAccount bankAccount = bankAccountRepository.findByEngineerId(engineerId).orElse(null);
 
         EngineerSettlementSummaryResponse.SettlementSummary settlementSummary = EngineerSettlementSummaryResponse.SettlementSummary.builder()
                 .grossAmount(totalGross)
