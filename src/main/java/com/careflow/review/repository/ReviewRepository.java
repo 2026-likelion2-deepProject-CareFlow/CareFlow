@@ -149,4 +149,23 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
             @Param("agencyId") Long agencyId,
             @Param("from") LocalDateTime from,
             @Param("to") LocalDateTime to);
+
+
+    /**
+     * [기사용] 특정 기사의 공개 리뷰 목록 페이징 조회 (별점 필터 포함, N+1 방지)
+     */
+    @Query(value = "SELECT r FROM Review r " +
+            "JOIN FETCH r.customer " +
+            "JOIN FETCH r.asRequest req " +
+            "JOIN FETCH req.appliance app " +
+            "JOIN FETCH app.category " +
+            "WHERE r.engineer.id = :engineerId " +
+            "AND r.isVisible = true " +
+            "AND (:rating IS NULL OR r.rating = :rating) " +
+            "ORDER BY r.createdAt DESC",
+            countQuery = "SELECT COUNT(r) FROM Review r WHERE r.engineer.id = :engineerId AND r.isVisible = true AND (:rating IS NULL OR r.rating = :rating)")
+    org.springframework.data.domain.Page<Review> findVisibleByEngineerIdAndRatingWithPaging(
+            @org.springframework.data.repository.query.Param("engineerId") Long engineerId,
+            @org.springframework.data.repository.query.Param("rating") Integer rating,
+            org.springframework.data.domain.Pageable pageable);
 }

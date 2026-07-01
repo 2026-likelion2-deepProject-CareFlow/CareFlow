@@ -1,3 +1,4 @@
+// 파일 경로: src/test/java/com/careflow/notification/service/NotificationServiceTest.java
 package com.careflow.notification.service;
 
 import com.careflow.notification.dto.NotificationResponse;
@@ -24,6 +25,8 @@ import java.util.Map;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.*;
 
@@ -99,11 +102,15 @@ class NotificationServiceTest {
             given(noti1.getCreatedAt()).willReturn(LocalDateTime.of(2024, 6, 18, 9, 30));
 
             Page<Notification> mockPage = new PageImpl<>(List.of(noti1), pageRequest, 1);
-            given(notificationRepository.findByUser_IdOrderByCreatedAtDesc(userId, pageRequest))
+
+            // 🌟 핵심 수정 포인트: 바뀐 레포지토리 메서드(findByUserIdAndTypeWithPaging)와 파라미터 매핑!
+            // type을 null(전체 조회)로 넘겼다고 가정하고 모킹합니다.
+            given(notificationRepository.findByUserIdAndTypeWithPaging(eq(userId), isNull(), eq(pageRequest)))
                     .willReturn(mockPage);
 
             // When
-            Page<NotificationResponse> result = notificationService.getNotifications(userId, pageRequest);
+            // 🌟 핵심 수정 포인트: 서비스 호출 시 중간에 null(type 파라미터)을 넣어줍니다!
+            Page<NotificationResponse> result = notificationService.getNotifications(userId, null, pageRequest);
 
             // Then
             assertThat(result.getTotalElements()).isEqualTo(1);
@@ -111,9 +118,9 @@ class NotificationServiceTest {
 
             NotificationResponse dto = result.getContent().get(0);
             assertThat(dto.getId()).isEqualTo(5L);
-            // 🌟 ID 포맷팅 검증 (NOT-yyyyMMdd-005)
+            // ID 포맷팅 검증 (NOT-yyyyMMdd-005)
             assertThat(dto.getNotificationId()).isEqualTo("NOT-20240618-005");
-            // 🌟 날짜 포맷팅 검증
+            // 날짜 포맷팅 검증
             assertThat(dto.getCreatedAt()).isEqualTo("2024.06.18 09:30");
             assertThat(dto.getType()).isEqualTo("AS_STATUS");
         }

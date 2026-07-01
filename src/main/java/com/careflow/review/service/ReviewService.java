@@ -118,4 +118,13 @@ public class ReviewService {
                 .map(EngineerReviewResponse::from)
                 .collect(Collectors.toList());
     }
+
+    /**
+     * 수리기사(ENGINEER)용: 본인에게 달린 리뷰 목록 조회 (페이징 + 별점 필터)
+     */
+    @Transactional(readOnly = true)
+    public org.springframework.data.domain.Page<EngineerReviewResponse> getEngineerReviewsPaging(Long engineerId, Integer rating, org.springframework.data.domain.Pageable pageable) {
+        org.springframework.data.domain.Page<Review> reviews = reviewRepository.findVisibleByEngineerIdAndRatingWithPaging(engineerId, rating, pageable);
+        return reviews.map(EngineerReviewResponse::from);
+    }
 }

@@ -18,11 +18,14 @@ import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.jpa.mapping.JpaMetamodelMappingContext;
+import org.springframework.data.redis.core.StringRedisTemplate; // 🌟 필수 추가
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
-import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
+import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 import java.util.List;
 
@@ -48,15 +51,20 @@ class EngineerNotificationControllerTest {
     @MockitoBean private OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;
     @MockitoBean private ClientRegistrationRepository clientRegistrationRepository;
 
+    // 🌟 핵심: 스프링 시큐리티 필터 에러 방지용 Redis 우회
+    @MockitoBean private StringRedisTemplate stringRedisTemplate;
+
     private static final Long ENGINEER_USER_ID = 10L;
+    private RequestPostProcessor engineerAuth;
 
     @BeforeEach
     void setUpAuth() {
+        // MockMvc 테스트에서 가장 안정적인 RequestPostProcessor 방식 적용
         CustomUserDetails userDetails = new CustomUserDetails(
-                ENGINEER_USER_ID, "engineer@test.com", "pw", "ENGINEER", null);
-        UsernamePasswordAuthenticationToken auth =
-                new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
-        SecurityContextHolder.getContext().setAuthentication(auth);
+                ENGINEER_USER_ID, "engineer@test.com", "pw", "ENGINEER", 100L);
+        engineerAuth = SecurityMockMvcRequestPostProcessors.authentication(
+                new UsernamePasswordAuthenticationToken(userDetails, null, List.of(new SimpleGrantedAuthority("ENGINEER")))
+        );
     }
 
     @Nested
@@ -64,7 +72,7 @@ class EngineerNotificationControllerTest {
     class GetNotifications {
 
         @Test
-        @DisplayName("성공: 페이징된 알림 목록 반환 (200 OK)")
+        @DisplayName("성공: 필터 없이 페이징된 전체 알림 목록 반환 (200 OK)")
         void success_200() throws Exception {
             NotificationResponse stubResponse = NotificationResponse.builder()
                     .id(1L).notificationId("NOT-20240618-001")
@@ -74,10 +82,12 @@ class EngineerNotificationControllerTest {
 
             PageImpl<NotificationResponse> mockPage = new PageImpl<>(List.of(stubResponse), PageRequest.of(0, 10), 1);
 
-            given(notificationService.getNotifications(eq(ENGINEER_USER_ID), any()))
+            // 🌟 수정: NotificationService의 파라미터가 3개(userId, type, pageable)로 변경된 것 반영
+            given(notificationService.getNotifications(eq(ENGINEER_USER_ID), eq(null), any()))
                     .willReturn(mockPage);
 
             mockMvc.perform(get("/api/engineer/notifications")
+                            .with(engineerAuth)
                             .param("page", "0")
                             .param("size", "10"))
                     .andExpect(status().isOk())
@@ -85,6 +95,31 @@ class EngineerNotificationControllerTest {
                     .andExpect(jsonPath("$.content[0].notificationId").value("NOT-20240618-001"))
                     .andExpect(jsonPath("$.content[0].title").value("배정 알림"))
                     .andExpect(jsonPath("$.totalElements").value(1));
+        }
+
+        @Test
+        @DisplayName("성공: type 파라미터가 있을 때 정상적으로 필터링을 호출한다 (200 OK)")
+        void success_withType_200() throws Exception {
+            NotificationResponse stubResponse = NotificationResponse.builder()
+                    .id(2L).notificationId("NOT-20240618-002")
+                    .type("LMS").title("교육 알림")
+                    .body("새로운 필수 교육이 등록되었습니다.")
+                    .channel("SSE").createdAt("2024.06.18 10:00").build();
+
+            PageImpl<NotificationResponse> mockPage = new PageImpl<>(List.of(stubResponse), PageRequest.of(0, 10), 1);
+
+            // 🌟 수정: type 파라미터("LMS")가 제대로 서비스로 넘어가는지 검증
+            given(notificationService.getNotifications(eq(ENGINEER_USER_ID), eq("LMS"), any()))
+                    .willReturn(mockPage);
+
+            mockMvc.perform(get("/api/engineer/notifications")
+                            .with(engineerAuth)
+                            .param("type", "LMS")
+                            .param("page", "0")
+                            .param("size", "10"))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.content.length()").value(1))
+                    .andExpect(jsonPath("$.content[0].type").value("LMS"));
         }
 
         @Test

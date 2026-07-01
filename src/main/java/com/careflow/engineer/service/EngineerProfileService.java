@@ -203,4 +203,19 @@ public class EngineerProfileService {
         // 🌟 수정: .from -> .of 로 변경하고 지역 이름 리스트 추가
         return ProfileResponse.of(profile, brandNames, regionIds, regionNames);
     }
+
+    @Transactional(readOnly = true)
+    public com.careflow.engineer.dto.EngineerNavbarResponse getNavbarProfile(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("유저 정보가 존재하지 않습니다."));
+
+        // 프로필은 미등록 상태일 수도 있으므로 Optional 처리
+        EngineerProfile profile = profileRepository.findByUser_Id(userId).orElse(null);
+
+        return com.careflow.engineer.dto.EngineerNavbarResponse.builder()
+                .name(user.getName())
+                .role("수리 기사")
+                .profileImageUrl(profile != null ? profile.getProfileImageUrl() : null)
+                .build();
+    }
 }

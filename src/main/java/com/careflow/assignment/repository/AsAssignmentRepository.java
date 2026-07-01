@@ -147,4 +147,65 @@ public interface AsAssignmentRepository extends JpaRepository<AsAssignment, Long
     @Query("SELECT DISTINCT a.asRequest.customer.id FROM AsAssignment a " +
            "WHERE a.agency.id = :agencyId AND a.status = 'COMPLETED'")
     List<Long> findDistinctCompletedCustomerIdsByAgencyId(@Param("agencyId") Long agencyId);
+
+    // 기사용 배정 목록 조회 (페이징 + 상태 필터링) - N+1 방지를 위해 JOIN FETCH 사용
+    @Query(value = "SELECT a FROM AsAssignment a " +
+            "JOIN FETCH a.asRequest r " +
+            "JOIN FETCH r.appliance app " +
+            "JOIN FETCH r.customer c " +
+            "JOIN FETCH r.symptom s " +
+            "WHERE a.engineer.id = :engineerId " +
+            "AND (:status IS NULL OR a.status = :status) " +
+            "ORDER BY a.assignedAt DESC",
+            countQuery = "SELECT COUNT(a) FROM AsAssignment a WHERE a.engineer.id = :engineerId AND (:status IS NULL OR a.status = :status)")
+    org.springframework.data.domain.Page<AsAssignment> findByEngineerIdAndStatus(
+            @Param("engineerId") Long engineerId,
+            @Param("status") String status,
+            org.springframework.data.domain.Pageable pageable);
+
+
+    // [대시보드용] 오늘 날짜의 내 배정 목록 전체 조회
+    @Query("SELECT a FROM AsAssignment a " +
+            "JOIN FETCH a.asRequest r " +
+            "JOIN FETCH r.customer c " +
+            "JOIN FETCH r.appliance app " +
+            "JOIN FETCH r.symptom s " +
+            "LEFT JOIN FETCH c.regionId " +
+            "WHERE a.engineer.id = :engineerId " +
+            "AND r.scheduledDate = :today " +
+            "AND a.status != 'REJECTED' " +
+            "ORDER BY r.scheduledTime ASC")
+    List<AsAssignment> findTodayAssignments(@Param("engineerId") Long engineerId, @Param("today") java.time.LocalDate today);
+
+    // [실적/정산용] 특정 기간 내 완료(COMPLETED)된 배정 목록 상세 조회
+    @Query("SELECT a FROM AsAssignment a " +
+            "JOIN FETCH a.asRequest r " +
+            "JOIN FETCH r.customer c " +
+            "JOIN FETCH r.appliance app " +
+            "LEFT JOIN FETCH r.workReport w " +
+            "LEFT JOIN FETCH r.review rv " +
+            "WHERE a.engineer.id = :engineerId " +
+            "AND r.scheduledDate >= :startDate " +
+            "AND r.scheduledDate <= :endDate " +
+            "AND a.status = 'COMPLETED' " +
+            "ORDER BY r.scheduledDate ASC")
+    List<AsAssignment> findCompletedAssignmentsWithDetails(
+            @Param("engineerId") Long engineerId,
+            @Param("startDate") java.time.LocalDate startDate,
+            @Param("endDate") java.time.LocalDate endDate);
+
+    // 파일 경로: src/main/java/com/careflow/assignment/repository/AsAssignmentRepository.java
+// 기존 코드 하단에 추가해 주세요!
+
+    // [기사용] 본인이 담당한 적 있는 고객(User) 목록 조회 (중복 제거)
+    @org.springframework.data.jpa.repository.Query(
+            value = "SELECT DISTINCT c FROM AsAssignment a " +
+                    "JOIN a.asRequest r " +
+                    "JOIN r.customer c " +
+                    "LEFT JOIN FETCH c.regionId " +
+                    "WHERE a.engineer.id = :engineerId " +
+                    "ORDER BY c.createdAt DESC",
+            countQuery = "SELECT COUNT(DISTINCT c) FROM AsAssignment a JOIN a.asRequest r JOIN r.customer c WHERE a.engineer.id = :engineerId"
+    )
+    org.springframework.data.domain.Page<com.careflow.user.entity.User> findCustomersByEngineerId(@org.springframework.data.repository.query.Param("engineerId") Long engineerId, org.springframework.data.domain.Pageable pageable);
 }

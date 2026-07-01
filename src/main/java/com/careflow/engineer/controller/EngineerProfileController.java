@@ -11,12 +11,14 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("/api/engineer/profile")
 @RequiredArgsConstructor
+@PreAuthorize("hasAuthority('ENGINEER')")
 public class EngineerProfileController {
     private final EngineerProfileService profileService;
 
@@ -41,5 +43,12 @@ public class EngineerProfileController {
             @RequestBody UpdateProfileRequest request) {
         ProfileResponse response = profileService.updateProfile(userDetails.getUserId(), request);
         return ResponseEntity.ok(response);
+    }
+
+    // 기사 내비게이션 바 요약 프로필 조회
+    @GetMapping("/me")
+    public ResponseEntity<com.careflow.engineer.dto.EngineerNavbarResponse> getNavbarProfile(
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+        return ResponseEntity.ok(profileService.getNavbarProfile(userDetails.getUserId()));
     }
 }
