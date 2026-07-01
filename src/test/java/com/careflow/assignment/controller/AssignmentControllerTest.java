@@ -24,8 +24,10 @@ import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
+import static org.mockito.ArgumentMatchers.anyInt;
 
 import java.util.NoSuchElementException;
+import org.springframework.data.redis.core.StringRedisTemplate;
 
 import static org.mockito.BDDMockito.given;
 import static org.mockito.ArgumentMatchers.any;
@@ -71,6 +73,8 @@ class AssignmentControllerTest {
     private OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;
     @MockitoBean
     private ClientRegistrationRepository clientRegistrationRepository;
+    @MockitoBean
+    private StringRedisTemplate stringRedisTemplate;
 
     // AGENCY 권한 테스트용 사용자
     private CustomUserDetails agencyUser() {
@@ -388,6 +392,101 @@ class AssignmentControllerTest {
         @DisplayName("실패: 인증 토큰 없음 → 401 Unauthorized")
         void reassign_noToken_401() throws Exception {
             mockMvc.perform(post("/api/agency/as-assignments/1/reassign"))
+                    .andExpect(status().isUnauthorized());
+        }
+    }
+
+    // ─────────────────────────────────────────────
+    //  GET /api/agency/as-assignments/in-progress
+    // ─────────────────────────────────────────────
+    @Nested
+    @DisplayName("GET /api/agency/as-assignments/in-progress — 진행 중 배정 목록 조회")
+    class GetInProgress {
+
+        private AssignmentInProgressPageResponse samplePage() {
+            AssignmentInProgressStats stats = new AssignmentInProgressStats(1, 0, 0, 2);
+            AssignmentInProgressResponse item = new AssignmentInProgressResponse(
+                    1L, 10L,
+                    java.time.LocalDateTime.of(2026, 7, 1, 8, 0),
+                    "MANUAL",
+                    200L, "테스트고객", "010-1111-2222",
+                    "삼성 에어컨 Q9000", "SN-001",
+                    20L, "테스트기사", "010-3333-4444", 4.5, null,
+                    "ACCEPTED", "IN_PROGRESS",
+                    java.time.LocalDateTime.of(2026, 7, 1, 10, 0),
+                    "2026-07-01", "10:00", "강남구 테헤란로 123",
+                    List.of(), new java.util.LinkedHashMap<>()
+            );
+            return new AssignmentInProgressPageResponse(stats, List.of(item), 1L, 1, 0, 10);
+        }
+
+        @Test
+        @DisplayName("성공: ACCEPTED 배정 1건 → 200 OK, stats + content 반환")
+        void getInProgress_withData_200() throws Exception {
+            given(assignmentInProgressService.getInProgress(any(), any(), any(), any(), any(), any(), any(), anyInt(), anyInt()))
+                    .willReturn(samplePage());
+
+            mockMvc.perform(get("/api/agency/as-assignments/in-progress")
+                            .with(user(agencyUser())))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.stats.totalCount").value(1))
+                    .andExpect(jsonPath("$.stats.completedCount").value(2))
+                    .andExpect(jsonPath("$.content[0].assignmentId").value(1L))
+                    .andExpect(jsonPath("$.content[0].customerName").value("테스트고객"))
+                    .andExpect(jsonPath("$.content[0].createdAt").exists())
+                    .andExpect(jsonPath("$.totalElements").value(1L))
+                    .andExpect(jsonPath("$.currentPage").value(0))
+                    .andExpect(jsonPath("$.size").value(10));
+        }
+
+        @Test
+        @DisplayName("성공: 배정 없음 → 200 OK, content 빈 배열 + stats 0")
+        void getInProgress_empty_200() throws Exception {
+            AssignmentInProgressPageResponse emptyPage = new AssignmentInProgressPageResponse(
+                    new AssignmentInProgressStats(0, 0, 0, 0), List.of(), 0L, 0, 0, 10);
+            given(assignmentInProgressService.getInProgress(any(), any(), any(), any(), any(), any(), any(), anyInt(), anyInt()))
+                    .willReturn(emptyPage);
+
+            mockMvc.perform(get("/api/agency/as-assignments/in-progress")
+                            .with(user(agencyUser())))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.content").isArray())
+                    .andExpect(jsonPath("$.content.length()").value(0))
+                    .andExpect(jsonPath("$.stats.totalCount").value(0));
+        }
+
+        @Test
+        @DisplayName("성공: 필터 파라미터 전달 → 200 OK (파라미터 수신 검증)")
+        void getInProgress_withFilters_200() throws Exception {
+            given(assignmentInProgressService.getInProgress(any(), any(), any(), any(), any(), any(), any(), anyInt(), anyInt()))
+                    .willReturn(samplePage());
+
+            mockMvc.perform(get("/api/agency/as-assignments/in-progress")
+                            .param("date", "2026-07-01")
+                            .param("latestLogStatus", "IN_PROGRESS")
+                            .param("brand", "삼성")
+                            .param("keyword", "테스트")
+                            .param("page", "0")
+                            .param("size", "5")
+                            .with(user(agencyUser())))
+                    .andExpect(status().isOk());
+        }
+
+        @Test
+        @DisplayName("실패: AGENCY 권한 없는 사용자 → 401 Unauthorized")
+        void getInProgress_noAuthority_401() throws Exception {
+            given(assignmentInProgressService.getInProgress(any(), any(), any(), any(), any(), any(), any(), anyInt(), anyInt()))
+                    .willThrow(new IllegalAccessException("대행사 관리자 권한이 없습니다."));
+
+            mockMvc.perform(get("/api/agency/as-assignments/in-progress")
+                            .with(user(customerUser())))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        @Test
+        @DisplayName("실패: 비인증 요청 → 401 Unauthorized")
+        void getInProgress_unauthenticated_401() throws Exception {
+            mockMvc.perform(get("/api/agency/as-assignments/in-progress"))
                     .andExpect(status().isUnauthorized());
         }
     }
