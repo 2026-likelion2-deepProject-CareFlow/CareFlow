@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.*;
 @RestController
 @RequestMapping("/api/engineer/profile")
 @RequiredArgsConstructor
-@PreAuthorize("hasAuthority('ENGINEER')")
+@PreAuthorize("hasRole('ENGINEER')")
 public class EngineerProfileController {
     private final EngineerProfileService profileService;
 
