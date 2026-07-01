@@ -20,8 +20,8 @@ public class SignUpRequest {
 
     private String phone;
 
-    @NotBlank
-    private String regionName;
+    @NotNull
+    private Integer regionId;
 
     @NotBlank
     private String addressDetail;
