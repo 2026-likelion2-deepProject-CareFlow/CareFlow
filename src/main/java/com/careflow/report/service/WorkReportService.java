@@ -18,12 +18,15 @@ import com.careflow.report.domain.entity.WorkReport;
 import com.careflow.report.domain.entity.WorkReportPart;
 import com.careflow.report.domain.enums.DiagnosisResult;
 import com.careflow.report.domain.enums.PartImportance;
+import com.careflow.report.dto.EngineerReportListResponse;
 import com.careflow.report.dto.RepairHistoryResponse;
 import com.careflow.report.dto.WorkReportDetailResponse;
 import com.careflow.report.repository.WorkReportRepository;
 import com.careflow.user.entity.User;
 import com.careflow.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.context.ApplicationEventPublisher;
@@ -213,5 +216,16 @@ public class WorkReportService {
 
         // 엔티티 도메인 메서드를 통한 상태 업데이트 (더티 체킹)
         report.approveByCustomer();
+    }
+
+    /**
+     * [기사용 API] 기사 본인의 작업 보고서 목록 전체 조회 (페이징)
+     * 배차(AsAssignment) 내역을 기준으로 작성 대기(DRAFT), 제출(SUBMITTED), 승인(APPROVED) 상태 매핑
+     */
+    @Transactional(readOnly = true)
+    public Page<EngineerReportListResponse> getEngineerWorkReports(Long engineerId, Pageable pageable) {
+        Page<AsAssignment> assignments = asAssignmentRepository.findWorkReportListByEngineerId(engineerId, pageable);
+
+        return assignments.map(EngineerReportListResponse::from);
     }
 }

@@ -13,6 +13,7 @@ import com.careflow.engineer.dto.CreateWorkReportRequest;
 import com.careflow.notification.service.NotificationService;
 import com.careflow.part.repository.RepairPartRepository;
 import com.careflow.report.domain.entity.WorkReport;
+import com.careflow.report.dto.EngineerReportListResponse;
 import com.careflow.report.dto.RepairHistoryResponse;
 import com.careflow.report.dto.WorkReportDetailResponse;
 import com.careflow.report.repository.WorkReportRepository;
@@ -20,6 +21,7 @@ import com.careflow.symptom.entity.Symptom;
 import com.careflow.user.entity.User;
 import com.careflow.user.repository.UserRepository;
 import org.junit.jupiter.api.DisplayName;
+import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
@@ -28,9 +30,13 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings; // 🎯 추가
 import org.mockito.quality.Strictness;            // 🎯 추가
 import org.springframework.context.ApplicationEventPublisher;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.PageImpl;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.lang.reflect.Constructor;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -325,5 +331,103 @@ class WorkReportServiceTest {
         assertThatThrownBy(() -> workReportService.approveWorkReport(myId, reportId))
                 .isInstanceOf(IllegalAccessException.class)
                 .hasMessageContaining("본인의 A/S 보고서만 승인할 수 있습니다.");
+    }
+
+    @Nested
+    @DisplayName("getEngineerWorkReports — 기사 본인의 작업 보고서 목록 페이징 조회")
+    class GetEngineerWorkReports {
+
+        private AsAssignment createMockAssignment(boolean hasReport, boolean isApproved) {
+            AsAssignment assignment = mock(AsAssignment.class);
+            AsRequest req = mock(AsRequest.class);
+            Appliance app = mock(Appliance.class);
+            User customer = mock(User.class);
+
+            given(assignment.getAsRequest()).willReturn(req);
+            given(req.getCustomer()).willReturn(customer);
+            given(req.getAppliance()).willReturn(app);
+
+            // 포맷팅 검증용 데이터
+            given(req.getId()).willReturn(1L);
+            given(req.getCreatedAt()).willReturn(LocalDateTime.of(2024, 6, 18, 10, 0));
+            given(req.getScheduledDate()).willReturn(LocalDate.of(2024, 6, 18)); // 화요일
+            given(req.getScheduledTime()).willReturn("14:00");
+
+            given(customer.getName()).willReturn("테스트고객");
+            given(app.getBrand()).willReturn("삼성");
+            given(app.getModelName()).willReturn("에어컨");
+
+            if (hasReport) {
+                WorkReport report = mock(WorkReport.class);
+                given(report.getReportId()).willReturn(10L);
+                given(report.getDiagnosisResult()).willReturn(com.careflow.report.domain.enums.DiagnosisResult.REPAIRED);
+                given(report.getFinalAmount()).willReturn(50000);
+                given(report.isCustomerApproved()).willReturn(isApproved);
+                given(report.getSubmittedAt()).willReturn(LocalDateTime.of(2024, 6, 18, 15, 30));
+
+                if (isApproved) {
+                    given(report.getApprovedAt()).willReturn(LocalDateTime.of(2024, 6, 18, 16, 0));
+                }
+                given(req.getWorkReport()).willReturn(report);
+            } else {
+                given(req.getWorkReport()).willReturn(null);
+            }
+
+            return assignment;
+        }
+
+        @Test
+        @DisplayName("성공: 보고서가 없는 배차는 DRAFT 상태로 매핑된다")
+        void success_draftStatus() {
+            AsAssignment draftAssignment = createMockAssignment(false, false);
+            PageRequest pageRequest = PageRequest.of(0, 20);
+            Page<AsAssignment> mockPage = new PageImpl<>(List.of(draftAssignment), pageRequest, 1);
+
+            given(asAssignmentRepository.findWorkReportListByEngineerId(1L, pageRequest)).willReturn(mockPage);
+
+            Page<EngineerReportListResponse> result = workReportService.getEngineerWorkReports(1L, pageRequest);
+
+            EngineerReportListResponse dto = result.getContent().get(0);
+            assertThat(dto.getStatus()).isEqualTo("DRAFT");
+            // 포맷팅 검증
+            assertThat(dto.getRequestId()).isEqualTo("AS-20240618-0001");
+            assertThat(dto.getWorkDate()).isEqualTo("2024.06.18 (화)");
+            assertThat(dto.getWorkTimeEnd()).isEqualTo("16:00"); // 14:00 + 2시간
+            assertThat(dto.getReportId()).isNull();
+        }
+
+        @Test
+        @DisplayName("성공: 보고서가 제출되었으나 미승인이면 SUBMITTED 상태로 매핑된다")
+        void success_submittedStatus() {
+            AsAssignment submittedAssignment = createMockAssignment(true, false);
+            PageRequest pageRequest = PageRequest.of(0, 20);
+            Page<AsAssignment> mockPage = new PageImpl<>(List.of(submittedAssignment), pageRequest, 1);
+
+            given(asAssignmentRepository.findWorkReportListByEngineerId(1L, pageRequest)).willReturn(mockPage);
+
+            Page<EngineerReportListResponse> result = workReportService.getEngineerWorkReports(1L, pageRequest);
+
+            EngineerReportListResponse dto = result.getContent().get(0);
+            assertThat(dto.getStatus()).isEqualTo("SUBMITTED");
+            assertThat(dto.getReportId()).isEqualTo(10L);
+            assertThat(dto.getDiagnosisResult()).isEqualTo("REPAIRED");
+            assertThat(dto.getApprovedAt()).isNull();
+        }
+
+        @Test
+        @DisplayName("성공: 보고서가 제출되고 승인 완료되면 APPROVED 상태로 매핑된다")
+        void success_approvedStatus() {
+            AsAssignment approvedAssignment = createMockAssignment(true, true);
+            PageRequest pageRequest = PageRequest.of(0, 20);
+            Page<AsAssignment> mockPage = new PageImpl<>(List.of(approvedAssignment), pageRequest, 1);
+
+            given(asAssignmentRepository.findWorkReportListByEngineerId(1L, pageRequest)).willReturn(mockPage);
+
+            Page<EngineerReportListResponse> result = workReportService.getEngineerWorkReports(1L, pageRequest);
+
+            EngineerReportListResponse dto = result.getContent().get(0);
+            assertThat(dto.getStatus()).isEqualTo("APPROVED");
+            assertThat(dto.getApprovedAt()).isEqualTo("2024.06.18 16:00");
+        }
     }
 }

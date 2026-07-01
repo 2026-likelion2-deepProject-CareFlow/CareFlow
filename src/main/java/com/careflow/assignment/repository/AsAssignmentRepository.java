@@ -124,6 +124,24 @@ public interface AsAssignmentRepository extends JpaRepository<AsAssignment, Long
             @Param("date") LocalDate date,
             @Param("status") String status);
 
+    /**
+     * [기사용 API] 기사 본인의 작업 보고서 목록 조회 (페이징)
+     * 배차(AsAssignment)를 기준으로 AsRequest, Appliance, Customer를 JOIN FETCH 하고,
+     * WorkReport는 작성 대기(DRAFT) 상태일 때 null일 수 있으므로 LEFT JOIN FETCH 처리!
+     */
+    @Query(value = "SELECT a FROM AsAssignment a " +
+            "JOIN FETCH a.asRequest req " +
+            "JOIN FETCH req.customer c " +
+            "JOIN FETCH req.appliance app " +
+            "LEFT JOIN FETCH req.workReport wr " +
+            "WHERE a.engineer.id = :engineerId " +
+            "AND a.status IN ('ACCEPTED', 'COMPLETED') " +
+            "ORDER BY req.scheduledDate DESC, req.scheduledTime DESC",
+            countQuery = "SELECT COUNT(a) FROM AsAssignment a WHERE a.engineer.id = :engineerId AND a.status IN ('ACCEPTED', 'COMPLETED')")
+    org.springframework.data.domain.Page<AsAssignment> findWorkReportListByEngineerId(
+            @org.springframework.data.repository.query.Param("engineerId") Long engineerId,
+            org.springframework.data.domain.Pageable pageable);
+
     // 대행사 소속 기사에게 COMPLETED 서비스를 1회 이상 받은 고객 user_id DISTINCT 목록
     // GET /api/agency/customers (고객 관리 목록 모수 산정용)
     @Query("SELECT DISTINCT a.asRequest.customer.id FROM AsAssignment a " +
