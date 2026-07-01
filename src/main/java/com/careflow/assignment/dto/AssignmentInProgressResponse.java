@@ -7,6 +7,7 @@ import java.util.Map;
 public record AssignmentInProgressResponse(
         Long assignmentId,
         Long requestId,
+        LocalDateTime createdAt,
         String assignMethod,
 
         Long customerId,

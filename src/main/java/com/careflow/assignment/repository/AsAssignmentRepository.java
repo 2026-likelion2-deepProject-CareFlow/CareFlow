@@ -98,6 +98,31 @@ public interface AsAssignmentRepository extends JpaRepository<AsAssignment, Long
            "ORDER BY r.scheduledDate ASC, a.assignedAt ASC")
     List<AsAssignment> findInProgressByAgencyId(@Param("agencyId") Long agencyId);
 
+    // 진행 중(ACCEPTED) 배정 필터 조회 — date·regionId·brand·engineerId 조건 선택 적용
+    // latestLogStatus·keyword 는 로그 집계 후 서비스 레이어에서 인메모리 필터링
+    @Query("SELECT DISTINCT a FROM AsAssignment a " +
+           "JOIN FETCH a.asRequest r " +
+           "JOIN FETCH r.appliance ap " +
+           "JOIN FETCH r.customer c " +
+           "JOIN FETCH a.engineer e " +
+           "WHERE a.agency.id = :agencyId " +
+           "AND a.status = 'ACCEPTED' " +
+           "AND (:date IS NULL OR r.scheduledDate = :date) " +
+           "AND (:regionId IS NULL OR r.visitRegion.id = :regionId) " +
+           "AND (:brand IS NULL OR ap.brand = :brand) " +
+           "AND (:engineerId IS NULL OR e.id = :engineerId) " +
+           "ORDER BY r.scheduledDate ASC, a.assignedAt ASC")
+    List<AsAssignment> findInProgressWithFilter(
+            @Param("agencyId") Long agencyId,
+            @Param("date") LocalDate date,
+            @Param("regionId") Long regionId,
+            @Param("brand") String brand,
+            @Param("engineerId") Long engineerId);
+
+    // 완료(COMPLETED) 배정 총 건수 조회 — stats.completedCount 산정용
+    @Query("SELECT COUNT(a) FROM AsAssignment a WHERE a.agency.id = :agencyId AND a.status = 'COMPLETED'")
+    int countCompletedByAgencyId(@Param("agencyId") Long agencyId);
+
     // 완료(COMPLETED) 배정 목록 — as_requests·appliance·customer·engineer JOIN FETCH
     @Query("SELECT DISTINCT a FROM AsAssignment a " +
            "JOIN FETCH a.asRequest r " +

@@ -95,18 +95,24 @@ public class AssignmentController {
 
     /**
      * [GET] /api/agency/as-assignments/in-progress
-     * 진행 중(ACCEPTED) 배정 목록 조회. as_status_logs 포함.
+     * 진행 중(ACCEPTED) 배정 목록 조회. 필터·페이징·stats 포함.
      * - role != AGENCY → 401
-     * - 결과 없음 → 204 No Content
+     * - 항상 200 OK 반환 (content 빈 배열 + stats 포함)
      */
     @GetMapping("/in-progress")
-    public ResponseEntity<List<AssignmentInProgressResponse>> getInProgress(
-            @AuthenticationPrincipal CustomUserDetails userDetails) throws IllegalAccessException {
+    public ResponseEntity<AssignmentInProgressPageResponse> getInProgress(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(required = false) Long regionId,
+            @RequestParam(required = false) String latestLogStatus,
+            @RequestParam(required = false) String brand,
+            @RequestParam(required = false) Long engineerId,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "10") int size) throws IllegalAccessException {
 
-        List<AssignmentInProgressResponse> result = assignmentInProgressService.getInProgress(userDetails);
-        if (result.isEmpty()) {
-            return ResponseEntity.noContent().build();
-        }
+        AssignmentInProgressPageResponse result = assignmentInProgressService.getInProgress(
+                userDetails, date, regionId, latestLogStatus, brand, engineerId, keyword, page, size);
         return ResponseEntity.ok(result);
     }
 

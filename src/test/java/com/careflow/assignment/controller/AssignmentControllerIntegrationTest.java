@@ -544,40 +544,47 @@ class AssignmentControllerIntegrationTest {
     class GetInProgress {
 
         @Test
-        @DisplayName("성공: ACCEPTED 배정 없음 → 204 No Content")
-        void inProgress_empty_204() throws Exception {
-            // BeforeEach 의 assignment 는 WAITING 상태 → 결과 없음
+        @DisplayName("성공: ACCEPTED 배정 없음 → 200 OK, content 빈 배열 + stats 0")
+        void inProgress_empty_200() throws Exception {
+            // BeforeEach 의 assignment 는 WAITING 상태 → ACCEPTED 없음
             mockMvc.perform(get("/api/agency/as-assignments/in-progress")
                             .header("Authorization", "Bearer " + agencyTokenWithAgencyId))
-                    .andExpect(status().isNoContent());
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.stats.totalCount").value(0))
+                    .andExpect(jsonPath("$.content").isArray())
+                    .andExpect(jsonPath("$.content.length()").value(0))
+                    .andExpect(jsonPath("$.totalElements").value(0));
         }
 
         @Test
-        @DisplayName("성공: ACCEPTED 배정 1건 → 핵심 필드 검증")
+        @DisplayName("성공: ACCEPTED 배정 1건 → stats·content 핵심 필드 검증")
         void inProgress_oneAssignment_200() throws Exception {
-            // WAITING → ACCEPTED 강제 전환
             asAssignmentRepository.updateStatus(assignment.getId(), "ACCEPTED");
 
             mockMvc.perform(get("/api/agency/as-assignments/in-progress")
                             .header("Authorization", "Bearer " + agencyTokenWithAgencyId))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.length()").value(1))
-                    .andExpect(jsonPath("$[0].assignmentId").value(assignment.getId()))
-                    .andExpect(jsonPath("$[0].requestId").value(asRequest.getId()))
-                    .andExpect(jsonPath("$[0].customerName").value("테스트고객"))
-                    .andExpect(jsonPath("$[0].engineerName").value("테스트기사"))
-                    .andExpect(jsonPath("$[0].assignmentStatus").value("ACCEPTED"))
-                    .andExpect(jsonPath("$[0].visitDate").value("2026-07-01"))
-                    .andExpect(jsonPath("$[0].logs").isArray())
-                    .andExpect(jsonPath("$[0].stepTimes").isMap());
+                    .andExpect(jsonPath("$.stats.totalCount").value(1))
+                    .andExpect(jsonPath("$.content.length()").value(1))
+                    .andExpect(jsonPath("$.content[0].assignmentId").value(assignment.getId()))
+                    .andExpect(jsonPath("$.content[0].requestId").value(asRequest.getId()))
+                    .andExpect(jsonPath("$.content[0].createdAt").exists())
+                    .andExpect(jsonPath("$.content[0].customerName").value("테스트고객"))
+                    .andExpect(jsonPath("$.content[0].engineerName").value("테스트기사"))
+                    .andExpect(jsonPath("$.content[0].assignmentStatus").value("ACCEPTED"))
+                    .andExpect(jsonPath("$.content[0].visitDate").value("2026-07-01"))
+                    .andExpect(jsonPath("$.content[0].logs").isArray())
+                    .andExpect(jsonPath("$.content[0].stepTimes").isMap())
+                    .andExpect(jsonPath("$.totalElements").value(1))
+                    .andExpect(jsonPath("$.currentPage").value(0))
+                    .andExpect(jsonPath("$.size").value(10));
         }
 
         @Test
-        @DisplayName("성공: 다른 대행사 배정은 결과에 포함되지 않음")
+        @DisplayName("성공: 다른 대행사 배정은 content에 포함되지 않음")
         void inProgress_otherAgencyExcluded_200() throws Exception {
             asAssignmentRepository.updateStatus(assignment.getId(), "ACCEPTED");
 
-            // 다른 대행사 배정 추가
             Agencies other = agenciesRepository.save(Agencies.builder()
                     .agencyName("다른대행사").businessNumber("OTHER-002")
                     .agencyAddress("서울 서초구").agencyFeeRate(3.0)
@@ -593,8 +600,75 @@ class AssignmentControllerIntegrationTest {
             mockMvc.perform(get("/api/agency/as-assignments/in-progress")
                             .header("Authorization", "Bearer " + agencyTokenWithAgencyId))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.length()").value(1))
-                    .andExpect(jsonPath("$[0].engineerName").value("테스트기사"));
+                    .andExpect(jsonPath("$.content.length()").value(1))
+                    .andExpect(jsonPath("$.content[0].engineerName").value("테스트기사"));
+        }
+
+        @Test
+        @DisplayName("성공: AsStatusLog 존재 → content[0].logs에 포함")
+        void inProgress_withStatusLog_logsIncluded() throws Exception {
+            asAssignmentRepository.updateStatus(assignment.getId(), "ACCEPTED");
+            asStatusLogRepository.save(AsStatusLog.builder()
+                    .asRequest(asRequest).changedBy(engineer)
+                    .fromStatus(null).toStatus("ENGINEER_DEPARTED").memo("출발").build());
+
+            mockMvc.perform(get("/api/agency/as-assignments/in-progress")
+                            .header("Authorization", "Bearer " + agencyTokenWithAgencyId))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.content[0].logs.length()").value(1))
+                    .andExpect(jsonPath("$.content[0].logs[0].toStatus").value("ENGINEER_DEPARTED"))
+                    .andExpect(jsonPath("$.content[0].latestLogStatus").value("ENGINEER_DEPARTED"));
+        }
+
+        @Test
+        @DisplayName("성공: latestLogStatus 필터 파라미터 → 해당 상태만 반환")
+        void inProgress_latestLogStatusFilter_applied() throws Exception {
+            // ACCEPTED 배정 2건 세팅
+            asAssignmentRepository.updateStatus(assignment.getId(), "ACCEPTED");
+            AsRequest req2 = saveAsRequest(LocalDate.of(2026, 7, 1));
+            AsAssignment assign2 = asAssignmentRepository.save(
+                    AsAssignment.create(req2, engineer, agency, AssignType.MANUAL));
+            asAssignmentRepository.updateStatus(assign2.getId(), "ACCEPTED");
+
+            // 첫 번째 배정에만 ENGINEER_DEPARTED 로그 추가
+            asStatusLogRepository.save(AsStatusLog.builder()
+                    .asRequest(asRequest).changedBy(engineer)
+                    .fromStatus(null).toStatus("ENGINEER_DEPARTED").memo("출발").build());
+
+            // latestLogStatus=ENGINEER_DEPARTED 필터 → 1건만 반환
+            mockMvc.perform(get("/api/agency/as-assignments/in-progress")
+                            .param("latestLogStatus", "ENGINEER_DEPARTED")
+                            .header("Authorization", "Bearer " + agencyTokenWithAgencyId))
+                    .andExpect(status().isOk())
+                    // stats.totalCount 는 필터 전 전체 2건
+                    .andExpect(jsonPath("$.stats.totalCount").value(2))
+                    // content 는 필터 후 1건
+                    .andExpect(jsonPath("$.content.length()").value(1))
+                    .andExpect(jsonPath("$.content[0].latestLogStatus").value("ENGINEER_DEPARTED"));
+        }
+
+        @Test
+        @DisplayName("성공: 페이지네이션 — ACCEPTED 3건, size=2, page=0 → content 2건·totalElements=3")
+        void inProgress_pagination_page0() throws Exception {
+            asAssignmentRepository.updateStatus(assignment.getId(), "ACCEPTED");
+            AsRequest req2 = saveAsRequest(LocalDate.of(2026, 7, 1));
+            AsAssignment a2 = asAssignmentRepository.save(
+                    AsAssignment.create(req2, engineer, agency, AssignType.MANUAL));
+            asAssignmentRepository.updateStatus(a2.getId(), "ACCEPTED");
+            AsRequest req3 = saveAsRequest(LocalDate.of(2026, 7, 1));
+            AsAssignment a3 = asAssignmentRepository.save(
+                    AsAssignment.create(req3, engineer, agency, AssignType.MANUAL));
+            asAssignmentRepository.updateStatus(a3.getId(), "ACCEPTED");
+
+            mockMvc.perform(get("/api/agency/as-assignments/in-progress")
+                            .param("page", "0")
+                            .param("size", "2")
+                            .header("Authorization", "Bearer " + agencyTokenWithAgencyId))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.content.length()").value(2))
+                    .andExpect(jsonPath("$.totalElements").value(3))
+                    .andExpect(jsonPath("$.totalPages").value(2))
+                    .andExpect(jsonPath("$.currentPage").value(0));
         }
 
         @Test
