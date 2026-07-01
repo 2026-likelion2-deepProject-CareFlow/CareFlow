@@ -166,8 +166,9 @@ public class LmsService {
                 .category(category)
                 .title(dto.title())
                 .body(dto.body())
+                .videoUrl(dto.videoUrl())
                 .requiredLevel(dto.requiredLevel())
-                .contentType(LmsContent.ContentType.TEXT)
+                .contentType(dto.contentType())
                 .version(dto.version())
                 .isActive(true)
                 .createdBy(admin)
@@ -212,7 +213,7 @@ public class LmsService {
     @Transactional
     public void updateContent(Long contentId, LmsContentUpdateDto dto) {
         LmsContent content = getContentOrThrow(contentId);
-        content.update(dto.title(), dto.body(), dto.requiredLevel(), dto.version());
+        content.update(dto.title(), dto.body(), dto.videoUrl(), dto.requiredLevel(), dto.version());
     }
 
     /**

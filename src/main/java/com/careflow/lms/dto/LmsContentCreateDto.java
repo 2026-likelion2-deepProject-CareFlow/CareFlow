@@ -7,6 +7,8 @@ public record LmsContentCreateDto(
         Integer categoryId,
         String title,
         String body,
+        String videoUrl,
         LmsContent.RequiredLevel requiredLevel,
+        LmsContent.ContentType contentType,
         String version
 ) {}

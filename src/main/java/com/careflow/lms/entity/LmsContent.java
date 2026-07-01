@@ -39,8 +39,12 @@ public class LmsContent {
 
 
     @Lob
-    @Column(name = "body", nullable = false, columnDefinition = "TEXT")
+    @Column(name = "body", nullable = true, columnDefinition = "TEXT")
     private String body;
+
+
+    @Column(name = "video_url", length = 500)
+    private String videoUrl;
 
     /**
      * 필수 이수 대상 등급
@@ -105,6 +109,7 @@ public class LmsContent {
             ApplianceCategory category,
             String title,
             String body,
+            String videoUrl,
             RequiredLevel requiredLevel,
             ContentType contentType,
             String version,
@@ -114,6 +119,7 @@ public class LmsContent {
         this.category      = category;
         this.title         = title;
         this.body          = body;
+        this.videoUrl      = videoUrl;
         this.requiredLevel = requiredLevel;
         this.contentType   = contentType;
         this.version       = version;
@@ -128,9 +134,10 @@ public class LmsContent {
     // ─────────────────────────────────────────────
 
     /** 관리자가 콘텐츠를 수정할 때 사용 */
-    public void update(String title, String body, RequiredLevel requiredLevel, String version) {
+    public void update(String title, String body, String videoUrl, RequiredLevel requiredLevel, String version) {
         this.title         = title;
         this.body          = body;
+        this.videoUrl      = videoUrl;
         this.requiredLevel = requiredLevel;
         this.version       = version;
         this.updatedAt     = LocalDateTime.now();
