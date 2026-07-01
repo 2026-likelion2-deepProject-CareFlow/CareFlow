@@ -99,4 +99,12 @@ public class User {
         if (addressDetail != null) this.addressDetail = addressDetail;
         this.updatedAt = LocalDateTime.now();
     }
+
+    /**
+     * 관리자에 의한 계정 상태 변경 (ACTIVE / INACTIVE / SUSPENDED)
+     */
+    public void updateStatus(String status) {
+        this.status = status;
+        this.updatedAt = LocalDateTime.now();
+    }
 }
