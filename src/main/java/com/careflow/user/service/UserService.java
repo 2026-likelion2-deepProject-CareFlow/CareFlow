@@ -1,5 +1,6 @@
 package com.careflow.user.service;
 
+import com.careflow.common.enums.UserStatus;
 import com.careflow.region.entity.Regions;
 import com.careflow.region.repository.RegionRepository;
 import com.careflow.user.dto.UserAddressResponse;
@@ -65,6 +66,25 @@ public class UserService {
         }
 
         user.updateProfile(request.name(), request.phone(), region, request.addressDetail());
+        return UserProfileResponse.from(user);
+    }
+
+    /**
+     * 관리자에 의한 계정 상태 변경
+     * status는 UserStatus(ACTIVE/INACTIVE/SUSPENDED)로 유효성 검사 후, User 엔티티에는 String 그대로 전달
+     */
+    @Transactional
+    public UserProfileResponse updateUserStatus(Long userId, String status) {
+        try {
+            UserStatus.valueOf(status);
+        } catch (IllegalArgumentException e) {
+            throw new IllegalArgumentException("유효하지 않은 계정 상태입니다.");
+        }
+
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new NoSuchElementException("존재하지 않는 사용자입니다."));
+
+        user.updateStatus(status);
         return UserProfileResponse.from(user);
     }
 }

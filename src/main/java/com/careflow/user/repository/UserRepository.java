@@ -60,4 +60,36 @@ public interface UserRepository extends JpaRepository<User, Long> {
             @Param("joinedFrom") LocalDateTime joinedFrom,
             @Param("joinedTo") LocalDateTime joinedTo,
             Pageable pageable);
+
+    // ── GET /api/admin/users 관리자용 Customer 목록/통계 ─────────────────────
+    // 기사/대행사 계정은 role != CUSTOMER 로 자연히 제외됨 (추후 역할 통합 시 확장 예정)
+    long countByRole(Role role);
+    long countByRoleAndStatus(Role role, String status);
+
+    // start 이상, end 미만(end 제외)으로 가입일시 구간 집계 — 오늘 신규 가입자 수(KPI), 최근 7일 추이(member-trend) 공용
+    @Query("SELECT COUNT(u) FROM User u WHERE u.role = :role AND u.createdAt >= :start AND u.createdAt < :end")
+    long countByRoleAndCreatedAtRange(
+            @Param("role") Role role,
+            @Param("start") LocalDateTime start,
+            @Param("end") LocalDateTime end);
+
+    // 관리자용 Customer 목록 검색 — keyword(이름/연락처/이메일)/status 필터, region을 LEFT JOIN FETCH 하여 N+1 방지
+    @Query(value = "SELECT u FROM User u LEFT JOIN FETCH u.regionId " +
+            "WHERE u.role = :role " +
+            "AND (:status IS NULL OR u.status = :status) " +
+            "AND (:keyword IS NULL OR u.name LIKE CONCAT('%', :keyword, '%') " +
+            "     OR u.phone LIKE CONCAT('%', :keyword, '%') " +
+            "     OR u.email LIKE CONCAT('%', :keyword, '%')) " +
+            "ORDER BY u.createdAt DESC",
+            countQuery = "SELECT COUNT(u) FROM User u " +
+            "WHERE u.role = :role " +
+            "AND (:status IS NULL OR u.status = :status) " +
+            "AND (:keyword IS NULL OR u.name LIKE CONCAT('%', :keyword, '%') " +
+            "     OR u.phone LIKE CONCAT('%', :keyword, '%') " +
+            "     OR u.email LIKE CONCAT('%', :keyword, '%'))")
+    Page<User> searchCustomersForAdmin(
+            @Param("role") Role role,
+            @Param("status") String status,
+            @Param("keyword") String keyword,
+            Pageable pageable);
 }
