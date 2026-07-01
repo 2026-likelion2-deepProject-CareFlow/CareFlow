@@ -7,7 +7,6 @@ import org.springframework.stereotype.Repository;
 import java.util.List;
 import java.util.Optional;
 
-@Repository
 public interface BankAccountRepository extends JpaRepository<BankAccount, Long> {
 
     /** 기사 ID로 단건 조회 (1:1) */
