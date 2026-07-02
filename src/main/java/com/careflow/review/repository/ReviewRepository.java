@@ -168,4 +168,27 @@ public interface ReviewRepository extends JpaRepository<Review, Long> {
             @org.springframework.data.repository.query.Param("engineerId") Long engineerId,
             @org.springframework.data.repository.query.Param("rating") Integer rating,
             org.springframework.data.domain.Pageable pageable);
+
+    /**
+     * [기사용] 특정 기사의 공개 리뷰 평점 분포 (1~5점 각 개수)
+     * GET /api/engineer/reviews/stats 에서 사용 — 탭 필터[전체/5/4/3/2/1] 카운트 및 분포 차트 산정.
+     * 리뷰가 0건인 점수는 결과에 아예 포함되지 않으므로(예: 3점 리뷰가 없으면 행 없음),
+     * 서비스 레이어에서 1~5 버킷을 0으로 초기화한 뒤 이 결과를 덮어써 채운다.
+     */
+    @Query("""
+            SELECT r.rating AS rating, COUNT(r) AS count
+            FROM Review r
+            WHERE r.engineer.id = :engineerId
+              AND r.isVisible = true
+            GROUP BY r.rating
+            """)
+    List<RatingCount> countByRatingForEngineer(@Param("engineerId") Long engineerId);
+
+    /**
+     * 평점별 개수 집계 결과 프로젝션 (기존 EngineerAvgRating 프로젝션과 동일한 인터페이스 방식)
+     */
+    interface RatingCount {
+        Integer getRating();
+        Long getCount();
+    }
 }
