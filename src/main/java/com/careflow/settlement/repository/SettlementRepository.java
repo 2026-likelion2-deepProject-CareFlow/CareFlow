@@ -86,6 +86,32 @@ public interface SettlementRepository extends JpaRepository<Settlement, Long> {
             @Param("to") LocalDateTime to);
 
     /**
+     * 특정 기사(engineer)의 해당 기간 정산 합산 집계 — 기사 대시보드 실적/정산 요약(GET /api/engineer/settlements/summary)용.
+     * - createdAt 범위 기준, 전체 status 포함(PENDING/APPROVED/PAID/DISPUTED)
+     * - settlements 테이블에 저장된 실제 스냅샷 컬럼(grossAmount·platformFee·agencyFee·engineerNetAmount)을 그대로 합산
+     *   → 하드코딩 수수료율(10%/5%) 대신 정산 시점의 실제 값을 사용하며, net = gross - platform - agency 로 정합.
+     * - agency 용 findMonthlySummary 와 동일한 MonthlySummaryProjection 을 재사용(모수만 engineer 로 교체).
+     */
+    @Query("""
+            SELECT COUNT(s.id) AS totalCount,
+                   COALESCE(SUM(s.grossAmount), 0) AS totalGrossAmount,
+                   COALESCE(SUM(CASE WHEN s.status = 'PAID' THEN s.grossAmount ELSE 0 END), 0) AS paidAmount,
+                   COALESCE(SUM(CASE WHEN s.status IN ('PENDING','APPROVED') THEN s.grossAmount ELSE 0 END), 0) AS pendingAmount,
+                   COALESCE(SUM(CASE WHEN s.status = 'DISPUTED' THEN s.grossAmount ELSE 0 END), 0) AS disputedAmount,
+                   COALESCE(SUM(s.platformFee), 0) AS totalPlatformFee,
+                   COALESCE(SUM(s.agencyFee), 0) AS totalAgencyFee,
+                   COALESCE(SUM(s.engineerNetAmount), 0) AS totalEngineerPayout
+            FROM Settlement s
+            WHERE s.engineer.id = :engineerId
+              AND s.createdAt >= :from
+              AND s.createdAt < :to
+            """)
+    MonthlySummaryProjection findEngineerMonthlySummary(
+            @Param("engineerId") Long engineerId,
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to);
+
+    /**
      * paid_at 기준 월 범위 내 대행사 정산 목록 전체 조회 (CSV 다운로드용)
      */
     @Query("""

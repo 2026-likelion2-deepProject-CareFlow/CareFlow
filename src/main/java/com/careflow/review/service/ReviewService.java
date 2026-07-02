@@ -8,6 +8,7 @@ import com.careflow.engineer.repository.EngineerProfileRepository;
 import com.careflow.report.domain.entity.WorkReport;
 import com.careflow.report.repository.WorkReportRepository;
 import com.careflow.review.dto.EngineerReviewResponse;
+import com.careflow.review.dto.EngineerReviewStatsResponse;
 import com.careflow.review.dto.ReviewCreateRequest;
 import com.careflow.review.dto.ReviewResponse;
 import com.careflow.review.entity.Review;
@@ -126,5 +127,52 @@ public class ReviewService {
     public org.springframework.data.domain.Page<EngineerReviewResponse> getEngineerReviewsPaging(Long engineerId, Integer rating, org.springframework.data.domain.Pageable pageable) {
         org.springframework.data.domain.Page<Review> reviews = reviewRepository.findVisibleByEngineerIdAndRatingWithPaging(engineerId, rating, pageable);
         return reviews.map(EngineerReviewResponse::from);
+    }
+
+    /**
+     * 수리기사(ENGINEER)용: 본인 리뷰 통계 (평점 분포 + 탭 카운트)
+     *
+     * <p>목록 API와 분리된 additive 엔드포인트(GET /api/engineer/reviews/stats)의 서비스 로직.</p>
+     * <ul>
+     * <li>분포/카
+     * 운트는 공개(isVisible=true) 리뷰 기준 — 목록 API의 모수와 동일.</li>
+     * <li>평균은 분포로부터 산정(Σ(rating×count)/total)하여 분포와 항상 정합하도록 함.
+     * (engineer_profiles.avg_rating 은 비공개 리뷰까지 반영된 누적 평균이라 값이 다를 수 있어 재사용하지 않음)</li>
+     * <li>리뷰가 0건인 점수도 count=0 으로 반드시 포함(프론트 탭 렌더링용).</li>
+     * </ul>
+     */
+    @Transactional(readOnly = true)
+    public EngineerReviewStatsResponse getEngineerReviewStats(Long engineerId) {
+        // 1) 1~5 버킷을 0으로 초기화 (5점부터 1점 순서대로 응답하기 위해 LinkedHashMap 사용)
+        java.util.Map<Integer, Long> counts = new java.util.LinkedHashMap<>();
+        for (int score = 5; score >= 1; score--) {
+            counts.put(score, 0L);
+        }
+
+        // 2) GROUP BY 집계 결과를 버킷에 반영
+        for (ReviewRepository.RatingCount row : reviewRepository.countByRatingForEngineer(engineerId)) {
+            if (row.getRating() != null) {
+                counts.put(row.getRating(), row.getCount() != null ? row.getCount() : 0L);
+            }
+        }
+
+        // 3) 전체 개수 및 가중합(Σ rating×count) 산정 → 평균은 분포로부터 도출
+        long totalCount = 0L;
+        long weightedSum = 0L;
+        for (int score = 1; score <= 5; score++) {
+            long c = counts.get(score);
+            totalCount += c;
+            weightedSum += (long) score * c;
+        }
+        double averageRating = totalCount > 0
+                ? Math.round((double) weightedSum / totalCount * 100.0) / 100.0
+                : 0.0;
+
+        // 4) DTO 필드명에 정확히 맞춰서 빌더 호출! (List -> Map으로 직접 전달)
+        return EngineerReviewStatsResponse.builder()
+                .avgRating(averageRating)          // DTO의 avgRating 필드에 매핑
+                .totalReviews(totalCount)          // DTO의 totalReviews 필드에 매핑
+                .ratingDistribution(counts)        // 조립된 Map을 그대로 전달
+                .build();
     }
 }
