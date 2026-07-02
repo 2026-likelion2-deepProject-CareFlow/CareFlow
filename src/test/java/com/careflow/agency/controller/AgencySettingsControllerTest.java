@@ -52,6 +52,7 @@ class AgencySettingsControllerTest {
     @MockitoBean private CustomOAuth2UserService customOAuth2UserService;
     @MockitoBean private OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;
     @MockitoBean private ClientRegistrationRepository clientRegistrationRepository;
+    @MockitoBean private org.springframework.data.redis.core.StringRedisTemplate stringRedisTemplate;
 
     // AGENCY 역할 인증 사용자 픽스처 — JWT payload의 role 클레임과 동일하게 "AGENCY" 사용
     private CustomUserDetails agencyUser() {

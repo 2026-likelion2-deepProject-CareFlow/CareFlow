@@ -50,6 +50,8 @@ class EngineerControllerTest {
     private OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;
     @MockitoBean
     private ClientRegistrationRepository clientRegistrationRepository;
+    @MockitoBean
+    private org.springframework.data.redis.core.StringRedisTemplate stringRedisTemplate;
 
     private EngineerAccountRequest validRequest() {
         return new EngineerAccountRequest(

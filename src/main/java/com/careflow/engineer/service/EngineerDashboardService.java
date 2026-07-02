@@ -8,10 +8,12 @@ import com.careflow.bank_account.entity.BankAccount;
 import com.careflow.bank_account.repository.BankAccountRepository;
 import com.careflow.engineer.domain.entity.EngineerProfile;
 import com.careflow.engineer.dto.EngineerDashboardResponse;
-import com.careflow.engineer.dto.EngineerSettlementSummaryResponse;
+import com.careflow.settlement.dto.EngineerSettlementSummaryResponse;
 import com.careflow.engineer.repository.EngineerProfileRepository;
 import com.careflow.notification.repository.NotificationRepository;
 import com.careflow.settlement.repository.SettlementRepository;
+import com.careflow.review.repository.ReviewRepository;
+import com.careflow.common.enums.AsStatus;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
@@ -36,6 +38,7 @@ public class EngineerDashboardService {
     private final NotificationRepository notificationRepository;
     private final AsStatusLogRepository asStatusLogRepository;
     private final BankAccountRepository bankAccountRepository;
+    private final ReviewRepository reviewRepository; // [추가] 기간별 평점 비교(findAvgRatingByEngineers) 재사용
 
     // 1. 대시보드 API (오늘의 실적 및 상태)
     public EngineerDashboardResponse getDashboardData(Long engineerId) {
@@ -48,6 +51,8 @@ public class EngineerDashboardService {
         int expectedCount = 0;
         int completedCount = 0;
         String currentStatus = "WAITING";
+        Long currentRequestId = null;       // [추가] 진행 중 건의 requestId
+        boolean currentIsActive = false;    // [추가] 실제 진행 중(출발~수리중)인 건을 이미 확정했는지
 
         // 🌟 방어 로직 1: 리스트 매핑 시 연관 객체 Null Safe 처리
         List<EngineerDashboardResponse.TodayScheduleDto> schedules = todayAssignments.stream().map(a -> {
@@ -73,6 +78,7 @@ public class EngineerDashboardService {
 
             return EngineerDashboardResponse.TodayScheduleDto.builder()
                     .assignmentId(a.getId())
+                    .requestId(a.getAsRequest().getId()) // [추가] 상태변경 API가 요구하는 requestId (assignmentId 아님)
                     .time(a.getAsRequest().getScheduledTime() != null ? a.getAsRequest().getScheduledTime() : "시간 미정")
                     .status(a.getStatus())
                     .productName((brand + " " + categoryName).trim())
@@ -84,16 +90,27 @@ public class EngineerDashboardService {
                     .build();
         }).toList();
 
-        // 🌟 방어 로직 2: 상태값 파악 시 리스트 인덱스 안전 처리
+        // 🌟 방어 로직 2 + [수정] 진행 중 건 선택 로직
+        //  - 완료/예정 건수 집계는 기존과 동일.
+        //  - currentWorkStatus/currentRequestId 는 "실제 진행 중(최신 status log 가 WAITING·COMPLETED 가 아닌)" 건을 우선 선택.
+        //    ACCEPTED 배정이 여러 건이면 마지막으로 덮어쓰던 기존 버그를 막고, 진행 중 건을 발견하면 그걸로 확정한다.
+        //    진행 중 건이 없으면 첫 ACCEPTED 건(대기 상태)을 가리키고, ACCEPTED 자체가 없으면 null(WAITING) 로 남는다.
         for (AsAssignment a : todayAssignments) {
-            if ("COMPLETED".equals(a.getStatus())) {
+            String assignStatus = a.getStatus();
+            if ("COMPLETED".equals(assignStatus)) {
                 completedCount++;
-            } else if ("WAITING".equals(a.getStatus()) || "ACCEPTED".equals(a.getStatus())) {
+            } else if ("WAITING".equals(assignStatus) || "ACCEPTED".equals(assignStatus)) {
                 expectedCount++;
-                if ("ACCEPTED".equals(a.getStatus())) {
+                if ("ACCEPTED".equals(assignStatus) && !currentIsActive) {
                     List<AsStatusLog> logs = asStatusLogRepository.findByAsRequest_IdOrderByCreatedAtAsc(a.getAsRequest().getId());
-                    if (logs != null && !logs.isEmpty()) {
-                        currentStatus = logs.get(logs.size() - 1).getToStatus();
+                    String latest = (logs != null && !logs.isEmpty())
+                            ? logs.get(logs.size() - 1).getToStatus()
+                            : "WAITING";
+                    boolean active = !"WAITING".equals(latest) && !"COMPLETED".equals(latest); // 출발/도착/작업중
+                    if (currentRequestId == null || active) {
+                        currentRequestId = a.getAsRequest().getId();
+                        currentStatus = latest;
+                        currentIsActive = active; // 진행 중 건을 잡았으면 이후 ACCEPTED 는 무시
                     }
                 }
             }
@@ -127,6 +144,7 @@ public class EngineerDashboardService {
                 .todayCompletedCount(completedCount)
                 .thisMonthExpectedEarning(expectedEarning != null ? expectedEarning : 0)
                 .currentWorkStatus(currentStatus)
+                .currentRequestId(currentRequestId) // [추가] 진행 중 건의 requestId (없으면 null)
                 .todaySchedules(schedules)
                 .notices(notices)
                 .build();
@@ -225,25 +243,86 @@ public class EngineerDashboardService {
                             .build();
                 }).toList();
 
-        // 4. 정산 요약 및 계좌 (v21 명세 완벽 반영)
-        Integer sumNet = settlementRepository.sumExpectedEarningByEngineerIdAndDate(engineerId, start.atStartOfDay(), end.plusDays(1).atStartOfDay());
+        // 4. 정산 요약 및 계좌 (v21 명세 반영)
+        // 🔧 [수정] 하드코딩 수수료율(10%/5%) 제거 — settlements 테이블의 실제 스냅샷 컬럼을 집계한다.
+        //   · gross/platformFee/agencyFee/net 이 모두 같은 정산 행에서 나오므로 net = gross - platform - agency 로 정합.
+        //   · 대행사별로 다른 실제 수수료율(agency_fee_rate 스냅샷)이 반영됨.
+        //   · 날짜 기준은 기존과 동일하게 정산 생성일(createdAt). 상단 totalGrossAmount(작업 실적, scheduledDate·workReport 기준)과는 관점이 다른 값임에 유의.
+        LocalDateTime settlementFrom = start.atStartOfDay();
+        LocalDateTime settlementTo = end.plusDays(1).atStartOfDay();
+        SettlementRepository.MonthlySummaryProjection settlementAgg =
+                settlementRepository.findEngineerMonthlySummary(engineerId, settlementFrom, settlementTo);
+
+        int settleGross = (settlementAgg != null && settlementAgg.getTotalGrossAmount() != null) ? settlementAgg.getTotalGrossAmount().intValue() : 0;
+        int settlePlatformFee = (settlementAgg != null && settlementAgg.getTotalPlatformFee() != null) ? settlementAgg.getTotalPlatformFee().intValue() : 0;
+        int settleAgencyFee = (settlementAgg != null && settlementAgg.getTotalAgencyFee() != null) ? settlementAgg.getTotalAgencyFee().intValue() : 0;
+        int settleNet = (settlementAgg != null && settlementAgg.getTotalEngineerPayout() != null) ? settlementAgg.getTotalEngineerPayout().intValue() : 0;
+
         BankAccount bankAccount = bankAccountRepository.findByEngineerId(engineerId).orElse(null);
 
         // 🌟 방어 로직: 프로필 평점 Null 처리
         double avgRating = profile.getAvgRating() != null ? profile.getAvgRating().doubleValue() : 0.0;
 
         EngineerSettlementSummaryResponse.SettlementSummary settlementSummary = EngineerSettlementSummaryResponse.SettlementSummary.builder()
-                .grossAmount(totalGross)
-                .platformFee((int)(totalGross * 0.1)) // 플랫폼 수수료 10% 가정
-                .agencyFee((int)(totalGross * 0.05))  // 대행사 수수료 5% 가정
-                .engineerNetAmount(sumNet != null ? sumNet : 0)
+                .grossAmount(settleGross)
+                .platformFee(settlePlatformFee)
+                .agencyFee(settleAgencyFee)
+                .engineerNetAmount(settleNet)
+                // ⚠ paidAt: 집계(여러 정산 행)에는 단일 지급일이 없어 표시용 예상치로 유지. 건별 실제 paid_at 은 정산 목록 API(GET /api/engineer/settlements) 참조.
                 .paidAt(end.plusDays(5).format(DateTimeFormatter.ofPattern("yyyy.MM.dd")) + " 예정")
                 .bankName(bankAccount != null && bankAccount.getBankName() != null ? bankAccount.getBankName() : "미등록")
                 .accountNumber(bankAccount != null && bankAccount.getAccountNumber() != null ? bankAccount.getAccountNumber() : "계좌 미등록")
                 .build();
 
+        // ── [추가] 작업 건수 세분화 (완료/진행/취소) — 조회 기간(start~end, scheduledDate 기준)
+        //   · 완료: totalCompleted (위에서 이미 산정)
+        //   · 진행: 배정 status = ACCEPTED (수락했으나 아직 미완료). 세부 현장상태(출발/도착/작업중)는 구분하지 않는 대략치.
+        //   · 취소: 이 기사에게 배정됐던 A/S 중 요청 status = CANCELLED (기사 거절건 제외)
+        long inProgressCount = asAssignmentRepository.countByEngineerAndStatusInPeriod(engineerId, "ACCEPTED", start, end);
+        long cancelledCount = asAssignmentRepository.countRequestsByEngineerAndRequestStatusInPeriod(engineerId, AsStatus.CANCELLED, start, end);
+
+        // ── [추가] 이번 달 / 지난 달 비교 (조회 기간 필터와 무관하게 항상 '이번 달 vs 전월' — 대행사 리뷰 통계와 동일 패턴)
+        java.time.YearMonth thisYm = java.time.YearMonth.now();
+        java.time.YearMonth prevYm = thisYm.minusMonths(1);
+        LocalDateTime thisMonthStart = thisYm.atDay(1).atStartOfDay();
+        LocalDateTime nextMonthStart = thisYm.plusMonths(1).atDay(1).atStartOfDay();
+        LocalDateTime prevMonthStart = prevYm.atDay(1).atStartOfDay();
+
+        // 정산 금액(net) 비교 — settlements.engineer_net_amount 합 (createdAt 기준)
+        Integer thisNetObj = settlementRepository.sumExpectedEarningByEngineerIdAndDate(engineerId, thisMonthStart, nextMonthStart);
+        Integer prevNetObj = settlementRepository.sumExpectedEarningByEngineerIdAndDate(engineerId, prevMonthStart, thisMonthStart);
+        int thisMonthNet = thisNetObj != null ? thisNetObj : 0;
+        int prevMonthNet = prevNetObj != null ? prevNetObj : 0;
+
+        // 평점 비교 — 해당 월 신규 리뷰 평균 (createdAt 기준). 프로필 누적 평균(avgRating)과는 다른 값.
+        List<ReviewRepository.EngineerAvgRating> thisRatingRows = reviewRepository.findAvgRatingByEngineers(List.of(engineerId), thisMonthStart, nextMonthStart);
+        List<ReviewRepository.EngineerAvgRating> prevRatingRows = reviewRepository.findAvgRatingByEngineers(List.of(engineerId), prevMonthStart, thisMonthStart);
+        double thisMonthAvgRating = (!thisRatingRows.isEmpty() && thisRatingRows.get(0).getAvgRating() != null)
+                ? Math.round(thisRatingRows.get(0).getAvgRating() * 100.0) / 100.0 : 0.0;
+        double prevMonthAvgRating = (!prevRatingRows.isEmpty() && prevRatingRows.get(0).getAvgRating() != null)
+                ? Math.round(prevRatingRows.get(0).getAvgRating() * 100.0) / 100.0 : 0.0;
+
+        // 완료 건수 비교 — scheduledDate 기준 (양끝 포함)
+        long thisMonthCompleted = asAssignmentRepository.countByEngineerAndStatusInPeriod(engineerId, "COMPLETED", thisYm.atDay(1), thisYm.atEndOfMonth());
+        long prevMonthCompleted = asAssignmentRepository.countByEngineerAndStatusInPeriod(engineerId, "COMPLETED", prevYm.atDay(1), prevYm.atEndOfMonth());
+
+        EngineerSettlementSummaryResponse.MonthlyComparison monthlyComparison =
+                EngineerSettlementSummaryResponse.MonthlyComparison.builder()
+                        .thisMonthNetAmount(thisMonthNet)
+                        .prevMonthNetAmount(prevMonthNet)
+                        .netAmountDiff(thisMonthNet - prevMonthNet)
+                        .thisMonthAvgRating(thisMonthAvgRating)
+                        .prevMonthAvgRating(prevMonthAvgRating)
+                        .avgRatingDiff(Math.round((thisMonthAvgRating - prevMonthAvgRating) * 100.0) / 100.0)
+                        .thisMonthCompletedCount(thisMonthCompleted)
+                        .prevMonthCompletedCount(prevMonthCompleted)
+                        .completedCountDiff(thisMonthCompleted - prevMonthCompleted)
+                        .build();
+
         return EngineerSettlementSummaryResponse.builder()
                 .totalCompletedCount(totalCompleted)
+                .inProgressCount(inProgressCount)   // [추가]
+                .cancelledCount(cancelledCount)     // [추가]
                 .totalGrossAmount(totalGross)
                 .avgRating(avgRating)
                 .customerSatisfaction(customerSatisfaction)
@@ -253,6 +332,7 @@ public class EngineerDashboardService {
                 .statusDistributions(statusDists)
                 .performanceList(performanceList)
                 .settlementSummary(settlementSummary)
+                .monthlyComparison(monthlyComparison) // [추가]
                 .build();
     }
 }

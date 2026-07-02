@@ -1,5 +1,5 @@
 // 파일 경로: src/test/java/com/careflow/engineer/EngineerPhase4IntegrationTest.java
-package com.careflow.engineer;
+package com.careflow.engineer.bugfix;
 
 import com.careflow.agency.entity.Agencies;
 import com.careflow.agency.repository.AgenciesRepository;

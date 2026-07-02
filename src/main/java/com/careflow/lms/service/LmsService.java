@@ -99,7 +99,10 @@ public class LmsService {
         // 2. 이수 이력 저장
         lmsConfirmationRepository.save(LmsConfirmation.of(engineer, content, currentYear));
 
-        // 3. 전체 이수 완료 판정 후 is_lms_completed 갱신
+        // 3. 변경 이력 즉시 반영
+        lmsConfirmationRepository.flush();
+
+        // 4. 전체 이수 완료 판정 후 is_lms_completed 갱신
         updateLmsCompletionStatus(engineer, currentYear);
     }
 

@@ -112,6 +112,24 @@ class AssignmentChangeEngineerServiceTest {
             assertThat(response.assignmentStatus()).isEqualTo("WAITING");
             assertThat(response.assignedAt()).isNotNull();
         }
+
+        @Test
+        @DisplayName("REJECTED 배정 기사 변경 → cancel() 재호출 없이 새 배정만 생성 (재배차 알림 수동 배정)")
+        void changeEngineer_rejectedStatus_success() throws Exception {
+            given(existing.getStatus()).willReturn("REJECTED");
+            given(asAssignmentRepository.findById(ASSIGNMENT_ID)).willReturn(Optional.of(existing));
+            given(userRepository.findById(NEW_ENGINEER_ID)).willReturn(Optional.of(newEngineer));
+            given(asAssignmentRepository.save(any(AsAssignment.class))).willReturn(newAssignment);
+
+            AssignmentChangeEngineerResponse response =
+                    assignmentChangeEngineerService.changeEngineer(changeRequest, agencyUser);
+
+            // 이미 REJECTED인 배정은 cancel()을 다시 호출하면 안 됨 (AsAssignment.cancel()이 재호출 시 예외를 던지기 때문)
+            verify(existing, never()).cancel();
+            verify(asAssignmentRepository).save(any(AsAssignment.class));
+            assertThat(response.newAssignmentId()).isEqualTo(NEW_ASSIGNMENT_ID);
+            assertThat(response.assignmentStatus()).isEqualTo("WAITING");
+        }
     }
 
     @Nested

@@ -233,4 +233,27 @@ public interface AsAssignmentRepository extends JpaRepository<AsAssignment, Long
             countQuery = "SELECT COUNT(DISTINCT c) FROM AsAssignment a JOIN a.asRequest r JOIN r.customer c WHERE a.engineer.id = :engineerId"
     )
     org.springframework.data.domain.Page<com.careflow.user.entity.User> findCustomersByEngineerId(@org.springframework.data.repository.query.Param("engineerId") Long engineerId, org.springframework.data.domain.Pageable pageable);
+
+    // [실적 요약] 특정 배정 상태(assignment status)의 기간 내 건수 — scheduledDate 기준(양끝 포함).
+    // findCompletedAssignmentsWithDetails 와 동일한 날짜 시맨틱. 진행 중(status='ACCEPTED')·완료(status='COMPLETED') 카운트에 재사용.
+    @Query("SELECT COUNT(a) FROM AsAssignment a JOIN a.asRequest r " +
+           "WHERE a.engineer.id = :engineerId " +
+           "AND a.status = :status " +
+           "AND r.scheduledDate >= :startDate AND r.scheduledDate <= :endDate")
+    long countByEngineerAndStatusInPeriod(@Param("engineerId") Long engineerId,
+                                          @Param("status") String status,
+                                          @Param("startDate") java.time.LocalDate startDate,
+                                          @Param("endDate") java.time.LocalDate endDate);
+
+    // [실적 요약] 이 기사에게 배정됐던 A/S 중 특정 요청 상태(as_requests.status)의 기간 내 건수 — 취소(CANCELLED) 집계용.
+    // 기사가 거절(REJECTED)한 배정은 제외(= 실제로 담당하던 건이 취소된 경우만). 한 요청에 배정 행이 여러 개일 수 있어 DISTINCT.
+    @Query("SELECT COUNT(DISTINCT r.id) FROM AsAssignment a JOIN a.asRequest r " +
+           "WHERE a.engineer.id = :engineerId " +
+           "AND a.status <> 'REJECTED' " +
+           "AND r.status = :reqStatus " +
+           "AND r.scheduledDate >= :startDate AND r.scheduledDate <= :endDate")
+    long countRequestsByEngineerAndRequestStatusInPeriod(@Param("engineerId") Long engineerId,
+                                                         @Param("reqStatus") com.careflow.common.enums.AsStatus reqStatus,
+                                                         @Param("startDate") java.time.LocalDate startDate,
+                                                         @Param("endDate") java.time.LocalDate endDate);
 }

@@ -39,6 +39,7 @@ public interface WorkReportRepository extends JpaRepository<WorkReport, Long> {
             "WHERE w.reportId = :reportId")
     Optional<WorkReport> findByIdWithParts(@Param("reportId") Long reportId);
 
+<<<<<<< HEAD
     // 고객 결제 요약 KPI용 — 해당 고객의 SUCCESS 결제 건 기준 부품비 합계
     // (work_report_parts.quantity * applied_unit_price를 as_request 단위로 집계). 데이터 없으면 0
     @Query("SELECT COALESCE(SUM(part.quantity * COALESCE(part.appliedUnitPrice, 0)), 0) FROM WorkReportPart part " +
@@ -48,5 +49,23 @@ public interface WorkReportRepository extends JpaRepository<WorkReport, Long> {
             "AND EXISTS (SELECT 1 FROM Payment pay WHERE pay.asRequest = r " +
             "AND pay.status = com.careflow.common.enums.PaymentStatus.SUCCESS)")
     long sumPartsAmountByCustomerId(@Param("customerId") Long customerId);
+=======
+    /**
+     * [기사용 API] 특정 기사가 특정 고객에게 처리한 작업 완료 보고서 이력 조회 (N+1 방지)
+     */
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT w FROM WorkReport w " +
+                    "JOIN FETCH w.asRequest r " +
+                    "JOIN FETCH r.appliance a " +
+                    "JOIN FETCH r.symptom s " +
+                    "WHERE w.engineer.id = :engineerId AND r.customer.id = :customerId " +
+                    "ORDER BY w.submittedAt DESC"
+    )
+    List<WorkReport> findHistoryByEngineerAndCustomer(
+            @org.springframework.data.repository.query.Param("engineerId") Long engineerId,
+            @org.springframework.data.repository.query.Param("customerId") Long customerId
+    );
+
+>>>>>>> b6d3b13c24c6c9cfdcd9cb9c99bbbb7c2fdc16e3
 }
 

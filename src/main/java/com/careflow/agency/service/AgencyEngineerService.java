@@ -197,7 +197,7 @@ public class AgencyEngineerService {
         return engineerScheduleRepository
                 .findByUser_IdAndWorkDateBetweenOrderByWorkDateAsc(engineerUserId, startDate, endDate)
                 .stream()
-                .map(ScheduleResponse::from)
+                .map(ScheduleResponse::of)
                 .toList();
     }
 

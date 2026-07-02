@@ -56,7 +56,7 @@ class EngineerReviewControllerTest {
         engineerAuth = SecurityMockMvcRequestPostProcessors.authentication(
                 new UsernamePasswordAuthenticationToken(
                         new CustomUserDetails(1L, "engineer@test.com", "pw", "ENGINEER", 100L),
-                        null, List.of(new SimpleGrantedAuthority("ENGINEER"))
+                        null, List.of(new SimpleGrantedAuthority("ROLE_ENGINEER"))
                 )
         );
     }

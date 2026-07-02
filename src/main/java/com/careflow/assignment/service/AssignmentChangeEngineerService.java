@@ -40,17 +40,23 @@ public class AssignmentChangeEngineerService {
             throw new IllegalAccessException("소속 대행사의 배정만 변경할 수 있습니다.");
         }
 
-        // 수락 대기(WAITING) 상태 배정만 기사 변경 가능
-        if (!"WAITING".equals(existing.getStatus())) {
-            throw new IllegalStateException("수락 대기 상태의 배정만 기사를 변경할 수 있습니다.");
+        // 수락 대기(WAITING) 또는 거절(REJECTED) 상태 배정만 기사 변경 가능
+        // - WAITING: 아직 기사가 응답하지 않은 배정을 다른 기사로 교체
+        // - REJECTED: 재배차 알림(ReassignModal)에서 거절된 배정에 새 기사를 수동 배정
+        boolean isWaiting = "WAITING".equals(existing.getStatus());
+        boolean isRejected = "REJECTED".equals(existing.getStatus());
+        if (!isWaiting && !isRejected) {
+            throw new IllegalStateException("수락 대기 또는 거절 상태의 배정만 기사를 변경할 수 있습니다.");
         }
 
         // 새 기사 조회
         User newEngineer = userRepository.findById(request.newEngineerId())
                 .orElseThrow(() -> new NoSuchElementException("해당 수리 기사를 찾을 수 없습니다."));
 
-        // 기존 배정 취소(REJECTED)
-        existing.cancel();
+        // 기존 배정 취소(REJECTED) — 이미 REJECTED 상태면 cancel() 재호출 시 예외가 발생하므로 WAITING일 때만 호출
+        if (isWaiting) {
+            existing.cancel();
+        }
 
         // 새 배정 생성 (WAITING)
         AsAssignment newAssignment = AsAssignment.create(

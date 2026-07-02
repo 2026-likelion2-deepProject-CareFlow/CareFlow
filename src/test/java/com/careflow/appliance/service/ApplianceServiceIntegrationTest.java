@@ -161,7 +161,7 @@ class ApplianceServiceIntegrationTest {
         assertThat(response.getScore()).isEqualTo(75);
 
         // 역추산된 점수들 검증
-        assertThat(response.getRepairCountScore()).isEqualTo(20);     // 누적 2회 수리
+        assertThat(response.getRepairCountScore()).isEqualTo(15);     // 누적 2회 수리 (HealthScoreCalculator: 0회=25,1회=20,2회=15,3회=8,4회+=0)
         assertThat(response.getUsagePeriodScore()).isEqualTo(20);     // 2년 사용
         assertThat(response.getPartImportanceScore()).isEqualTo(15);  // 최신 보고서 부품 NORMAL
         assertThat(response.getLastRepairedScore()).isEqualTo(15);    // 직전 보고서 13개월 전

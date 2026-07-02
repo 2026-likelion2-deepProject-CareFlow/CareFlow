@@ -14,6 +14,7 @@ import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
@@ -24,10 +25,12 @@ import java.util.List;
  * 대행사 전용 통합 컨트롤러 — /api/agency
  *
  * 프론트엔드 URI 규약(단수형 /api/agency/*)에 맞춰 대행사 설정 및 작업 관련 API를 제공한다.
+ * 모든 엔드포인트는 AGENCY 역할만 접근 가능하다.
  */
 @RestController
 @RequestMapping("/api/agency")
 @RequiredArgsConstructor
+@PreAuthorize("hasRole('AGENCY')")
 public class AgencyController {
 
     private final AgenciesService agenciesService;

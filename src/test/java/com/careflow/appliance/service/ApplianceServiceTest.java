@@ -63,7 +63,7 @@ class ApplianceServiceTest {
         HealthCertificate cert = mock(HealthCertificate.class);
         given(healthCertificateRepository.findByAppliance_Id(applianceId)).willReturn(Optional.of(cert));
 
-        // 1축(수리횟수) 테스트용 데이터: 누적 2회 수리 -> 20점
+        // 1축(수리횟수) 테스트용 데이터: 누적 2회 수리 -> 15점 (HealthScoreCalculator: 0회=25,1회=20,2회=15,3회=8,4회+=0)
         given(cert.getRepairCount()).willReturn(2);
         given(cert.getUpdatedAt()).willReturn(LocalDateTime.now());
         given(cert.getGrade()).willReturn("B");
@@ -95,8 +95,8 @@ class ApplianceServiceTest {
         assertThat(response.getGrade()).isEqualTo("B");
         assertThat(response.getScore()).isEqualTo(75);
 
-        // 계산식 검증: 20(누적2회) + 20(사용2년) + 15(NORMAL) + 15(직전수리 13개월 전) = 70점
-        assertThat(response.getRepairCountScore()).isEqualTo(20);
+        // 계산식 검증: 15(누적2회) + 20(사용2년) + 15(NORMAL) + 15(직전수리 13개월 전) = 65점
+        assertThat(response.getRepairCountScore()).isEqualTo(15);
         assertThat(response.getUsagePeriodScore()).isEqualTo(20);
         assertThat(response.getPartImportanceScore()).isEqualTo(15);
         assertThat(response.getLastRepairedScore()).isEqualTo(15);

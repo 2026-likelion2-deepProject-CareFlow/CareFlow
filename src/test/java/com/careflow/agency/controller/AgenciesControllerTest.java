@@ -56,6 +56,8 @@ class AgenciesControllerTest {
     private OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;
     @MockitoBean
     private ClientRegistrationRepository clientRegistrationRepository;
+    @MockitoBean
+    private org.springframework.data.redis.core.StringRedisTemplate stringRedisTemplate;
 
     // 유효한 요청 픽스처 — 각 테스트에서 필드만 교체해서 사용
     private AgencyCreateRequest validRequest;
