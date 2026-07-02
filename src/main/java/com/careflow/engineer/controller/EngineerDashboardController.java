@@ -3,7 +3,7 @@ package com.careflow.engineer.controller;
 
 import com.careflow.auth.security.CustomUserDetails;
 import com.careflow.engineer.dto.EngineerDashboardResponse;
-import com.careflow.engineer.dto.EngineerSettlementSummaryResponse;
+import com.careflow.settlement.dto.EngineerSettlementSummaryResponse;
 import com.careflow.engineer.service.EngineerDashboardService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;

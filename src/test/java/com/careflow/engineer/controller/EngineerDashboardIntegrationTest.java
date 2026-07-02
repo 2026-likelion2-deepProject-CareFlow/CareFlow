@@ -91,7 +91,7 @@ class EngineerDashboardIntegrationTest {
         EngineerProfile profile = EngineerProfile.createInitial(engineer);
         profile.completeProfile(categoryRepository.save(ApplianceCategory.createRoot("세탁기", 1)), 2015, SkillLevel.ADVANCED, "반갑습니다");
         engineerProfileRepository.save(profile);
-        bankAccountRepository.save(BankAccount.create(engineer.getId(), "국민은행", "123-456-789", "이엔지"));
+        bankAccountRepository.save(BankAccount.create(engineer.getId(), "국민은행", "123-456-789", engineer.getName()));
 
         // 3. A/S 요청 -> 배정 -> 완료 -> 보고서 작성 흐름 세팅
         ApplianceCategory cat = categoryRepository.save(ApplianceCategory.createRoot("냉장고", 1));
