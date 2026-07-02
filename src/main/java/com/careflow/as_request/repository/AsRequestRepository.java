@@ -87,4 +87,7 @@ public interface AsRequestRepository extends JpaRepository<AsRequest, Long> {
            "ORDER BY r.createdAt DESC")
     List<AsRequest> findByCustomerIdAndAgencyId(
             @Param("customerId") Long customerId, @Param("agencyId") Long agencyId);
+
+    // 고객 결제 요약 KPI용 — 해당 고객의 특정 상태(COMPLETED=결제 대기) A/S 요청 건수
+    long countByCustomer_IdAndStatus(Long customerId, AsStatus status);
 }
