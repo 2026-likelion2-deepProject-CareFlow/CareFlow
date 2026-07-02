@@ -79,10 +79,10 @@ public class AdminUserService {
         return trend;
     }
 
-    // role 미지정 시 CUSTOMER 기본값 — 잘못된 role 문자열이면 400으로 응답되도록 IllegalArgumentException
+    // role 미지정 시 전체 user 기본값 — 잘못된 role 문자열이면 400으로 응답되도록 IllegalArgumentException
     private Role parseRole(String roleParam) {
         if (roleParam == null || roleParam.isBlank()) {
-            return Role.CUSTOMER;
+            return null;
         }
         try {
             return Role.valueOf(roleParam);
