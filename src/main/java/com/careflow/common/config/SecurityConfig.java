@@ -75,6 +75,11 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers("/").permitAll()
+                        // AccessDeniedHandler/AuthenticationEntryPoint가 response.sendError()로 위임하면
+                        // 컨테이너가 /error로 내부 forward하는데, 이때는 ERROR dispatch라 JwtFilter가
+                        // 재실행되지 않아 SecurityContext가 익명으로 바뀜 — /error를 막아두면 원래
+                        // 의도했던 상태코드(403 등)가 401로 뒤바뀌어 나가므로 permitAll 필요
+                        .requestMatchers("/error").permitAll()
                         .requestMatchers("/api/agencies/signup").permitAll()
                         .requestMatchers("/api/agencies/agency").permitAll()
                         .requestMatchers("/api/engineer/signup").permitAll()
