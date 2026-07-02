@@ -127,8 +127,8 @@ public class EngineerScheduleService {
             throw new IllegalStateException("이미 A/S가 배정된 근무표는 삭제할 수 없습니다. 대행사에 문의해주세요.");
         }
 
-        schedule.changeScheduleStatus(ScheduleStatus.OFF);
-        schedule.getTimeSlots().clear();
+        // 🌟 수정: 상태 변경이 아니라 쿨하게 DB에서 날려버림 (Hard Delete)
+        engineerScheduleRepository.delete(schedule);
     }
 
     @Transactional(readOnly = true)

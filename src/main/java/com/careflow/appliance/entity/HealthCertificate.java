@@ -75,18 +75,17 @@ public class HealthCertificate {
         this.isCertified = false;
     }
 
-    public void calculateAndUpdateHealth(PartImportance maxImportance, LocalDate purchaseDate) {
-        this.repairCount += 1;
-        if (maxImportance == PartImportance.CRITICAL) {
-            this.criticalPartsReplaced += 1;
-        }
+    // 🌟 수정: += 누적 방식을 버리고 외부에서 주입받은 절대값으로 재계산
+    public void recalculate(int totalRepairCount, int totalCriticalParts, PartImportance worstImportance, LocalDateTime lastRepaired, LocalDate purchaseDate) {
+        this.repairCount = totalRepairCount;
+        this.criticalPartsReplaced = totalCriticalParts;
+        this.lastRepairedAt = lastRepaired;
 
-        LocalDateTime now = LocalDateTime.now(); // 기준 시점
+        LocalDateTime now = LocalDateTime.now();
 
-        // 💡 단일화된 계산기 호출
         int axis1 = HealthScoreCalculator.calculateRepairCountScore(this.repairCount);
         int axis2 = HealthScoreCalculator.calculateUsagePeriodScore(purchaseDate, now);
-        int axis3 = HealthScoreCalculator.calculatePartImportanceScore(maxImportance);
+        int axis3 = HealthScoreCalculator.calculatePartImportanceScore(worstImportance);
         int axis4 = HealthScoreCalculator.calculateLastRepairedScore(this.lastRepairedAt, now);
 
         this.score = axis1 + axis2 + axis3 + axis4;
@@ -98,6 +97,6 @@ public class HealthCertificate {
         else this.grade = "E";
 
         this.isCertified = (this.score >= 75 && (this.grade.equals("A") || this.grade.equals("B")));
-        this.lastRepairedAt = now; // 갱신
+        this.updatedAt = now;
     }
 }
