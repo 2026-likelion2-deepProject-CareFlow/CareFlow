@@ -11,7 +11,6 @@ import com.careflow.as_status_log.repository.AsStatusLogRepository;
 import com.careflow.assignment.entity.AsAssignment;
 import com.careflow.assignment.repository.AsAssignmentRepository;
 import com.careflow.engineer.dto.CreateWorkReportRequest;
-import com.careflow.notification.service.NotificationService;
 import com.careflow.part.domain.entity.RepairPart;
 import com.careflow.part.repository.RepairPartRepository;
 import com.careflow.report.domain.entity.WorkReport;
@@ -50,7 +49,6 @@ public class WorkReportService {
     private final AsAssignmentRepository asAssignmentRepository;
     private final ApplianceRepository applianceRepository;
     private final AsStatusLogRepository asStatusLogRepository;
-    private final NotificationService notificationService;
     private final ApplicationEventPublisher eventPublisher;
 
     @Transactional
@@ -76,7 +74,6 @@ public class WorkReportService {
 
         String oldStatusStr = asRequest.getStatus().name();
 
-        // 1. 상태 변경 (IN_PROGRESS -> COMPLETED)
         asRequest.completeWork();
 
         WorkReport report = WorkReport.builder()
@@ -88,8 +85,6 @@ public class WorkReportService {
                 .memo(request.getMemo())
                 .imageUrls(request.getImageUrls())
                 .build();
-
-        PartImportance maxImportance = null;
 
         if (request.getParts() != null && !request.getParts().isEmpty()) {
             for (CreateWorkReportRequest.PartDto partDto : request.getParts()) {
@@ -106,25 +101,14 @@ public class WorkReportService {
                         .build();
 
                 report.addPart(reportPart);
-
-                if (maxImportance == null || repairPart.getImportance().getSeverity() < maxImportance.getSeverity()) {
-                    maxImportance = repairPart.getImportance();
-                }
-
             }
         }
 
         WorkReport savedReport = workReportRepository.save(report);
-        HealthCertificate certificate = healthCertificateRepository.findByAppliance_Id(asRequest.getAppliance().getId())
-                .orElseGet(() -> healthCertificateRepository.save(
-                        HealthCertificate.builder()
-                                .appliance(asRequest.getAppliance())
-                                .build()
-                ));
+        workReportRepository.flush();
 
-        certificate.calculateAndUpdateHealth(maxImportance, asRequest.getAppliance().getPurchaseDate());
+        syncHealthCertificate(asRequest.getAppliance());
 
-        // 🌟 2. 상태 변경 로그 기록 (COMPLETED)
         String actionMemo = engineer.getName() + " 기사님이 작업을 완료하고 보고서를 제출했습니다.";
         AsStatusLog statusLog = AsStatusLog.builder()
                 .asRequest(asRequest)
@@ -135,13 +119,12 @@ public class WorkReportService {
                 .build();
         asStatusLogRepository.save(statusLog);
 
-
-        // 🌟 3. SSE 알림 '이벤트 발행'
         String title = "A/S 수리 완료 및 보고서 도착";
         String applianceInfo = asRequest.getAppliance().getBrand() + " " + asRequest.getAppliance().getModelName();
         String body = "[" + applianceInfo + "] " + actionMemo;
 
         eventPublisher.publishEvent(new AsStatusNotificationEvent(asRequest.getCustomer(), title, body));
+
         if (asRequest.getAgency() != null && asRequest.getAgency().getRepresentativeId() != null) {
             eventPublisher.publishEvent(new AsStatusNotificationEvent(asRequest.getAgency().getRepresentativeId(), title, body));
         }
@@ -232,7 +215,7 @@ public class WorkReportService {
     @Transactional
     public void cancelApprovalRequest(Long engineerId, Long reportId) {
         WorkReport report = workReportRepository.findById(reportId)
-                .orElseThrow(() -> new java.util.NoSuchElementException("보고서를 찾을 수 없습니다."));
+                .orElseThrow(() -> new NoSuchElementException("보고서를 찾을 수 없습니다."));
 
         if (!report.getEngineer().getId().equals(engineerId)) {
             throw new IllegalStateException("본인이 작성한 보고서만 취소할 수 있습니다.");
@@ -245,10 +228,8 @@ public class WorkReportService {
         AsRequest request = report.getAsRequest();
         String oldStatusStr = request.getStatus().name();
 
-        // 1. A/S 요청 상태 원복 (COMPLETED -> IN_PROGRESS)
         request.revertToInProgress();
 
-        // 2. 상태 변경 로그 기록
         AsStatusLog statusLog = AsStatusLog.builder()
                 .asRequest(request)
                 .changedBy(report.getEngineer())
@@ -258,7 +239,38 @@ public class WorkReportService {
                 .build();
         asStatusLogRepository.save(statusLog);
 
-        // 3. 작업 보고서 물리 삭제 (다시 작성할 수 있도록)
         workReportRepository.delete(report);
+        workReportRepository.flush();
+
+        syncHealthCertificate(request.getAppliance());
+    }
+
+    // 🌟 신규 추가: 해당 가전의 모든 보고서를 모아 진단서를 완벽하게 재계산하는 핵심 헬퍼 메서드
+    private void syncHealthCertificate(Appliance appliance) {
+        List<WorkReport> allReports = workReportRepository.findByApplianceIdOrderBySubmittedAtDesc(appliance.getId());
+
+        int totalRepairCount = allReports.size();
+        int totalCriticalParts = 0;
+        PartImportance worstImportance = null;
+        LocalDateTime lastRepaired = allReports.isEmpty() ? null : allReports.get(0).getSubmittedAt();
+
+        for (WorkReport r : allReports) {
+            for (com.careflow.report.domain.entity.WorkReportPart p : r.getParts()) {
+                PartImportance imp = p.getRepairPart().getImportance();
+                if (imp == PartImportance.CRITICAL) {
+                    totalCriticalParts++;
+                }
+                if (worstImportance == null || imp.getSeverity() < worstImportance.getSeverity()) {
+                    worstImportance = imp;
+                }
+            }
+        }
+
+        HealthCertificate certificate = healthCertificateRepository.findByAppliance_Id(appliance.getId())
+                .orElseGet(() -> healthCertificateRepository.save(
+                        HealthCertificate.builder().appliance(appliance).build()
+                ));
+
+        certificate.recalculate(totalRepairCount, totalCriticalParts, worstImportance, lastRepaired, appliance.getPurchaseDate());
     }
 }

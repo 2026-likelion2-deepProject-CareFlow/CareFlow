@@ -12,11 +12,12 @@ import java.time.temporal.ChronoUnit;
  */
 public class HealthScoreCalculator {
 
+    // 🌟 수정: 0회=25, 1회=20, 2회=15, 3회=8, 4회이상=0 으로 정확히 매핑
     public static int calculateRepairCountScore(int count) {
-        if (count <= 1) return 25;
-        if (count == 2) return 20;
-        if (count == 3) return 15;
-        if (count == 4) return 8;
+        if (count == 0) return 25;
+        if (count == 1) return 20;
+        if (count == 2) return 15;
+        if (count == 3) return 8;
         return 0;
     }
 
