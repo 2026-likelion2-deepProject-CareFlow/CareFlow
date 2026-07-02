@@ -70,6 +70,8 @@ class AccountRequestsControllerTest {
     private OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;
     @MockitoBean
     private ClientRegistrationRepository clientRegistrationRepository;
+    @MockitoBean
+    private org.springframework.data.redis.core.StringRedisTemplate stringRedisTemplate;
 
     // 역할별 인증 Principal 헬퍼
     private RequestPostProcessor adminAuth;

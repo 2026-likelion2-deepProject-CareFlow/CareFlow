@@ -242,11 +242,11 @@ class AgencyAsStatusLogIntegrationTest {
         }
 
         @Test
-        @DisplayName("실패: AGENCY 이외 권한(CUSTOMER)으로 호출 — 401")
+        @DisplayName("실패: AGENCY 이외 권한(CUSTOMER)으로 호출 — 403 Forbidden (@PreAuthorize)")
         void fail_notAgency_401() throws Exception {
             mockMvc.perform(get("/api/agency/work-requests/stats")
                             .header("Authorization", "Bearer " + customerToken))
-                    .andExpect(status().isUnauthorized());
+                    .andExpect(status().isForbidden());
         }
     }
 

@@ -49,6 +49,7 @@ class CustomerControllerTest {
     @MockitoBean private CustomOAuth2UserService customOAuth2UserService;
     @MockitoBean private OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;
     @MockitoBean private ClientRegistrationRepository clientRegistrationRepository;
+    @MockitoBean private org.springframework.data.redis.core.StringRedisTemplate stringRedisTemplate;
 
     private static final Long CUSTOMER_USER_ID = 1L;
 

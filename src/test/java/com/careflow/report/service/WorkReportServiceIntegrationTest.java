@@ -131,10 +131,11 @@ class WorkReportServiceIntegrationTest {
 
     @ParameterizedTest
     @CsvSource({
-            "CRITICAL, B, 75",  // 기본 75점 + CRITICAL(0점) = 75점 (B등급 선방!)
-            "MAJOR, B, 83",     // 기본 75점 + MAJOR(8점) = 83점
-            "NORMAL, A, 90",    // 기본 75점 + NORMAL(15점) = 90점
-            "MINOR, A, 95"      // 기본 75점 + MINOR(20점) = 95점
+            // 이번 접수가 첫 수리이므로: repairCount=1회(20점) + usagePeriod=구매일 미상(25점) + lastRepaired=방금 수리(0점)
+            "CRITICAL, D, 45",  // 20+25+0(CRITICAL)+0 = 45점
+            "MAJOR, D, 53",     // 20+25+8(MAJOR)+0 = 53점
+            "NORMAL, C, 60",    // 20+25+15(NORMAL)+0 = 60점
+            "MINOR, C, 65"      // 20+25+20(MINOR)+0 = 65점
     })
     @DisplayName("성공: [부품 교체] 4축 계산 모델 적용 - 부품 중요도별 등급/점수 산정 검증")
     void submitWorkReport_Parts_Parameterized_Integration(PartImportance importance, String expectedGrade, int expectedScore) throws Exception {
@@ -160,9 +161,11 @@ class WorkReportServiceIntegrationTest {
         workReportService.submitWorkReport(testEngineer.getId(), request);
 
         // Then
+        // 이번 접수가 첫 수리이므로: repairCount=1회(20점) + usagePeriod=구매일 미상(25점)
+        // + partImportance=부품 교체 없음(25점) + lastRepaired=방금 수리(0점) = 70점
         HealthCertificate cert = healthCertificateRepository.findAll().getFirst();
-        assertThat(cert.getGrade()).isEqualTo("A");
-        assertThat(cert.getScore()).isEqualTo(100);
+        assertThat(cert.getGrade()).isEqualTo("C");
+        assertThat(cert.getScore()).isEqualTo(70);
 
         // 🌟 추가 검증: DB에 상태 로그 데이터가 INSERT 되었는지 확인
         long newLogCount = asStatusLogRepository.count();

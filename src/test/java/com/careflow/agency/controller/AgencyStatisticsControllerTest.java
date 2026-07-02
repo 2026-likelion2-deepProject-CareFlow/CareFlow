@@ -50,6 +50,8 @@ class AgencyStatisticsControllerTest {
     private OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;
     @MockitoBean
     private ClientRegistrationRepository clientRegistrationRepository;
+    @MockitoBean
+    private org.springframework.data.redis.core.StringRedisTemplate stringRedisTemplate;
 
     // AGENCY 역할 CustomUserDetails 픽스처
     private CustomUserDetails agencyUser() {
@@ -104,13 +106,13 @@ class AgencyStatisticsControllerTest {
         }
 
         @Test
-        @DisplayName("실패: AGENCY 아닌 역할(CUSTOMER) → 401 (GlobalExceptionHandler IllegalAccessException 매핑)")
+        @DisplayName("실패: AGENCY 아닌 역할(CUSTOMER) → 403 (@PreAuthorize(\"hasRole('AGENCY')\") 매핑)")
         void nonAgencyRole() throws Exception {
             mockMvc.perform(get("/api/agency/statistics/summary")
                             .param("dateFrom", "2024-06-01")
                             .param("dateTo", "2024-06-18")
                             .with(user(customerUser())))
-                    .andExpect(status().isUnauthorized());
+                    .andExpect(status().isForbidden());
         }
     }
 
@@ -132,7 +134,7 @@ class AgencyStatisticsControllerTest {
                             .param("dateTo", "2024-06-18")
                             .with(user(agencyUser())))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$[0].date").value("06.01"))
+                    .andExpect(jsonPath("$[0].date").value("2024-06-01"))
                     .andExpect(jsonPath("$[0].receiptCount").value(38));
         }
 

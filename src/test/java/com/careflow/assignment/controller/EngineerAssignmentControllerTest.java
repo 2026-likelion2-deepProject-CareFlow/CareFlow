@@ -63,7 +63,7 @@ class EngineerAssignmentControllerTest {
     private RequestPostProcessor buildAuth(Long userId, String email, String role) {
         CustomUserDetails userDetails = new CustomUserDetails(userId, email, "", role, 100L);
         return SecurityMockMvcRequestPostProcessors.authentication(
-                new UsernamePasswordAuthenticationToken(userDetails, null, List.of(new SimpleGrantedAuthority(role)))
+                new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities())
         );
     }
 

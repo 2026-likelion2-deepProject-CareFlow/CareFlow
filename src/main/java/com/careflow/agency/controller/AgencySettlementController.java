@@ -10,13 +10,18 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
 
 
+/**
+ * 모든 엔드포인트는 AGENCY 역할만 접근 가능하다.
+ */
 @RestController
 @RequestMapping("/api/agency/settlements")
 @RequiredArgsConstructor
+@PreAuthorize("hasRole('AGENCY')")
 public class AgencySettlementController {
 
     private final AgencySettlementService agencySettlementService;
