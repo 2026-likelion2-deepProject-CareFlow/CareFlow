@@ -38,5 +38,15 @@ public interface WorkReportRepository extends JpaRepository<WorkReport, Long> {
             "LEFT JOIN FETCH p.repairPart rp " +
             "WHERE w.reportId = :reportId")
     Optional<WorkReport> findByIdWithParts(@Param("reportId") Long reportId);
+
+    // 고객 결제 요약 KPI용 — 해당 고객의 SUCCESS 결제 건 기준 부품비 합계
+    // (work_report_parts.quantity * applied_unit_price를 as_request 단위로 집계). 데이터 없으면 0
+    @Query("SELECT COALESCE(SUM(part.quantity * COALESCE(part.appliedUnitPrice, 0)), 0) FROM WorkReportPart part " +
+            "JOIN part.report w " +
+            "JOIN w.asRequest r " +
+            "WHERE r.customer.id = :customerId " +
+            "AND EXISTS (SELECT 1 FROM Payment pay WHERE pay.asRequest = r " +
+            "AND pay.status = com.careflow.common.enums.PaymentStatus.SUCCESS)")
+    long sumPartsAmountByCustomerId(@Param("customerId") Long customerId);
 }
 

@@ -50,4 +50,20 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
            "ORDER BY p.createdAt DESC")
     List<Payment> findByCustomerIdAndAgencyId(
             @Param("customerId") Long customerId, @Param("agencyId") Long agencyId);
+
+    // 고객 결제 요약 KPI용 — 해당 고객의 SUCCESS 결제 전체 합계 (원). 데이터 없으면 0
+    @Query("SELECT COALESCE(SUM(p.amount), 0) FROM Payment p " +
+           "WHERE p.customer.id = :customerId " +
+           "AND p.status = com.careflow.common.enums.PaymentStatus.SUCCESS")
+    long sumSuccessAmountByCustomerId(@Param("customerId") Long customerId);
+
+    // 고객 결제 요약 KPI용 — 해당 고객의 이번 달(paid_at 기준 [from, to)) SUCCESS 결제 합계 (원). 데이터 없으면 0
+    @Query("SELECT COALESCE(SUM(p.amount), 0) FROM Payment p " +
+           "WHERE p.customer.id = :customerId " +
+           "AND p.status = com.careflow.common.enums.PaymentStatus.SUCCESS " +
+           "AND p.paidAt >= :from AND p.paidAt < :to")
+    long sumSuccessAmountByCustomerIdAndPaidAtBetween(
+            @Param("customerId") Long customerId,
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to);
 }

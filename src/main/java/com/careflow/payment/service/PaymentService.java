@@ -3,6 +3,7 @@ package com.careflow.payment.service;
 import com.careflow.as_request.entity.AsRequest;
 import com.careflow.as_request.repository.AsRequestRepository;
 import com.careflow.common.enums.AsStatus;
+import com.careflow.payment.dto.CustomerPaymentSummaryResponse;
 import com.careflow.payment.dto.PaymentResponse;
 import com.careflow.payment.entity.Payment;
 import com.careflow.payment.repository.PaymentRepository;
@@ -14,6 +15,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.NoSuchElementException;
 
 @Service
@@ -94,5 +97,30 @@ public class PaymentService {
                 payment.getPgProvider().name(),
                 payment.getPaidAt()
         );
+    }
+
+    /**
+     * 고객 결제 요약 KPI 조회 (customerId 기준 — 본인 데이터만)
+     * - totalAmount: status=SUCCESS 결제 전체 합계
+     * - thisMonthAmount: 위 중 이번 달(paid_at 기준) 합계
+     * - unpaidCount: status=COMPLETED (결제 대기) A/S 요청 건수
+     */
+    @Transactional(readOnly = true)
+    public CustomerPaymentSummaryResponse getPaymentSummary(Long customerId) {
+
+        long totalAmount = paymentRepository.sumSuccessAmountByCustomerId(customerId);
+
+        // 이번 달 1일 00:00 ~ 다음 달 1일 00:00 (H2/MySQL 양쪽 호환을 위해 범위 비교 사용)
+        LocalDateTime monthStart = LocalDate.now().withDayOfMonth(1).atStartOfDay();
+        LocalDateTime monthEnd = monthStart.plusMonths(1);
+        long thisMonthAmount = paymentRepository.sumSuccessAmountByCustomerIdAndPaidAtBetween(
+                customerId, monthStart, monthEnd);
+
+        long unpaidCount = asRequestRepository.countByCustomer_IdAndStatus(customerId, AsStatus.COMPLETED);
+
+        long partsAmount = workReportRepository.sumPartsAmountByCustomerId(customerId);
+        long otherAmount = totalAmount - partsAmount;
+
+        return new CustomerPaymentSummaryResponse(totalAmount, thisMonthAmount, unpaidCount, partsAmount, otherAmount);
     }
 }
