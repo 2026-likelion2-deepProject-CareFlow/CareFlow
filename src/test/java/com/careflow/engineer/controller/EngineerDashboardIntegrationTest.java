@@ -91,7 +91,6 @@ class EngineerDashboardIntegrationTest {
         EngineerProfile profile = EngineerProfile.createInitial(engineer);
         profile.completeProfile(categoryRepository.save(ApplianceCategory.createRoot("세탁기", 1)), 2015, SkillLevel.ADVANCED, "반갑습니다");
         engineerProfileRepository.save(profile);
-// BankAccount.create(기사ID, 은행명, 계좌번호, 예금주) 순서로 맞춰서 넣어줍니다.
         bankAccountRepository.save(BankAccount.create(engineer.getId(), "국민은행", "123-456-789", engineer.getName()));
 
         // 3. A/S 요청 -> 배정 -> 완료 -> 보고서 작성 흐름 세팅

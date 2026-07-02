@@ -61,6 +61,7 @@ class AgencyEngineerControllerTest {
     @MockitoBean private CustomOAuth2UserService customOAuth2UserService;
     @MockitoBean private OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;
     @MockitoBean private ClientRegistrationRepository clientRegistrationRepository;
+    @MockitoBean private org.springframework.data.redis.core.StringRedisTemplate stringRedisTemplate;
 
     private static final Long AGENCY_USER_ID   = 1L;
     private static final Long ENGINEER_USER_ID = 10L;
@@ -69,7 +70,7 @@ class AgencyEngineerControllerTest {
     @BeforeEach
     void setUpAuth() {
         CustomUserDetails userDetails = new CustomUserDetails(
-                AGENCY_USER_ID, "agency@test.com", "pw", "ROLE_AGENCY", null);
+                AGENCY_USER_ID, "agency@test.com", "pw", "AGENCY", null);
         UsernamePasswordAuthenticationToken auth =
                 new UsernamePasswordAuthenticationToken(
                         userDetails, null, userDetails.getAuthorities());

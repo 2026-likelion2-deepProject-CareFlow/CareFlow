@@ -165,11 +165,11 @@ class AgencyAsRequestIntegrationTest {
         }
 
         @Test
-        @DisplayName("실패: CUSTOMER 계정으로 요청 — 401 Unauthorized")
+        @DisplayName("실패: CUSTOMER 계정으로 요청 — 403 Forbidden (@PreAuthorize)")
         void customerRole_401() throws Exception {
             mockMvc.perform(get("/api/agency/work-requests")
                             .header("Authorization", "Bearer " + customerToken))
-                    .andExpect(status().isUnauthorized());
+                    .andExpect(status().isForbidden());
         }
 
         @Test
@@ -435,11 +435,11 @@ class AgencyAsRequestIntegrationTest {
         }
 
         @Test
-        @DisplayName("실패: CUSTOMER 계정으로 요청 — 401 Unauthorized")
+        @DisplayName("실패: CUSTOMER 계정으로 요청 — 403 Forbidden (@PreAuthorize)")
         void customerRole_401() throws Exception {
             mockMvc.perform(get("/api/agency/stats/summary")
                             .header("Authorization", "Bearer " + customerToken))
-                    .andExpect(status().isUnauthorized());
+                    .andExpect(status().isForbidden());
         }
 
         @Test

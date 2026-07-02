@@ -31,6 +31,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.jdbc.Sql;
+import org.springframework.test.util.ReflectionTestUtils;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
@@ -239,9 +240,10 @@ class SettlementServiceIntegrationTest {
             LocalDateTime june = LocalDateTime.of(2026, 6, 10, 10, 0);
             Settlement s = createPaidSettlement(engineerUser1, 200000, june);
 
-            // 리뷰 INSERT — 평점 4
-            reviewRepository.save(Review.create(
-                    s.getAsRequest(), customerUser, engineerUser1, 4, "좋아요"));
+            // 리뷰 INSERT — 평점 4 (createdAt 기본값은 now()라 조회 대상 월(6월) 범위에 들어오도록 명시적으로 맞춰줌)
+            Review review = Review.create(s.getAsRequest(), customerUser, engineerUser1, 4, "좋아요");
+            ReflectionTestUtils.setField(review, "createdAt", june);
+            reviewRepository.save(review);
 
             // When
             EngineerPerformanceResponse result =

@@ -73,13 +73,13 @@ class WorkReportControllerTest {
         engineerAuth = SecurityMockMvcRequestPostProcessors.authentication(
                 new UsernamePasswordAuthenticationToken(
                         new CustomUserDetails(ENGINEER_USER_ID, "engineer@test.com", "pw", "ENGINEER", 100L),
-                        null, List.of(new SimpleGrantedAuthority("ENGINEER"))
+                        null, List.of(new SimpleGrantedAuthority("ROLE_ENGINEER"))
                 )
         );
         customerAuth = SecurityMockMvcRequestPostProcessors.authentication(
                 new UsernamePasswordAuthenticationToken(
                         new CustomUserDetails(CUSTOMER_USER_ID, "customer@test.com", "pw", "CUSTOMER", null),
-                        null, List.of(new SimpleGrantedAuthority("CUSTOMER"))
+                        null, List.of(new SimpleGrantedAuthority("ROLE_CUSTOMER"))
                 )
         );
     }

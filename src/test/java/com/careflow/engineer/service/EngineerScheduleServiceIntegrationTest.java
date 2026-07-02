@@ -142,7 +142,7 @@ class EngineerScheduleServiceIntegrationTest {
     }
 
     @Test
-    @DisplayName("성공: 스케줄 삭제 및 OFF 상태 처리 (DB Update 검증)")
+    @DisplayName("성공: 스케줄 삭제 시 DB에서 Hard Delete 된다 (DB Delete 검증)")
     void deleteSchedule_Success() throws Exception {
         // Given: 스케줄과 슬롯을 DB에 저장
         EngineerSchedule schedule = EngineerSchedule.builder()
@@ -154,13 +154,11 @@ class EngineerScheduleServiceIntegrationTest {
 
         // 엔티티 매니저 플러시 및 클리어를 해주면 더 완벽하지만, 스프링 데이터 JPA의 더티체킹을 믿고 그냥 진행!
 
-        // When: 삭제(OFF) 요청
+        // When: 삭제 요청
         engineerScheduleService.deleteSchedule(testUser.getId(), savedSchedule.getScheduleId());
 
-        // Then: DB에서 다시 조회해서 상태가 OFF로 바뀌고 슬롯이 지워졌는지 확인!
-        EngineerSchedule updatedSchedule = engineerScheduleRepository.findById(savedSchedule.getScheduleId()).orElseThrow();
-        assertThat(updatedSchedule.getStatus()).isEqualTo(ScheduleStatus.OFF);
-        assertThat(updatedSchedule.getTimeSlots()).isEmpty();
+        // Then: DB에서 행 자체가 삭제되었는지 확인! (EngineerScheduleServiceTest의 Hard Delete 검증과 동일한 계약)
+        assertThat(engineerScheduleRepository.findById(savedSchedule.getScheduleId())).isEmpty();
     }
 
     @Test

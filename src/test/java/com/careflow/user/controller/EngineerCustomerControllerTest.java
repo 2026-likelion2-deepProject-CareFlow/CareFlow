@@ -40,6 +40,7 @@ class EngineerCustomerControllerTest {
     @Autowired private MockMvc mockMvc;
 
     @MockitoBean private AsAssignmentRepository asAssignmentRepository;
+    @MockitoBean private com.careflow.user.service.EngineerCustomerService engineerCustomerService;
     @MockitoBean private JwtProvider jwtProvider;
     @MockitoBean private StringRedisTemplate stringRedisTemplate;
     @MockitoBean private JpaMetamodelMappingContext jpaMetamodelMappingContext;
@@ -54,7 +55,7 @@ class EngineerCustomerControllerTest {
         engineerAuth = SecurityMockMvcRequestPostProcessors.authentication(
                 new UsernamePasswordAuthenticationToken(
                         new CustomUserDetails(1L, "engineer@test.com", "pw", "ENGINEER", 100L),
-                        null, List.of(new SimpleGrantedAuthority("ENGINEER"))
+                        null, List.of(new SimpleGrantedAuthority("ROLE_ENGINEER"))
                 )
         );
     }

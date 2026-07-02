@@ -88,7 +88,10 @@ public class EngineerAssignmentService {
             Long sympId = (a.getAsRequest() != null && a.getAsRequest().getSymptom() != null) ? a.getAsRequest().getSymptom().getId() : null;
 
             String latestLogStatus = reqId != null ? latestLogMap.get(reqId) : "WAITING";
-            Integer avgCost = sympId != null ? expectedCostMap.get(sympId) : 0;
+            // sympId != null ? map.get(sympId) : 0 형태는 삼항연산자 타입 통일 규칙 때문에
+            // 두 번째 피연산자(int 리터럴 0)에 맞춰 Integer가 강제 언박싱되어, map.get()이 null을 반환하면
+            // NPE가 발생함(Map에 해당 symptomId의 예상 수리비 데이터가 없는 경우) → getOrDefault로 대체
+            Integer avgCost = sympId != null ? expectedCostMap.getOrDefault(sympId, 0) : 0;
 
             return EngineerAssignmentResponse.of(a, latestLogStatus, avgCost);
         });

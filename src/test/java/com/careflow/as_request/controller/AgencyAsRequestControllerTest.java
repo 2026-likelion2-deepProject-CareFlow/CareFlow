@@ -57,6 +57,7 @@ class AgencyAsRequestControllerTest {
     @MockitoBean private CustomOAuth2UserService customOAuth2UserService;
     @MockitoBean private OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;
     @MockitoBean private ClientRegistrationRepository clientRegistrationRepository;
+    @MockitoBean private org.springframework.data.redis.core.StringRedisTemplate stringRedisTemplate;
 
     private static final Long AGENCY_USER_ID = 1L;
 

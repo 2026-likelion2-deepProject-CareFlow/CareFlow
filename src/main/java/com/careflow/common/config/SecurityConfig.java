@@ -87,12 +87,12 @@ public class SecurityConfig {
                         .requestMatchers("/api/auth/**").permitAll()
                         .requestMatchers("/oauth2/**", "/login/oauth2/**").permitAll()
                         // 대행사 설정 — AGENCY 역할만 접근 가능
-                        // JWT payload의 role 클레임이 "AGENCY" 문자열로 저장되므로 ROLE_ 접두사 없이 매칭
-                        .requestMatchers("/api/agencies/profile").hasAuthority("AGENCY")
-                        .requestMatchers("/api/agencies/fee-rate").hasAuthority("AGENCY")
+                        // CustomUserDetails.getAuthorities()가 "ROLE_" 접두사를 붙이므로 hasRole 사용(hasAuthority 아님)
+                        .requestMatchers("/api/agencies/profile").hasRole("AGENCY")
+                        .requestMatchers("/api/agencies/fee-rate").hasRole("AGENCY")
                         .requestMatchers("/api/regions/**").permitAll()
                         // 대행사 프로필 수정 (리팩토링된 경로)
-                        .requestMatchers("/api/agency/me").hasAuthority("AGENCY")
+                        .requestMatchers("/api/agency/me").hasRole("AGENCY")
                         // 관리자용 회원 관리 API — ADMIN 역할만 접근 가능(컨트롤러의 checkAdminRole과 이중 방어)
                         // CustomUserDetails.getAuthorities()가 "ROLE_" 접두사를 붙이므로 hasRole 사용(hasAuthority 아님)
                         .requestMatchers("/api/admin/**").hasRole("ADMIN")
