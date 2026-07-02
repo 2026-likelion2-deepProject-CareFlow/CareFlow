@@ -11,7 +11,6 @@ import com.careflow.as_status_log.repository.AsStatusLogRepository;
 import com.careflow.assignment.entity.AsAssignment;
 import com.careflow.assignment.repository.AsAssignmentRepository;
 import com.careflow.engineer.dto.CreateWorkReportRequest;
-import com.careflow.notification.service.NotificationService;
 import com.careflow.part.domain.entity.RepairPart;
 import com.careflow.part.repository.RepairPartRepository;
 import com.careflow.report.domain.entity.WorkReport;
@@ -50,7 +49,6 @@ public class WorkReportService {
     private final AsAssignmentRepository asAssignmentRepository;
     private final ApplianceRepository applianceRepository;
     private final AsStatusLogRepository asStatusLogRepository;
-    private final NotificationService notificationService;
     private final ApplicationEventPublisher eventPublisher;
 
     @Transactional

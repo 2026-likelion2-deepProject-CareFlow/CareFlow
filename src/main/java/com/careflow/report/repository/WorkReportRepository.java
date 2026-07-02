@@ -38,5 +38,22 @@ public interface WorkReportRepository extends JpaRepository<WorkReport, Long> {
             "LEFT JOIN FETCH p.repairPart rp " +
             "WHERE w.reportId = :reportId")
     Optional<WorkReport> findByIdWithParts(@Param("reportId") Long reportId);
+
+    /**
+     * [기사용 API] 특정 기사가 특정 고객에게 처리한 작업 완료 보고서 이력 조회 (N+1 방지)
+     */
+    @org.springframework.data.jpa.repository.Query(
+            "SELECT w FROM WorkReport w " +
+                    "JOIN FETCH w.asRequest r " +
+                    "JOIN FETCH r.appliance a " +
+                    "JOIN FETCH r.symptom s " +
+                    "WHERE w.engineer.id = :engineerId AND r.customer.id = :customerId " +
+                    "ORDER BY w.submittedAt DESC"
+    )
+    List<WorkReport> findHistoryByEngineerAndCustomer(
+            @org.springframework.data.repository.query.Param("engineerId") Long engineerId,
+            @org.springframework.data.repository.query.Param("customerId") Long customerId
+    );
+
 }
 

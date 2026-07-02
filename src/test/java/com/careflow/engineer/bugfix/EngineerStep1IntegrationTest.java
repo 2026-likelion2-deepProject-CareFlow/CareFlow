@@ -1,4 +1,4 @@
-package com.careflow.engineer;
+package com.careflow.engineer.bugfix;
 
 import com.careflow.agency.entity.Agencies;
 import com.careflow.agency.repository.AgenciesRepository;
@@ -16,8 +16,6 @@ import com.careflow.common.enums.AgencyStatus;
 import com.careflow.common.enums.AssignType;
 import com.careflow.common.enums.RegisterMethod;
 import com.careflow.common.enums.Role;
-import com.careflow.engineer.domain.entity.EngineerSchedule;
-import com.careflow.engineer.domain.enums.ScheduleStatus;
 import com.careflow.engineer.dto.CreateWorkReportRequest;
 import com.careflow.engineer.repository.EngineerScheduleRepository;
 import com.careflow.engineer.service.EngineerScheduleService;

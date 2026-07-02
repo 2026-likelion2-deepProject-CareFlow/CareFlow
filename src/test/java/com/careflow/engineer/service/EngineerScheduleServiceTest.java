@@ -109,4 +109,23 @@ class EngineerScheduleServiceTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("이미 A/S가 배정된 근무표");
     }
+
+    // 🌟 추가할 코드 (STEP 3 방어적 프로그래밍 검증)
+    @Test
+    @DisplayName("성공: 등록된 일정이 없는 날짜(휴무)를 조회하면 예외 대신 OFF 상태의 빈 응답을 반환한다.")
+    void getDailySchedule_OffDay_Success() {
+        LocalDate targetDate = LocalDate.of(2026, 12, 25);
+        Long userId = 1L;
+
+        // DB에 해당 날짜 일정이 없다고 모킹
+        given(engineerScheduleRepository.findByUser_IdAndWorkDateBetweenOrderByWorkDateAsc(userId, targetDate, targetDate))
+                .willReturn(List.of());
+
+        // 예외가 터지지 않고 정상 응답!
+        ScheduleResponse response = engineerScheduleService.getDailySchedule(userId, targetDate);
+
+        assertThat(response.getWorkDate()).isEqualTo(targetDate);
+        assertThat(response.getStatus()).isEqualTo("OFF"); // 프론트엔드 안전 처리
+        assertThat(response.getTimeSlots()).isEmpty();
+    }
 }

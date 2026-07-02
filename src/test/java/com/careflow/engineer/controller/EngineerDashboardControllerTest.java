@@ -7,7 +7,7 @@ import com.careflow.auth.security.OAuth2LoginSuccessHandler;
 import com.careflow.common.config.PasswordEncoderConfig;
 import com.careflow.common.config.SecurityConfig;
 import com.careflow.engineer.dto.EngineerDashboardResponse;
-import com.careflow.engineer.dto.EngineerSettlementSummaryResponse;
+import com.careflow.settlement.dto.EngineerSettlementSummaryResponse;
 import com.careflow.engineer.service.EngineerDashboardService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
