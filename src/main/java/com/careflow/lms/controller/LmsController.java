@@ -198,4 +198,19 @@ public class LmsController {
                 lmsService.getAgencyEngineersLmsStatus(agencyId, userDetails.getUserId())
         );
     }
+
+    /**
+     * [대행사] 미이수 기사에게 LMS 이수 독려 알림 발송
+     * POST /api/lms/agency/{agencyId}/engineers/{engineerUserId}/notify-lms
+     */
+    @PostMapping("/agency/{agencyId}/engineers/{engineerUserId}/notify-lms")
+    @PreAuthorize("hasAnyRole('ADMIN', 'AGENCY')")
+    public ResponseEntity<Void> sendLmsNotification(
+            @PathVariable Long agencyId,
+            @PathVariable Long engineerUserId,
+            @AuthenticationPrincipal CustomUserDetails userDetails
+    ) {
+        lmsService.sendLmsNotification(agencyId, engineerUserId, userDetails.getUserId());
+        return ResponseEntity.ok().build();
+    }
 }

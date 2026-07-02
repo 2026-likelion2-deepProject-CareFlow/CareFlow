@@ -11,6 +11,7 @@ import com.careflow.lms.entity.LmsContent;
 import com.careflow.lms.entity.LmsContent.RequiredLevel;
 import com.careflow.lms.repository.LmsConfirmationRepository;
 import com.careflow.lms.repository.LmsContentRepository;
+import com.careflow.notification.service.NotificationService;
 import com.careflow.user.entity.User;
 import com.careflow.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -33,6 +34,7 @@ public class LmsService {
     private final EngineerProfileRepository engineerProfileRepository;
     private final UserRepository            userRepository;
     private final ApplianceCategoryRepository  applianceCategoryRepository;
+    private final NotificationService notificationService;
 
     // ─────────────────────────────────────────────
     // 기사용
@@ -289,6 +291,60 @@ public class LmsService {
                     );
                 })
                 .toList();
+    }
+
+    /**
+     * [대행사] 미이수 기사에게 LMS 이수 독려 알림 발송
+     *
+     * 처리 순서:
+     * 1. 요청자 권한 검증 (ADMIN 또는 본인 소속 대행사)
+     * 2. 대상 기사 미이수 여부 확인
+     * 3. 이미 이수 완료한 기사에게는 알림 발송 안 함
+     * 4. notifications 테이블 INSERT + SSE 실시간 발송
+     */
+    @Transactional
+    public void sendLmsNotification(Long agencyId, Long engineerUserId, Long requestUserId) {
+        // 1. 권한 검증
+        User requestUser = getUserOrThrow(requestUserId);
+        if (!requestUser.getRole().equals(Role.ADMIN) &&
+                !agencyId.equals(requestUser.getAgency().getId())) {
+            throw new IllegalStateException("본인 소속 대행사의 기사에게만 알림을 발송할 수 있습니다.");
+        }
+
+        // 2. 대상 기사 조회
+        User engineer = getUserOrThrow(engineerUserId);
+        EngineerProfile profile = getEngineerProfile(engineerUserId);
+
+        // 3. 이미 이수 완료한 기사에게는 알림 발송 안 함
+        if (profile.isLmsCompleted()) {
+            throw new IllegalStateException("이미 LMS 교육을 이수한 기사입니다.");
+        }
+
+        // 4. 미이수 콘텐츠 수 계산
+        int currentYear = LocalDate.now().getYear();
+        RequiredLevel requiredLevel = RequiredLevel.valueOf(profile.getSkillLevel().name());
+
+        int totalCount = lmsContentRepository.findRequiredContents(
+                profile.getCategory().getCategoryId(),
+                requiredLevel
+        ).size();
+
+        int completedCount = lmsConfirmationRepository
+                .findContentIdsByUserIdAndYear(engineerUserId, currentYear)
+                .size();
+
+        int remainingCount = totalCount - completedCount;
+
+        // 5. 알림 발송 (notifications INSERT + SSE)
+        notificationService.send(
+                engineer,
+                "LMS",
+                "LMS 교육 이수 안내",
+                String.format(
+                        "%d년도 필수 교육 중 %d개가 미이수 상태입니다. LMS 교육 메뉴에서 이수를 완료해 주세요.",
+                        currentYear, remainingCount
+                )
+        );
     }
 
     // ─────────────────────────────────────────────
