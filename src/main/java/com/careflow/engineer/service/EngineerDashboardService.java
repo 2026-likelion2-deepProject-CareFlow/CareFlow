@@ -8,7 +8,7 @@ import com.careflow.bank_account.entity.BankAccount;
 import com.careflow.bank_account.repository.BankAccountRepository;
 import com.careflow.engineer.domain.entity.EngineerProfile;
 import com.careflow.engineer.dto.EngineerDashboardResponse;
-import com.careflow.engineer.dto.EngineerSettlementSummaryResponse;
+import com.careflow.settlement.dto.EngineerSettlementSummaryResponse;
 import com.careflow.engineer.repository.EngineerProfileRepository;
 import com.careflow.notification.repository.NotificationRepository;
 import com.careflow.settlement.repository.SettlementRepository;

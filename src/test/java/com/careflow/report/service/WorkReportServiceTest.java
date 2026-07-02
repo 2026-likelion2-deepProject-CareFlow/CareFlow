@@ -85,6 +85,10 @@ class WorkReportServiceTest {
         given(appliance.getBrand()).willReturn("삼성");
         given(appliance.getModelName()).willReturn("세탁기");
 
+        // 🌟 핵심: 원천 재계산을 위한 가전 Mocking 추가
+        given(appliance.getId()).willReturn(200L);
+        given(appliance.getPurchaseDate()).willReturn(LocalDate.now().minusYears(1));
+
         AsAssignment assignment = validAssignment();
 
         given(userRepository.findById(1L)).willReturn(Optional.of(engineer));
@@ -92,17 +96,23 @@ class WorkReportServiceTest {
         given(asRequest.getId()).willReturn(100L);
         given(workReportRepository.existsByAsRequest_Id(100L)).willReturn(false);
         given(asAssignmentRepository.findByAsRequest_Id(100L)).willReturn(List.of(assignment));
-        given(appliance.getId()).willReturn(200L);
-        given(healthCertificateRepository.findByAppliance_Id(200L)).willReturn(Optional.of(certificate));
         given(savedReport.getReportId()).willReturn(999L);
         given(workReportRepository.save(any(WorkReport.class))).willReturn(savedReport);
+
+        // 🌟 핵심: syncHealthCertificate 내부 동작을 위한 Mocking
+        given(workReportRepository.findByApplianceIdOrderBySubmittedAtDesc(200L)).willReturn(List.of(savedReport));
+        given(healthCertificateRepository.findByAppliance_Id(200L)).willReturn(Optional.of(certificate));
 
         CreateWorkReportRequest request = createReportRequest("REPAIRED", null);
         Long reportId = workReportService.submitWorkReport(1L, request);
 
         assertThat(reportId).isEqualTo(999L);
         verify(asRequest).completeWork();
-        verify(certificate).calculateAndUpdateHealth(null, null);
+        verify(workReportRepository).flush(); // 🌟 flush 확인
+
+        // 🌟 에러 원인 해결: 옛날 메서드 대신 recalculate 검증!
+        verify(certificate).recalculate(eq(1), eq(0), eq(null), any(), any());
+
         verify(asStatusLogRepository, times(1)).save(any());
         verify(eventPublisher, atLeastOnce()).publishEvent(any(com.careflow.notification.event.AsStatusNotificationEvent.class));
     }
@@ -237,7 +247,6 @@ class WorkReportServiceTest {
         User engineer = mock(User.class);
         given(engineer.getName()).willReturn("테스트기사");
 
-        // 🌟 핵심 수정 포인트: DTO 변환 시 필요한 Appliance와 Symptom 추가 모킹
         Appliance appliance = mock(Appliance.class);
         given(appliance.getBrand()).willReturn("삼성");
         given(appliance.getModelName()).willReturn("비스포크");
@@ -248,8 +257,8 @@ class WorkReportServiceTest {
         AsRequest asRequest = mock(AsRequest.class);
         given(asRequest.getId()).willReturn(100L);
         given(asRequest.getCustomer()).willReturn(customer);
-        given(asRequest.getAppliance()).willReturn(appliance); // 필수!
-        given(asRequest.getSymptom()).willReturn(symptom); // 필수!
+        given(asRequest.getAppliance()).willReturn(appliance);
+        given(asRequest.getSymptom()).willReturn(symptom);
 
         WorkReport report = mock(WorkReport.class);
         given(report.getReportId()).willReturn(reportId);
@@ -403,8 +412,13 @@ class WorkReportServiceTest {
             User engineer = mock(User.class);
             given(engineer.getId()).willReturn(engineerId);
 
+            // 🌟 멱등성 롤백을 위한 연관 엔티티 추가 모킹
+            Appliance appliance = mock(Appliance.class);
+            given(appliance.getId()).willReturn(200L);
+
             AsRequest asRequest = mock(AsRequest.class);
             given(asRequest.getStatus()).willReturn(AsStatus.COMPLETED);
+            given(asRequest.getAppliance()).willReturn(appliance);
 
             WorkReport report = mock(WorkReport.class);
             given(report.getEngineer()).willReturn(engineer);
@@ -413,11 +427,19 @@ class WorkReportServiceTest {
 
             given(workReportRepository.findById(reportId)).willReturn(Optional.of(report));
 
+            // 🌟 취소되어 보고서가 0개가 된다고 가정
+            given(workReportRepository.findByApplianceIdOrderBySubmittedAtDesc(200L)).willReturn(List.of());
+            HealthCertificate certificate = mock(HealthCertificate.class);
+            given(healthCertificateRepository.findByAppliance_Id(200L)).willReturn(Optional.of(certificate));
+
             workReportService.cancelApprovalRequest(engineerId, reportId);
 
             verify(asRequest).revertToInProgress();
             verify(asStatusLogRepository).save(any(AsStatusLog.class));
             verify(workReportRepository).delete(report);
+            verify(workReportRepository).flush(); // 🌟 flush 검증
+            // 🌟 보고서 0개 기준 재계산 검증
+            verify(certificate).recalculate(eq(0), eq(0), eq(null), eq(null), any());
         }
 
         @Test

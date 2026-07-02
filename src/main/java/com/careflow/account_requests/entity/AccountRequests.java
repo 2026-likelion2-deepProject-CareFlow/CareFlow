@@ -32,7 +32,7 @@ public class AccountRequests {
     @Column(name = "email", nullable = false, unique = true)
     private String email;
 
-    @Column(name = "password", nullable = false)
+    @Column(name = "password_hash", nullable = false)
     private String password;
 
     @Column(name = "name", nullable = false)
@@ -42,7 +42,7 @@ public class AccountRequests {
     private String phone;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "requests_role", nullable = false)
+    @Column(name = "requested_role", nullable = false)
     private AccountRequestsRole requestsRole;
 
     @Enumerated(EnumType.STRING)

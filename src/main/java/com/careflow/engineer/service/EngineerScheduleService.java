@@ -19,7 +19,6 @@ import java.time.LocalDate;
 import java.time.LocalTime;
 import java.util.Comparator;
 import java.util.List;
-import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -70,7 +69,8 @@ public class EngineerScheduleService {
 
         EngineerSchedule savedSchedule = engineerScheduleRepository.save(newSchedule);
 
-        return ScheduleResponse.from(savedSchedule);
+        // 🌟 수정: .from() 대신 .of() 사용
+        return ScheduleResponse.of(savedSchedule);
     }
 
     private List<ParsedSlot> validAndParseTimeSlots(List<ScheduleRequest.TimeSlotDto> timeSlots) {
@@ -102,7 +102,7 @@ public class EngineerScheduleService {
     }
 
     @Transactional(readOnly = true)
-    public List<ScheduleResponse> getMonthlySchedules(Long userId, int year, int month) {   // 월간 내 근무 일정 조회
+    public List<ScheduleResponse> getMonthlySchedules(Long userId, int year, int month) {
         LocalDate startDate = LocalDate.of(year, month, 1);
         LocalDate endDate = startDate.withDayOfMonth(startDate.lengthOfMonth());
 
@@ -110,12 +110,12 @@ public class EngineerScheduleService {
                 .findByUser_IdAndWorkDateBetweenOrderByWorkDateAsc(userId, startDate, endDate);
 
         return schedules.stream()
-                .map(ScheduleResponse::from)
+                .map(ScheduleResponse::of) // 🌟 수정: .from() 대신 .of() 사용
                 .collect(Collectors.toList());
     }
 
     @Transactional
-    public void deleteSchedule(Long userId, Long scheduleId) {  // 스케줄 삭제 및 OFF 상태 처리
+    public void deleteSchedule(Long userId, Long scheduleId) {
         EngineerSchedule schedule = engineerScheduleRepository.findById(scheduleId)
                 .orElseThrow(() -> new IllegalArgumentException("해당 근무표를 찾을 수 없습니다."));
 
@@ -127,22 +127,17 @@ public class EngineerScheduleService {
             throw new IllegalStateException("이미 A/S가 배정된 근무표는 삭제할 수 없습니다. 대행사에 문의해주세요.");
         }
 
-        schedule.changeScheduleStatus(ScheduleStatus.OFF);
-        schedule.getTimeSlots().clear();
+        engineerScheduleRepository.delete(schedule);
     }
 
     @Transactional(readOnly = true)
     public ScheduleResponse getDailySchedule(Long userId, LocalDate date) {
-        // 해당 날짜의 스케줄이 없으면 빈 응답(OFF 상태 등)으로 반환하거나 null 처리
-        Optional<EngineerSchedule> scheduleOpt = engineerScheduleRepository
+        // 🌟 수정: 예외를 던지지 않고, 값이 없으면 우리가 만든 안전한 OFF 응답을 반환합니다!
+        return engineerScheduleRepository
                 .findByUser_IdAndWorkDateBetweenOrderByWorkDateAsc(userId, date, date)
-                .stream().findFirst();
-
-        if (scheduleOpt.isEmpty()) {
-            // 근무표가 없으면 프론트엔드가 에러 대신 '일정 없음'으로 처리할 수 있도록 204 No Content 대신 빈 객체를 주거나 예외 처리
-            throw new IllegalArgumentException("해당 날짜에 등록된 근무표가 없습니다.");
-        }
-
-        return ScheduleResponse.from(scheduleOpt.get());
+                .stream()
+                .findFirst()
+                .map(ScheduleResponse::of)
+                .orElseGet(() -> ScheduleResponse.ofOffDay(date));
     }
 }

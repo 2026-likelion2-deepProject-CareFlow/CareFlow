@@ -1,5 +1,5 @@
 // 파일 경로: src/main/java/com/careflow/engineer/dto/EngineerSettlementSummaryResponse.java
-package com.careflow.engineer.dto;
+package com.careflow.settlement.dto;
 
 import lombok.Builder;
 import lombok.Getter;

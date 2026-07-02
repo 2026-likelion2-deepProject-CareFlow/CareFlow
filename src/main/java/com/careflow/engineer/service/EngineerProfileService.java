@@ -127,7 +127,7 @@ public class EngineerProfileService {
         if (careerStartedYear == null) {
             throw new IllegalArgumentException("경력 시작 연도가 필요합니다.");
         }
-        int workYear = LocalDate.now().getYear() - careerStartedYear + 1; // 1~5=초급, 6~10=중급, 11↑=고급
+        int workYear = LocalDate.now().getYear() - careerStartedYear; // 1~5=초급, 6~10=중급, 11↑=고급
         if (workYear <= 5) {
             return SkillLevel.BEGINNER;
         } else if (workYear <= 10) {

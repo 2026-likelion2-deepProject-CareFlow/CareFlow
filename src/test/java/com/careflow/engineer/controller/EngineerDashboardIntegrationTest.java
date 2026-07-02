@@ -11,6 +11,7 @@ import com.careflow.as_request.repository.AsRequestRepository;
 import com.careflow.assignment.entity.AsAssignment;
 import com.careflow.assignment.repository.AsAssignmentRepository;
 import com.careflow.auth.security.JwtProvider;
+import com.careflow.bank_account.entity.BankAccount;
 import com.careflow.bank_account.repository.BankAccountRepository;
 import com.careflow.common.enums.AgencyStatus;
 import com.careflow.common.enums.AssignType;
@@ -90,7 +91,8 @@ class EngineerDashboardIntegrationTest {
         EngineerProfile profile = EngineerProfile.createInitial(engineer);
         profile.completeProfile(categoryRepository.save(ApplianceCategory.createRoot("세탁기", 1)), 2015, SkillLevel.ADVANCED, "반갑습니다");
         engineerProfileRepository.save(profile);
-        bankAccountRepository.save(BankAccount.builder().engineer(engineer).bankName("국민은행").accountNumber("123-456-789").build());
+// BankAccount.create(기사ID, 은행명, 계좌번호, 예금주) 순서로 맞춰서 넣어줍니다.
+        bankAccountRepository.save(BankAccount.create(engineer.getId(), "국민은행", "123-456-789", engineer.getName()));
 
         // 3. A/S 요청 -> 배정 -> 완료 -> 보고서 작성 흐름 세팅
         ApplianceCategory cat = categoryRepository.save(ApplianceCategory.createRoot("냉장고", 1));

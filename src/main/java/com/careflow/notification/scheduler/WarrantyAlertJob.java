@@ -27,7 +27,7 @@ public class WarrantyAlertJob implements Job {
     private final NotificationService notificationService;
 
     @Override
-    @Transactional(readOnly = true) // 🌟 읽기 전용 트랜잭션: 조회 성능 최적화 (알림 저장은 NotificationService 내의 트랜잭션을 탐)
+    @Transactional
     public void execute(JobExecutionContext context) throws JobExecutionException {
         try {
             // 알림 기준일: 오늘로부터 30일 뒤
