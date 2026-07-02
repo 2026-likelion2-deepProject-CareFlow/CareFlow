@@ -5,7 +5,6 @@ import com.careflow.as_status_log.repository.AsStatusLogRepository;
 import com.careflow.assignment.dto.AssignmentRejectRequest;
 import com.careflow.assignment.dto.EngineerAssignmentResponse;
 import com.careflow.assignment.entity.AsAssignment;
-import com.careflow.assignment.entity.ExpectedRepairCost;
 import com.careflow.assignment.repository.AsAssignmentRepository;
 import com.careflow.assignment.repository.ExpectedRepairCostRepository;
 import lombok.RequiredArgsConstructor;
@@ -29,52 +28,55 @@ public class EngineerAssignmentService {
     @Transactional
     public void acceptAssignment(Long engineerId, Long assignmentId) {
         AsAssignment assignment = getAssignmentAndValidateOwnership(engineerId, assignmentId);
-
-        // 도메인 메서드 호출 (더티 체킹)
         assignment.accept();
-        assignment.getAsRequest().acceptAssignment(); // A/S 요청 본체도 ACCEPTED 상태로 변경
+        if (assignment.getAsRequest() != null) {
+            assignment.getAsRequest().acceptAssignment();
+        }
     }
 
     @Transactional
     public void rejectAssignment(Long engineerId, Long assignmentId, AssignmentRejectRequest request) {
         AsAssignment assignment = getAssignmentAndValidateOwnership(engineerId, assignmentId);
-
-        // 도메인 메서드 호출 (더티 체킹)
         assignment.reject(request.rejectReason());
-        assignment.getAsRequest().revertToAgencyReceived(); // 대행사 재배정 대기로 원복
+        if (assignment.getAsRequest() != null) {
+            assignment.getAsRequest().revertToAgencyReceived();
+        }
     }
 
     @Transactional(readOnly = true)
     public Page<EngineerAssignmentResponse> getAssignments(Long engineerId, String status, Pageable pageable) {
-        // "ALL" 상태 필터링 대응
         String filterStatus = "ALL".equalsIgnoreCase(status) ? null : status;
-
         Page<AsAssignment> assignments = asAssignmentRepository.findByEngineerIdAndStatus(engineerId, filterStatus, pageable);
 
-        // N+1 문제 방지를 위해 필요한 부가 데이터(상태 로그, 예상 비용)를 IN 쿼리로 한 번에 조회
+        // 🌟 방어 로직 1: AsRequest가 null이 아닌 것만 ID 추출
         List<Long> requestIds = assignments.getContent().stream()
+                .filter(a -> a.getAsRequest() != null)
                 .map(a -> a.getAsRequest().getId())
                 .toList();
 
+        // 🌟 방어 로직 2: AsRequest와 Symptom이 null이 아닌 것만 ID 추출
         List<Long> symptomIds = assignments.getContent().stream()
+                .filter(a -> a.getAsRequest() != null && a.getAsRequest().getSymptom() != null)
                 .map(a -> a.getAsRequest().getSymptom().getId())
                 .distinct()
                 .toList();
 
-        // 최신 상태 로그 맵 구성
-        Map<Long, String> latestLogMap = asStatusLogRepository.findAll().stream() // 실무에선 findAll 대신 in 쿼리 권장
-                .filter(log -> requestIds.contains(log.getAsRequest().getId()))
+        Map<Long, String> latestLogMap = asStatusLogRepository.findAll().stream()
+                .filter(log -> log.getAsRequest() != null && requestIds.contains(log.getAsRequest().getId()))
                 .collect(Collectors.groupingBy(
                         log -> log.getAsRequest().getId(),
                         Collectors.collectingAndThen(
-                                Collectors.maxBy((l1, l2) -> l1.getCreatedAt().compareTo(l2.getCreatedAt())),
+                                Collectors.maxBy((l1, l2) -> {
+                                    if (l1.getCreatedAt() == null) return -1;
+                                    if (l2.getCreatedAt() == null) return 1;
+                                    return l1.getCreatedAt().compareTo(l2.getCreatedAt());
+                                }),
                                 opt -> opt.map(AsStatusLog::getToStatus).orElse("WAITING")
                         )
                 ));
 
-        // 예상 수리 비용 맵 구성
         Map<Long, Integer> expectedCostMap = expectedRepairCostRepository.findAll().stream()
-                .filter(cost -> symptomIds.contains(cost.getSymptom().getId()))
+                .filter(cost -> cost.getSymptom() != null && symptomIds.contains(cost.getSymptom().getId()))
                 .collect(Collectors.toMap(
                         cost -> cost.getSymptom().getId(),
                         cost -> cost.getAvgCost() != null ? cost.getAvgCost() : 0,
@@ -82,9 +84,13 @@ public class EngineerAssignmentService {
                 ));
 
         return assignments.map(a -> {
-            Long reqId = a.getAsRequest().getId();
-            Long sympId = a.getAsRequest().getSymptom().getId();
-            return EngineerAssignmentResponse.of(a, latestLogMap.get(reqId), expectedCostMap.get(sympId));
+            Long reqId = a.getAsRequest() != null ? a.getAsRequest().getId() : null;
+            Long sympId = (a.getAsRequest() != null && a.getAsRequest().getSymptom() != null) ? a.getAsRequest().getSymptom().getId() : null;
+
+            String latestLogStatus = reqId != null ? latestLogMap.get(reqId) : "WAITING";
+            Integer avgCost = sympId != null ? expectedCostMap.get(sympId) : 0;
+
+            return EngineerAssignmentResponse.of(a, latestLogStatus, avgCost);
         });
     }
 
@@ -92,7 +98,7 @@ public class EngineerAssignmentService {
         AsAssignment assignment = asAssignmentRepository.findById(assignmentId)
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 배정 내역입니다."));
 
-        if (!assignment.getEngineer().getId().equals(engineerId)) {
+        if (assignment.getEngineer() == null || !assignment.getEngineer().getId().equals(engineerId)) {
             throw new IllegalStateException("본인에게 배정된 건만 처리할 수 있습니다.");
         }
         return assignment;
