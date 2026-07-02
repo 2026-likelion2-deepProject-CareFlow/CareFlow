@@ -135,10 +135,11 @@ public class AssignmentController {
 
     /**
      * [POST] /api/agency/as-assignments/change
-     * WAITING 상태 배정의 기사를 변경. 기존 배정 REJECTED + 새 배정 WAITING 생성.
+     * WAITING 또는 REJECTED 상태 배정의 기사를 변경. 새 배정 WAITING 생성.
+     * (WAITING이면 기존 배정 REJECTED 처리, REJECTED면 이미 종결 상태이므로 그대로 두고 새 배정만 생성)
      * - role != AGENCY → 401
      * - assignmentId or newEngineerId 미존재 → 404
-     * - 배정 status != WAITING → 400
+     * - 배정 status가 WAITING/REJECTED가 아님(ACCEPTED/COMPLETED) → 403
      */
     @PostMapping("/change")
     public ResponseEntity<AssignmentChangeEngineerResponse> changeEngineer(

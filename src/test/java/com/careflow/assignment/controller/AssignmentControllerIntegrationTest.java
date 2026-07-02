@@ -797,6 +797,32 @@ class AssignmentControllerIntegrationTest {
         }
 
         @Test
+        @DisplayName("성공: REJECTED 배정도 기사 변경 가능 → 201 Created (재배차 알림 수동 배정)")
+        void change_rejected_201() throws Exception {
+            asAssignmentRepository.updateStatus(assignment.getId(), "REJECTED");
+            User newEngineer = userRepository.save(User.builder()
+                    .email("new-rejected@eng.com").passwordHash("hash").name("재배차기사")
+                    .phone("010-6666-5555").role(Role.ENGINEER).agency(agency).build());
+
+            String body = objectMapper.writeValueAsString(
+                    new com.careflow.assignment.dto.AssignmentChangeEngineerRequest(
+                            assignment.getId(), newEngineer.getId()));
+
+            mockMvc.perform(post("/api/agency/as-assignments/change")
+                            .header("Authorization", "Bearer " + agencyTokenWithAgencyId)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.newEngineerId").value(newEngineer.getId()))
+                    .andExpect(jsonPath("$.assignmentStatus").value("WAITING"));
+
+            // DB 직접 검증: 기존 배정은 계속 REJECTED로 유지(재취소되지 않음)
+            String oldStatus = asAssignmentRepository.findById(assignment.getId())
+                    .orElseThrow().getStatus();
+            assertThat(oldStatus).isEqualTo("REJECTED");
+        }
+
+        @Test
         @DisplayName("실패: ACCEPTED 상태 배정은 기사 변경 불가 → 403 Forbidden")
         void change_accepted_403() throws Exception {
             asAssignmentRepository.updateStatus(assignment.getId(), "ACCEPTED");
