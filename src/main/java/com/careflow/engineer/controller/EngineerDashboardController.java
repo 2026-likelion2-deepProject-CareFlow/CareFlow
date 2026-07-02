@@ -20,7 +20,7 @@ import java.time.LocalDate;
 @RestController
 @RequestMapping("/api/engineer")
 @RequiredArgsConstructor
-@PreAuthorize("hasAuthority('ENGINEER')") // 권한 설정
+@PreAuthorize("hasRole('ENGINEER')") // 권한 설정
 public class EngineerDashboardController {
 
     private final EngineerDashboardService engineerDashboardService;

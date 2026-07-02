@@ -18,7 +18,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/engineer/settlements")
 @RequiredArgsConstructor
-@PreAuthorize("hasAuthority('ENGINEER')") // 권한 설정 확실하게!
+@PreAuthorize("hasRole('ENGINEER')") // 권한 설정 확실하게!
 public class EngineerSettlementController {
 
     private final SettlementRepository settlementRepository;

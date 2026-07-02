@@ -17,7 +17,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RestController
 @RequestMapping("/api/engineer/reviews")
 @RequiredArgsConstructor
-@PreAuthorize("hasAuthority('ENGINEER')")
+@PreAuthorize("hasRole('ENGINEER')")
 public class EngineerReviewController {
 
     private final ReviewService reviewService;
