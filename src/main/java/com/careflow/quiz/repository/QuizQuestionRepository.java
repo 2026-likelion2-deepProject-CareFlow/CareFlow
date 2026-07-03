@@ -11,14 +11,14 @@ import java.util.List;
 public interface QuizQuestionRepository extends JpaRepository<QuizQuestion, Long> {
 
     // 응시 자격 검증 + 채점용: 현재 연도 활성 문항 조회
-    List<QuizQuestion> findByCategoryIdAndRequiredLevelAndQuizYearAndIsActiveTrue(
+    List<QuizQuestion> findByCategory_CategoryIdAndRequiredLevelAndQuizYearAndIsActiveTrue(
             Integer categoryId,
             QuizQuestion.RequiredLevel requiredLevel,
             Integer quizYear
     );
 
     // 문항 수 확인 (5개 미만이면 응시 불가)
-    long countByCategoryIdAndRequiredLevelAndQuizYearAndIsActiveTrue(
+    long countByCategory_CategoryIdAndRequiredLevelAndQuizYearAndIsActiveTrue(
             Integer categoryId,
             QuizQuestion.RequiredLevel requiredLevel,
             Integer quizYear
