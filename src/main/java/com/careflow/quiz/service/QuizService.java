@@ -56,7 +56,7 @@ public class QuizService {
 
         boolean isContentCompleted  = lmsService.isQuizEligible(engineerUserId);
         boolean isQuestionRegistered = quizQuestionRepository
-                .countByCategory_CategoryIdAndRequiredLevelAndQuizYearAndIsActiveTrue(
+                .countByCategoryIdAndRequiredLevelAndQuizYearAndIsActiveTrue(
                         categoryId, level, currentYear) >= REQUIRED_QUESTIONS;
         boolean isPassed = quizAttemptRepository
                 .existsByUserIdAndCategoryIdAndRequiredLevelAndQuizYearAndIsPassed(
@@ -95,7 +95,7 @@ public class QuizService {
         validateEligibility(engineerUserId, categoryId, level, currentYear);
 
         return quizQuestionRepository
-                .findByCategory_CategoryIdAndRequiredLevelAndQuizYearAndIsActiveTrue(
+                .findByCategoryIdAndRequiredLevelAndQuizYearAndIsActiveTrue(
                         categoryId, level, currentYear)
                 .stream()
                 .sorted((a, b) -> Integer.compare(a.getSortOrder(), b.getSortOrder()))
@@ -129,7 +129,7 @@ public class QuizService {
 
         // 2. 채점
         List<QuizQuestion> questions = quizQuestionRepository
-                .findByCategory_CategoryIdAndRequiredLevelAndQuizYearAndIsActiveTrue(
+                .findByCategoryIdAndRequiredLevelAndQuizYearAndIsActiveTrue(
                         categoryId, level, currentYear);
 
         Map<Long, QuizQuestion> questionMap = questions.stream()
@@ -337,7 +337,7 @@ public class QuizService {
 
         // 2. 신년도 문항 5개 등록 여부 확인
         long questionCount = quizQuestionRepository
-                .countByCategory_CategoryIdAndRequiredLevelAndQuizYearAndIsActiveTrue(
+                .countByCategoryIdAndRequiredLevelAndQuizYearAndIsActiveTrue(
                         categoryId, level, currentYear);
         if (questionCount < REQUIRED_QUESTIONS) {
             throw new IllegalStateException(
