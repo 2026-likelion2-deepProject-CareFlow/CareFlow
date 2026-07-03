@@ -3,6 +3,7 @@ package com.careflow.auth.controller;
 import com.careflow.auth.dto.*;
 import com.careflow.auth.security.CustomUserDetails;
 import com.careflow.auth.service.AuthService;
+import com.careflow.auth.service.PasswordResetService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
@@ -15,6 +16,7 @@ import org.springframework.web.bind.annotation.*;
 public class AuthController {
 
     private final AuthService authService;
+    private final PasswordResetService passwordResetService;
 
     @PostMapping("/signup")
     public ResponseEntity<String> signUp(@Valid @RequestBody SignUpRequest request) {
@@ -51,5 +53,23 @@ public class AuthController {
     @PostMapping("/oauth2/exchange")
     public ResponseEntity<TokenResponse> exchangeOAuth2Code(@Valid @RequestBody OAuth2ExchangeRequest request) {
         return ResponseEntity.ok(authService.exchangeOAuth2Code(request.code()));
+    }
+
+    @PostMapping("/password/send-code")
+    public ResponseEntity<String> sendPasswordResetCode(@Valid @RequestBody PasswordSendCodeRequest request) {
+        passwordResetService.sendCode(request);
+        return ResponseEntity.ok("인증 코드가 이메일로 발송되었습니다.");
+    }
+
+    @PostMapping("/password/verify-code")
+    public ResponseEntity<String> verifyPasswordResetCode(@Valid @RequestBody PasswordVerifyCodeRequest request) {
+        passwordResetService.verifyCode(request);
+        return ResponseEntity.ok("인증 코드가 확인되었습니다.");
+    }
+
+    @PostMapping("/password/reset")
+    public ResponseEntity<String> resetPassword(@Valid @RequestBody PasswordResetRequest request) {
+        passwordResetService.resetPassword(request);
+        return ResponseEntity.ok("비밀번호가 변경되었습니다.");
     }
 }

@@ -118,4 +118,9 @@ public class User {
         if (email != null) this.email = email;
         this.updatedAt = LocalDateTime.now();
     }
+
+    public void updatePassword(String encodedPassword) {
+        this.passwordHash = encodedPassword;
+        this.updatedAt = LocalDateTime.now();
+    }
 }
