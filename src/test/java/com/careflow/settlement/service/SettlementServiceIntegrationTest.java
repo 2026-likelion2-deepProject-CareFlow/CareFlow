@@ -311,7 +311,7 @@ class SettlementServiceIntegrationTest {
             assertThat(result.getTotalGrossAmount()).isEqualTo(500000L);
             // 모두 PAID 이므로 paidAmount = totalGrossAmount
             assertThat(result.getPaidAmount()).isEqualTo(500000L);
-            // PENDING/APPROVED/DISPUTED 건 없음
+            // PENDING/DISPUTED 건 없음
             assertThat(result.getPendingAmount()).isZero();
             assertThat(result.getDisputedAmount()).isZero();
             // platform_fee 합: 200000*0.10 + 300000*0.10 = 20000 + 30000 = 50000

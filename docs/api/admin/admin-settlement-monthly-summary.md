@@ -49,7 +49,7 @@ Authorization: Bearer {accessToken}
 - **해당 월 정산 내역이 없는 대행사도 포함**: 프론트 mock(`mockAgencies` 중 "케어플러스" 2026년 6월 항목)처럼 `asCount=0`인 대행사도 `status: "NONE"`으로 목록에 포함되어야 한다 → `Agencies`를 기준으로 `Settlement`를 LEFT JOIN한다.
 - **월 필터 기준 컬럼**: `settlements.created_at` 기준으로 월 범위를 필터링한다 (agency 도메인의 `findMonthlySummary` / `findAgencySettlements`와 동일 기준, `paid_at` 아님).
 - **`agencyPay` 산출 공식**: `agencyPay = totalRevenue(grossAmount 합계) - careflowFee(platformFee 합계)`. 이는 `agencyFee + engineerNetAmount`와 동일한 값이며, "CareFlow가 대행사에 실제로 송금하는 금액"을 의미한다. 대행사 내부에서 기사에게 재정산하는 로직과는 무관하다.
-- **`status` 값 체계**: 기존 `settlements.status`(PENDING/APPROVED/PAID/DISPUTED, 4종)와 달리 본 API의 대행사 단위 집계 `status`는 프론트 UI(`STATUS_META`)에 맞춰 **3종(`PENDING`/`PAID`/`NONE`)**으로 파생한다.
+- **`status` 값 체계**: 기존 `settlements.status`([DDL v11] PENDING/PAID/DISPUTED, 3종)와 달리 본 API의 대행사 단위 집계 `status`는 프론트 UI(`STATUS_META`)에 맞춰 **별도 3종(`PENDING`/`PAID`/`NONE`)**으로 파생한다.
   - `asCount == 0` → `"NONE"` (해당 월 정산 내역 없음)
   - 해당 월 정산 중 `PAID`가 아닌 건이 1건이라도 있으면 → `"PENDING"`
   - 전부 `PAID`이면 → `"PAID"`

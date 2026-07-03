@@ -215,7 +215,7 @@ class EngineerIntegrationTest {
                 new BigDecimal("5.00"),
                 42500
         ));
-        settlement.approve();
+        settlement.markPaid();
         settlementRepository.flush();
 
         Review review = Review.create(asRequest, customer, engineer, 5, "매우 친절하십니다.");

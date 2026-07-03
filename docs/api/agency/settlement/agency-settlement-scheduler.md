@@ -108,8 +108,8 @@ Payment(SUCCESS) ──[스케줄러]──▶ Settlement(PENDING)
                                         │
                               [별도 API — 추후 구현]
                                         │
-                              APPROVED ──▶ PAID
-                              PENDING  ──▶ DISPUTED
+                              PENDING ──▶ PAID       ([DDL v11] APPROVED 경유 없이 직접 전이)
+                              PENDING ──▶ DISPUTED
 ```
 
 ---

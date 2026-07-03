@@ -17,9 +17,11 @@ public interface AsRequestRepository extends JpaRepository<AsRequest, Long> {
     List<AsRequest> findByCustomer_IdOrderByIdDesc(Long customerId);
 
     // 대행사 소속 A/S 요청 전체 목록 조회 — COMPLETED 제외, N+1 방지용 JOIN FETCH
+    // appliance: 목록에 brand/modelName(제품 정보) 노출을 위해 JOIN FETCH
     @Query("SELECT r FROM AsRequest r " +
            "JOIN FETCH r.symptom " +
            "JOIN FETCH r.customer " +
+           "JOIN FETCH r.appliance " +
            "JOIN FETCH r.visitRegion " +
            "WHERE r.agency.id = :agencyId " +
            "AND r.status != :excludeStatus " +
@@ -31,9 +33,11 @@ public interface AsRequestRepository extends JpaRepository<AsRequest, Long> {
     // 대행사 소속 A/S 요청 필터링 조회 — 접수일(created_at)·상태 선택 적용, COMPLETED 항상 제외
     // startOfDay/endOfDay null 허용 — null 이면 날짜 조건 미적용
     // filterStatus null 허용 — null 이면 상태 조건 미적용
+    // appliance: 목록에 brand/modelName(제품 정보) 노출을 위해 JOIN FETCH
     @Query("SELECT r FROM AsRequest r " +
            "JOIN FETCH r.symptom " +
            "JOIN FETCH r.customer " +
+           "JOIN FETCH r.appliance " +
            "JOIN FETCH r.visitRegion " +
            "WHERE r.agency.id = :agencyId " +
            "AND r.status != :excludeStatus " +

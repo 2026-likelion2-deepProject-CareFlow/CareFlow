@@ -289,12 +289,13 @@ class AgencySettlementServiceIntegrationTest {
     class PendingAmountStats {
 
         @Test
-        void PENDING과_APPROVED_합산이_pendingAmount에_반영() throws Exception {
+        void PENDING_합산이_pendingAmount에_반영() throws Exception {
+            // [DDL v11] APPROVED 상태 제거 — pendingAmount는 PENDING 건만 합산
             YearMonth now = YearMonth.now();
             LocalDateTime thisMonth = now.atDay(1).atStartOfDay();
 
             createSettlement(engineerUser, agency, 50000, "PENDING",  thisMonth);
-            createSettlement(engineerUser, agency, 30000, "APPROVED", thisMonth);
+            createSettlement(engineerUser, agency, 30000, "PENDING",  thisMonth);
             createSettlement(engineerUser, agency, 20000, "DISPUTED", thisMonth);
 
             AgencySettlementListResponse result = agencySettlementService.getSettlements(

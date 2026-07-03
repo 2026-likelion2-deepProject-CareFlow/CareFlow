@@ -82,7 +82,7 @@ public class AdminSettlementService {
 
     /**
      * [⑨] 단일 대행사 지급 승인
-     * - 대상 월의 PAID가 아닌 정산(PENDING/APPROVED/DISPUTED) 전부를 markPaid()로 직접 전이
+     * - 대상 월의 PAID가 아닌 정산([DDL v11] PENDING/DISPUTED, APPROVED 제거) 전부를 markPaid()로 직접 전이
      * - 대상이 없어도(이미 전부 PAID) 에러 없이 종료 (멱등)
      */
     @Transactional

@@ -53,10 +53,9 @@ public class AgencySettlementController {
      * 정산 상태 변경
      * PATCH /api/agency/settlements/{settlementId}/status
      *
-     * 전이 규칙:
+     * 전이 규칙 ([DDL v11] APPROVED 제거 — PENDING에서 바로 PAID로 전이):
      *   - PAID → 변경 불가
-     *   - PAID 로 변경: APPROVED 상태에서만 허용
-     *   - 그 외(PENDING↔APPROVED↔DISPUTED) 간 전이 자유
+     *   - 그 외(PENDING↔DISPUTED, → PAID) 간 전이 자유
      */
     @PatchMapping("/{settlementId}/status")
     public ResponseEntity<Void> updateStatus(

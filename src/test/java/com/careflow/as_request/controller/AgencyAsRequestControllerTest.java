@@ -90,6 +90,8 @@ class AgencyAsRequestControllerTest {
                     .andExpect(jsonPath("$.length()").value(2))
                     .andExpect(jsonPath("$[0].requestId").value(1))
                     .andExpect(jsonPath("$[0].status").value("ASSIGNED"))
+                    .andExpect(jsonPath("$[0].brand").value("삼성"))
+                    .andExpect(jsonPath("$[0].modelName").value("Q9000"))
                     .andExpect(jsonPath("$[1].status").value("IN_PROGRESS"));
         }
 
@@ -296,6 +298,7 @@ class AgencyAsRequestControllerTest {
     private AgencyAsRequestListResponse stubListResponse(Long requestId, AsStatus status) {
         return new AgencyAsRequestListResponse(
                 requestId, status, "테스트고객", "010-1111-2222",
+                "삼성", "Q9000",
                 "냉방 불량", "냉각이 안 됩니다",
                 "강남구", "테헤란로 123",
                 LocalDate.of(2026, 7, 1), "10:00",

@@ -5,7 +5,7 @@
 관리자(ADMIN)가 [대행사별 월별 정산 현황 조회](admin-settlement-monthly-summary.md) 화면 상단의 "미지급 전체 승인" 버튼을 클릭했을 때, 해당 월 **전체 대행사의 미지급 정산을 한 번에 지급 완료 처리**한다.
 위치: Admin 정산 관리 페이지 — `AdminSettlementPage.jsx`의 `approveAll()`.
 
-[단일 대행사 지급 승인](admin-settlement-approve.md) API와 상태 전이 로직·설계 결정(“PENDING/APPROVED/DISPUTED → PAID 직접 전이”, 멱등성 등)을 동일하게 공유하며, 대상 범위만 **agencyId 필터 없이 전체 대행사**로 확장된다.
+[단일 대행사 지급 승인](admin-settlement-approve.md) API와 상태 전이 로직·설계 결정(“PENDING/DISPUTED → PAID 직접 전이”, 멱등성 등)을 동일하게 공유하며, 대상 범위만 **agencyId 필터 없이 전체 대행사**로 확장된다.
 
 ---
 
@@ -47,7 +47,7 @@ Authorization: Bearer {accessToken}
 
 ## 알려진 제약 (구현 전 반드시 인지할 것)
 
-- **상태 전이 범위**: [admin-settlement-approve.md](admin-settlement-approve.md)의 "상태 전이 범위" 항목과 동일 — 대상 월의 **전체 대행사**에 걸쳐 `PAID`가 아닌 모든 정산(`PENDING`/`APPROVED`/`DISPUTED`)을 `Settlement.markPaid()`로 직접 전이한다.
+- **상태 전이 범위**: [admin-settlement-approve.md](admin-settlement-approve.md)의 "상태 전이 범위" 항목과 동일 — 대상 월의 **전체 대행사**에 걸쳐 `PAID`가 아닌 모든 정산(`PENDING`/`DISPUTED`)을 `Settlement.markPaid()`로 직접 전이한다. ([DDL v11] `settlements.status`에서 `APPROVED`가 실제로 제거되어, 이제 이 API의 전이 대상은 곧 DB 상태 도메인 전체와 정확히 일치한다.)
 - **멱등성**: 미지급 건이 0개(전체 이미 PAID)여도 에러 없이 200 OK를 반환한다.
 - **agencyId 경로 변수 없음**: 단일 대행사 승인과 달리 대행사 존재 검증 단계가 없다 — 대상 월에 정산 자체가 하나도 없어도 정상 200 OK(빈 처리).
 - **처리량**: 전체 대행사 대상이므로 대상 건수가 많을 수 있다. 벌크 JPQL UPDATE 대신 엔티티 조회 후 도메인 메서드 호출 방식(더티 체킹)을 유지하되, 조회 시 `agency`/`engineer` 등 불필요한 연관관계를 즉시 로딩하지 않도록 주의한다(상태 변경만 필요하므로 fetch join 불필요).

@@ -9,7 +9,7 @@ import lombok.NoArgsConstructor;
 @AllArgsConstructor
 public class AgencySettlementSearchRequest {
 
-    // 정산 상태 필터 (PENDING/APPROVED/PAID/DISPUTED), null 이면 전체
+    // 정산 상태 필터 (PENDING/PAID/DISPUTED), null 이면 전체
     private String status;
 
     // 기사명 부분 일치 검색, null 이면 조건 없음
