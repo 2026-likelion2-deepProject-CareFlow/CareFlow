@@ -65,4 +65,10 @@ public class ExpectedRepairCost {
     @Column(name = "updated_at", nullable = false,
             columnDefinition = "DATETIME DEFAULT CURRENT_TIMESTAMP")
     private LocalDateTime updatedAt = LocalDateTime.now();
+
+    // 관리자 수동 보정을 위한 메서드 추가 (더티 체킹용)
+    public void updateAvgCost(Integer newAvgCost) {
+        this.avgCost = newAvgCost;
+        this.updatedAt = java.time.LocalDateTime.now();
+    }
 }
