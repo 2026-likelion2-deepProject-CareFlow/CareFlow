@@ -107,4 +107,15 @@ public class User {
         this.status = status;
         this.updatedAt = LocalDateTime.now();
     }
+
+    /**
+     * 연락처·이메일 수정 — null 필드는 기존 값 유지 (PATCH 의미론)
+     * 대행사 관리자가 소속 기사의 연락처를 대신 수정하는 화면 등에서 사용.
+     * 이메일 중복 여부 검증은 호출측(Service)에서 선행되어야 함.
+     */
+    public void updateContact(String phone, String email) {
+        if (phone != null) this.phone = phone;
+        if (email != null) this.email = email;
+        this.updatedAt = LocalDateTime.now();
+    }
 }

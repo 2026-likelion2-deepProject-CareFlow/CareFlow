@@ -13,9 +13,9 @@ SET FOREIGN_KEY_CHECKS = 0;
 INSERT INTO `users`
   (user_id, agency_id, email, password_hash, name, phone, role, region_id, address_detail, status, last_login_at, created_at, updated_at, deleted_at)
 VALUES
-(1, NULL, 'admin01@careflow.kr', '$2b$12$AdminHash01AdminHash01AdminHash01AdminHash01Adm', '김관리', '010-9001-0001', 'ADMIN', NULL, NULL, 'ACTIVE', '2026-06-23 08:30:00', '2024-01-02 10:00:00', '2026-06-23 08:30:00', NULL),
-(2, NULL, 'admin02@careflow.kr', '$2b$12$AdminHash02AdminHash02AdminHash02AdminHash02Adm', '이운영', '010-9001-0002', 'ADMIN', NULL, NULL, 'ACTIVE', '2026-06-22 09:15:00', '2024-01-02 10:05:00', '2026-06-22 09:15:00', NULL),
-(3, NULL, 'admin03@careflow.kr', '$2b$12$AdminHash03AdminHash03AdminHash03AdminHash03Adm', '박시스템', '010-9001-0003', 'ADMIN', NULL, NULL, 'ACTIVE', '2026-06-21 11:00:00', '2024-01-02 10:10:00', '2026-06-21 11:00:00', NULL);
+(1, NULL, 'admin01@careflow.kr', '$2y$04$BK8.nOhlwI2Q0xULB2y0buEWae7i98mFRqTkJZY0yh0LT.Ay4oNPG', '김관리', '010-9001-0001', 'ADMIN', NULL, NULL, 'ACTIVE', '2026-06-23 08:30:00', '2024-01-02 10:00:00', '2026-06-23 08:30:00', NULL),
+(2, NULL, 'admin02@careflow.kr', '$2y$04$BK8.nOhlwI2Q0xULB2y0buEWae7i98mFRqTkJZY0yh0LT.Ay4oNPG', '이운영', '010-9001-0002', 'ADMIN', NULL, NULL, 'ACTIVE', '2026-06-22 09:15:00', '2024-01-02 10:05:00', '2026-06-22 09:15:00', NULL),
+(3, NULL, 'admin03@careflow.kr', '$2y$04$BK8.nOhlwI2Q0xULB2y0buEWae7i98mFRqTkJZY0yh0LT.Ay4oNPG', '박시스템', '010-9001-0003', 'ADMIN', NULL, NULL, 'ACTIVE', '2026-06-21 11:00:00', '2024-01-02 10:10:00', '2026-06-21 11:00:00', NULL);
 
 -- =============================================================
 -- AGENCY 슈퍼계정 (10개 대행사 × 1명)
@@ -26,25 +26,25 @@ INSERT INTO `users`
   (user_id, agency_id, email, password_hash, name, phone, role, region_id, address_detail, status, last_login_at, created_at, updated_at, deleted_at)
 VALUES
 -- 대행사 1 슈퍼계정
-(4, NULL, 'super01@hansolservice.co.kr', '$2b$12$SuperHash01SuperHash01SuperHash01SuperHash01S', '한솔서비스대표', '010-2001-0001', 'AGENCY', NULL, NULL, 'ACTIVE', '2026-06-23 07:00:00', '2024-02-01 09:00:00', '2026-06-23 07:00:00', NULL),
+(4, NULL, 'super01@hansolservice.co.kr', '$2y$04$BK8.nOhlwI2Q0xULB2y0buEWae7i98mFRqTkJZY0yh0LT.Ay4oNPG', '한솔서비스대표', '010-2001-0001', 'AGENCY', NULL, NULL, 'ACTIVE', '2026-06-23 07:00:00', '2024-02-01 09:00:00', '2026-06-23 07:00:00', NULL),
 -- 대행사 2 슈퍼계정
-(5, NULL, 'super02@namseoservice.co.kr', '$2b$12$SuperHash02SuperHash02SuperHash02SuperHash02S', '남서서비스대표', '010-2002-0001', 'AGENCY', NULL, NULL, 'ACTIVE', '2026-06-23 07:10:00', '2024-02-05 09:00:00', '2026-06-23 07:10:00', NULL),
+(5, NULL, 'super02@namseoservice.co.kr', '$2y$04$BK8.nOhlwI2Q0xULB2y0buEWae7i98mFRqTkJZY0yh0LT.Ay4oNPG', '남서서비스대표', '010-2002-0001', 'AGENCY', NULL, NULL, 'ACTIVE', '2026-06-23 07:10:00', '2024-02-05 09:00:00', '2026-06-23 07:10:00', NULL),
 -- 대행사 3 슈퍼계정
-(6, NULL, 'super03@bukhanservice.co.kr', '$2b$12$SuperHash03SuperHash03SuperHash03SuperHash03S', '북한강서비스대표', '010-2003-0001', 'AGENCY', NULL, NULL, 'ACTIVE', '2026-06-22 08:00:00', '2024-02-10 09:00:00', '2026-06-22 08:00:00', NULL),
+(6, NULL, 'super03@bukhanservice.co.kr', '$2y$04$BK8.nOhlwI2Q0xULB2y0buEWae7i98mFRqTkJZY0yh0LT.Ay4oNPG', '북한강서비스대표', '010-2003-0001', 'AGENCY', NULL, NULL, 'ACTIVE', '2026-06-22 08:00:00', '2024-02-10 09:00:00', '2026-06-22 08:00:00', NULL),
 -- 대행사 4 슈퍼계정
-(7, NULL, 'super04@dongbuservice.co.kr', '$2b$12$SuperHash04SuperHash04SuperHash04SuperHash04S', '동부서비스대표', '010-2004-0001', 'AGENCY', NULL, NULL, 'ACTIVE', '2026-06-23 08:30:00', '2024-02-15 09:00:00', '2026-06-23 08:30:00', NULL),
+(7, NULL, 'super04@dongbuservice.co.kr', '$2y$04$BK8.nOhlwI2Q0xULB2y0buEWae7i98mFRqTkJZY0yh0LT.Ay4oNPG', '동부서비스대표', '010-2004-0001', 'AGENCY', NULL, NULL, 'ACTIVE', '2026-06-23 08:30:00', '2024-02-15 09:00:00', '2026-06-23 08:30:00', NULL),
 -- 대행사 5 슈퍼계정
-(8, NULL, 'super05@seobuservice.co.kr', '$2b$12$SuperHash05SuperHash05SuperHash05SuperHash05S', '서부서비스대표', '010-2005-0001', 'AGENCY', NULL, NULL, 'ACTIVE', '2026-06-21 09:00:00', '2024-03-01 09:00:00', '2026-06-21 09:00:00', NULL),
+(8, NULL, 'super05@seobuservice.co.kr', '$2y$04$BK8.nOhlwI2Q0xULB2y0buEWae7i98mFRqTkJZY0yh0LT.Ay4oNPG', '서부서비스대표', '010-2005-0001', 'AGENCY', NULL, NULL, 'ACTIVE', '2026-06-21 09:00:00', '2024-03-01 09:00:00', '2026-06-21 09:00:00', NULL),
 -- 대행사 6 슈퍼계정
-(9, NULL, 'super06@gyeonggiservice.co.kr', '$2b$12$SuperHash06SuperHash06SuperHash06SuperHash06S', '경기전자서비스대표', '010-2006-0001', 'AGENCY', NULL, NULL, 'ACTIVE', '2026-06-23 10:00:00', '2024-03-05 09:00:00', '2026-06-23 10:00:00', NULL),
+(9, NULL, 'super06@gyeonggiservice.co.kr', '$2y$04$BK8.nOhlwI2Q0xULB2y0buEWae7i98mFRqTkJZY0yh0LT.Ay4oNPG', '경기전자서비스대표', '010-2006-0001', 'AGENCY', NULL, NULL, 'ACTIVE', '2026-06-23 10:00:00', '2024-03-05 09:00:00', '2026-06-23 10:00:00', NULL),
 -- 대행사 7 슈퍼계정
-(10, NULL, 'super07@busanservice.co.kr', '$2b$12$SuperHash07SuperHash07SuperHash07SuperHash07S', '부산가전서비스대표', '010-2007-0001', 'AGENCY', NULL, NULL, 'ACTIVE', '2026-06-23 08:00:00', '2024-03-10 09:00:00', '2026-06-23 08:00:00', NULL),
+(10, NULL, 'super07@busanservice.co.kr', '$2y$04$BK8.nOhlwI2Q0xULB2y0buEWae7i98mFRqTkJZY0yh0LT.Ay4oNPG', '부산가전서비스대표', '010-2007-0001', 'AGENCY', NULL, NULL, 'ACTIVE', '2026-06-23 08:00:00', '2024-03-10 09:00:00', '2026-06-23 08:00:00', NULL),
 -- 대행사 8 슈퍼계정
-(11, NULL, 'super08@daeguservice.co.kr', '$2b$12$SuperHash08SuperHash08SuperHash08SuperHash08S', '대구전자대행대표', '010-2008-0001', 'AGENCY', NULL, NULL, 'ACTIVE', '2026-06-22 09:00:00', '2024-03-15 09:00:00', '2026-06-22 09:00:00', NULL),
+(11, NULL, 'super08@daeguservice.co.kr', '$2y$04$BK8.nOhlwI2Q0xULB2y0buEWae7i98mFRqTkJZY0yh0LT.Ay4oNPG', '대구전자대행대표', '010-2008-0001', 'AGENCY', NULL, NULL, 'ACTIVE', '2026-06-22 09:00:00', '2024-03-15 09:00:00', '2026-06-22 09:00:00', NULL),
 -- 대행사 9 슈퍼계정
-(12, NULL, 'super09@incheonservice.co.kr', '$2b$12$SuperHash09SuperHash09SuperHash09SuperHash09S', '인천서비스대표', '010-2009-0001', 'AGENCY', NULL, NULL, 'ACTIVE', '2026-06-23 07:30:00', '2024-04-01 09:00:00', '2026-06-23 07:30:00', NULL),
+(12, NULL, 'super09@incheonservice.co.kr', '$2y$04$BK8.nOhlwI2Q0xULB2y0buEWae7i98mFRqTkJZY0yh0LT.Ay4oNPG', '인천서비스대표', '010-2009-0001', 'AGENCY', NULL, NULL, 'ACTIVE', '2026-06-23 07:30:00', '2024-04-01 09:00:00', '2026-06-23 07:30:00', NULL),
 -- 대행사 10 슈퍼계정
-(13, NULL, 'super10@jeonseoservice.co.kr', '$2b$12$SuperHash10SuperHash10SuperHash10SuperHash10S', '전서서비스대표', '010-2010-0001', 'AGENCY', NULL, NULL, 'ACTIVE', '2026-06-20 10:00:00', '2024-04-05 09:00:00', '2026-06-20 10:00:00', NULL);
+(13, NULL, 'super10@jeonseoservice.co.kr', '$2y$04$BK8.nOhlwI2Q0xULB2y0buEWae7i98mFRqTkJZY0yh0LT.Ay4oNPG', '전서서비스대표', '010-2010-0001', 'AGENCY', NULL, NULL, 'ACTIVE', '2026-06-20 10:00:00', '2024-04-05 09:00:00', '2026-06-20 10:00:00', NULL);
 
 -- =============================================================
 -- agencies (10개)

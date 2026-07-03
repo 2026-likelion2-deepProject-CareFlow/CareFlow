@@ -23,6 +23,7 @@ import com.careflow.engineer.domain.entity.EngineerProfile;
 import com.careflow.engineer.domain.entity.EngineerSchedule;
 import com.careflow.engineer.domain.entity.EngineerServiceRegion;
 import com.careflow.engineer.domain.enums.ScheduleStatus;
+import com.careflow.engineer.domain.enums.SkillLevel;
 import com.careflow.engineer.dto.ScheduleResponse;
 import com.careflow.engineer.repository.EngineerExpertBrandRepository;
 import com.careflow.engineer.repository.EngineerProfileRepository;
@@ -131,8 +132,9 @@ public class AgencyEngineerService {
 
     /**
      * 소속 기사 프로필 수정 (대행사 관리자 권한)
-     * 수정 가능 항목: 전문 가전 카테고리, 전문 브랜드 목록, 활동 지역 목록
-     * null로 전달된 필드는 기존값 유지
+     * 수정 가능 항목: 전문 가전 카테고리, 전문 브랜드 목록, 활동 지역 목록, 연락처, 이메일, 경력 시작 연도, 소개
+     * null로 전달된 필드는 기존값 유지. 단 expertBrands/serviceRegionIds는 빈 배열이면 전체 삭제로 처리(전체 교체 방식이므로).
+     * 기술 등급은 요청으로 받지 않고 경력 시작 연도 기준으로 서버가 자동 재산정한다(기사 본인 수정 플로우와 동일 규칙).
      */
     @Transactional
     public AgencyEngineerDetailResponse updateAgencyEngineerProfile(
@@ -158,21 +160,56 @@ public class AgencyEngineerService {
             profile.updateCategory(category);
         }
 
-        // 전문 브랜드 수정 (전체 교체)
+        // 연락처·이메일 수정 — 이메일은 로그인 식별자이므로 변경 전 중복 검증
+        if (request.getPhone() != null || request.getEmail() != null) {
+            if (request.getEmail() != null
+                    && !request.getEmail().equals(engineerUser.getEmail())
+                    && userRepository.existsByEmail(request.getEmail())) {
+                throw new IllegalArgumentException("이미 사용 중인 이메일입니다.");
+            }
+            engineerUser.updateContact(request.getPhone(), request.getEmail());
+        }
+
+        // 경력 시작 연도·소개 수정 — 경력 연도가 바뀌면 기술 등급도 함께 재산정
+        if (request.getCareerStartedYear() != null || request.getIntroduction() != null) {
+            SkillLevel newSkillLevel = profile.getSkillLevel();
+            if (request.getCareerStartedYear() != null) {
+                int currentYear = LocalDate.now().getYear();
+                if (request.getCareerStartedYear() > currentYear) {
+                    throw new IllegalArgumentException("경력 시작 연도는 미래일 수 없습니다.");
+                }
+                newSkillLevel = calculateSkillLevel(request.getCareerStartedYear());
+            }
+            profile.updateBasicInfo(request.getCareerStartedYear(), newSkillLevel, request.getIntroduction(), null);
+        }
+
+        // 전문 브랜드 수정 (전체 교체, 빈 배열이면 전체 삭제)
         List<String> resultBrands = expertBrandRepository.findByEngineer_Id(engineerUserId).stream()
                 .map(EngineerExpertBrand::getBrandName).toList();
-        if (request.getExpertBrands() != null && !request.getExpertBrands().isEmpty()) {
+        if (request.getExpertBrands() != null) {
             resultBrands = saveExpertBrands(engineerUser, request.getExpertBrands());
         }
 
-        // 활동 지역 수정 (전체 교체, depth=2 구 단위만 허용)
+        // 활동 지역 수정 (전체 교체, depth=2 구 단위만 허용, 빈 배열이면 전체 삭제)
         List<Integer> resultRegionIds = serviceRegionRepository.findByEngineer_Id(engineerUserId).stream()
                 .map(r -> r.getRegion().getId()).toList();
-        if (request.getServiceRegionIds() != null && !request.getServiceRegionIds().isEmpty()) {
+        if (request.getServiceRegionIds() != null) {
             resultRegionIds = saveServiceRegions(engineerUser, request.getServiceRegionIds());
         }
 
         return AgencyEngineerDetailResponse.from(profile, resultBrands, resultRegionIds);
+    }
+
+    // 연차별 기술 등급 자동 산정 (1~5년=초급, 6~10년=중급, 11년↑=고급) — EngineerProfileService.calculateSkillLevel과 동일 규칙
+    private SkillLevel calculateSkillLevel(Integer careerStartedYear) {
+        int workYear = LocalDate.now().getYear() - careerStartedYear;
+        if (workYear <= 5) {
+            return SkillLevel.BEGINNER;
+        } else if (workYear <= 10) {
+            return SkillLevel.INTERMEDIATE;
+        } else {
+            return SkillLevel.ADVANCED;
+        }
     }
 
     /**
@@ -424,6 +461,9 @@ public class AgencyEngineerService {
 
     private List<String> saveExpertBrands(User engineer, List<String> brands) {
         expertBrandRepository.deleteByEngineer_Id(engineer.getId());
+        // Hibernate의 flush 순서(Insert → Delete)로 인해 flush 없이 바로 재삽입하면
+        // 기존 값과 겹치는 브랜드에서 uk_eng_brand 유니크 제약 위반이 발생함 — 삭제를 먼저 반영
+        expertBrandRepository.flush();
 
         List<String> distinctBrands = brands.stream()
                 .filter(b -> b != null && !b.isBlank())
@@ -440,6 +480,8 @@ public class AgencyEngineerService {
 
     private List<Integer> saveServiceRegions(User engineer, List<Integer> regionIds) {
         serviceRegionRepository.deleteByEngineer_Id(engineer.getId());
+        // 위 saveExpertBrands와 동일한 이유로 삭제를 먼저 flush — 겹치는 지역에서 uk_eng_region 위반 방지
+        serviceRegionRepository.flush();
 
         List<EngineerServiceRegion> entities = new ArrayList<>();
         List<Integer> result = new ArrayList<>();

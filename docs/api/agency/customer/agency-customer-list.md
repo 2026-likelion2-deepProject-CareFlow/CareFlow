@@ -69,7 +69,7 @@ Content-Type: application/json
 
 ## 알려진 제약 (구현 전 반드시 인지할 것)
 
-- 현재 `users` 테이블에는 `grade`, `join_path` 컬럼이 **존재하지 않는다** (`sql/CareFlow_DDL_v7.sql` 확인 완료).
+- 현재 `users` 테이블에는 `grade`, `join_path` 컬럼이 **존재하지 않는다** (`sql/CareFlow_DDL_v10.sql` 확인 필요).
 - 따라서 이번 구현에서는 `grade`/`joinPath`를 `AgencyCustomerSearchRequest`에 필드로는 유지하되(프론트 계약 유지), **서비스 로직에서는 필터 조건으로 사용하지 않는다.**
 - 추후 DB 마이그레이션으로 두 컬럼이 추가되면 `AgencyCustomerService.searchCustomers()`의 Repository 쿼리에 조건을 추가해야 한다.
 - 이 사실을 코드 내 한글 주석으로 명시한다.
