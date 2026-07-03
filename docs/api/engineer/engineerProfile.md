@@ -17,9 +17,9 @@
 - 공통 : JWT 인증 필요(`role = ENGINEER`), `@AuthenticationPrincipal CustomUserDetails` 에서 `userId` 추출
 - ⚠ **(변경) URI 단수형 통일** : 프론트엔드 `axios` 규격에 맞춰 클래스 매핑을 `/api/engineer/profile` 로 운영한다. (구 `/api/engineers/me/profile` 에서 변경)
 
-### [PUT] /api/engineer/profile - EngineerProfileController.completeProfile
+### [POST] /api/engineer/profile - EngineerProfileController.completeProfile
 - **설명**: 기사 첫 로그인 시 선생성된 빈 프로필을 완성한다(전문 카테고리·경력 시작 연도·소개·전문 브랜드·서비스 지역). 경력 시작 연도로 기술 등급을 자동 산정한다. (요구사항 E-02, E-04)
-- **Request Body**: `@Valid @RequestBody CreateProfileRequest request`
+- **Request Body**: `@RequestBody @Valid CreateProfileRequest request`
     - `categoryId`(Integer, 필수), `careerStartedYear`(Integer, 필수, 1950 이상), `introduction`(String, 선택)
     - `expertBrands`(List`<String>`, 1개 이상 필수), `serviceRegionIds`(List`<Integer>`, 1개 이상 필수)
 - **Response (200 OK)**: `ProfileResponse`
@@ -28,10 +28,14 @@
 - **설명**: 본인 프로필 상세 조회 (전문 브랜드·서비스 지역 + 사용자/대행사 합본 포함)
 - **Response (200 OK)**: `ProfileResponse`
 
-### [PATCH] /api/engineer/profile - updateProfile
+### [PUT] /api/engineer/profile - updateProfile
 - **설명**: 프로필 부분 수정 (소개글·프로필 사진·**경력 시작 연도**, 그리고 선택적으로 전문 브랜드·서비스 지역 재설정). 경력 시작 연도 변경 시 기술 등급을 재산정한다.
 - **Request Body**: `@RequestBody UpdateProfileRequest request` (모든 필드 선택 — `careerStartedYear`, `introduction`, `profileImageUrl`, `expertBrands`, `serviceRegionIds`)
 - **Response (200 OK)**: `ProfileResponse`
+
+### [GET] /api/engineer/profile/me - getNavbarProfile ✨(신규)
+- **설명**: 상단 내비게이션 바 표시용 요약 프로필을 조회한다(프로필 미등록 상태여도 안전하게 반환). 프로필이 없으면 `profileImageUrl` 은 `null`.
+- **Response (200 OK)**: `EngineerNavbarResponse` — `name`(기사 이름), `role`(고정 문자열 `"수리 기사"`), `profileImageUrl`
 
 ### 📦 ProfileResponse 필드 명세 (✨ 프론트 연동을 위해 확장됨 — BFF 합본)
 정적 팩토리는 `ProfileResponse.of(entity, expertBrands, serviceRegionIds, serviceRegionNames)` 를 사용한다(구 `from()` 대체). 프론트 화면이 ID가 아닌 **이름**과 **사용자 기본 정보**를 요구하므로 다음을 합본하여 반환한다.
@@ -58,8 +62,8 @@
     - 전문 카테고리 `depth = 2`(소분류) 검증
     - 경력 시작 연도 **미래 불가** 검증 (`@Min(1950)` + 현재 연도 초과 차단)
 2. **데이터 처리(Process) 단계**
-    - **기술 등급(SkillLevel) 자동 산정** (요구사항 E-04) : `근무연차 = 현재연도 - careerStartedYear + 1`
-        - 1~5년 → `BEGINNER`(초급) / 6~10년 → `INTERMEDIATE`(중급) / 11년 이상 → `ADVANCED`(고급)
+    - **기술 등급(SkillLevel) 자동 산정** (요구사항 E-04) : `근무연차 = 현재연도 - careerStartedYear` (⚠ 현재 코드는 `+1` 보정이 없음 — 올해 시작=0년차부터 계산)
+        - 0~5년 → `BEGINNER`(초급) / 6~10년 → `INTERMEDIATE`(중급) / 11년 이상 → `ADVANCED`(고급)
     - 프로필 본문 갱신 : `profile.completeProfile(category, careerStartedYear, skillLevel, introduction)`
     - **서비스 지역 갱신** : `delete-then-insert` — 기존 매핑 전체 삭제 후, 중복 제거된 `serviceRegionIds` 를 `depth=2` 검증하며 재INSERT
     - **전문 브랜드 갱신** : `delete-then-insert` — 기존 매핑 전체 삭제 후, `trim`·공백 제거·중복 제거한 브랜드명을 재INSERT
@@ -70,7 +74,7 @@
 
 ### (3) [PATCH] 프로필 수정 — updateProfile
 1. **검증** : 인증, `User`·프로필 존재 확인
-2. **처리** : `updateBasicInfo(introduction, profileImageUrl)` — **각 값이 null 이면 기존 값 유지**(부분 수정). `careerStartedYear` 가 있으면 등급 재산정. `expertBrands` / `serviceRegionIds` 는 **비어있지 않은 경우에만** `delete-then-insert` 로 교체(비어있으면 기존 유지). 지역이 교체된 경우 `serviceRegionNames` 를 다시 조회
+2. **처리** : `careerStartedYear` 가 있으면 미래 검증 후 등급 재산정. 이후 `updateBasicInfo(careerStartedYear, newSkillLevel, introduction, profileImageUrl)` 호출 — **각 값이 null 이면 기존 값 유지**(부분 수정). `expertBrands` / `serviceRegionIds` 는 **비어있지 않은 경우에만** `delete-then-insert` 로 교체(비어있으면 기존 유지). 지역이 교체된 경우 `serviceRegionNames` 를 다시 조회
 3. **응답** : HTTP `200`, `ProfileResponse.of(...)` 반환
 
 ## 5. 예외 처리 (Error Handling) 및 제약 조건
