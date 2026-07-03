@@ -26,6 +26,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -43,7 +44,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -402,6 +406,203 @@ class AgencyEngineerServiceTest {
                     .isInstanceOf(IllegalAccessException.class)
                     .hasMessage("소속 대행사의 기사만 조회/수정할 수 있습니다.");
         }
+
+        @Test
+        @DisplayName("성공: 연락처·이메일 수정 — 중복 아닌 새 이메일이면 updateContact 호출")
+        void success_updateContact() throws Exception {
+            // Given
+            User agencyUser = agencyUser(AGENCY_USER_ID, AGENCY_ID);
+            User engineer   = engineerUser(ENGINEER_USER_ID, AGENCY_ID); // 기존 email: engineer10@test.com
+            EngineerProfile profile = completedProfile(engineer, 5);
+
+            AgencyEngineerProfileUpdateRequest request =
+                    buildUpdateRequest(null, null, null, "010-9999-9999", "new@test.com", null, null);
+
+            given(userRepository.findById(AGENCY_USER_ID)).willReturn(Optional.of(agencyUser));
+            given(engineerProfileRepository.findByUser_Id(ENGINEER_USER_ID)).willReturn(Optional.of(profile));
+            given(userRepository.existsByEmail("new@test.com")).willReturn(false);
+            given(expertBrandRepository.findByEngineer_Id(ENGINEER_USER_ID)).willReturn(List.of());
+            given(serviceRegionRepository.findByEngineer_Id(ENGINEER_USER_ID)).willReturn(List.of());
+
+            // When
+            agencyEngineerService.updateAgencyEngineerProfile(AGENCY_USER_ID, ENGINEER_USER_ID, request);
+
+            // Then
+            verify(engineer).updateContact("010-9999-9999", "new@test.com");
+        }
+
+        @Test
+        @DisplayName("실패: 이미 사용 중인 이메일로 변경 시도 — IllegalArgumentException, updateContact 호출 안 됨")
+        void fail_duplicateEmail_throwsException() throws Exception {
+            // Given
+            User agencyUser = agencyUser(AGENCY_USER_ID, AGENCY_ID);
+            User engineer   = engineerUser(ENGINEER_USER_ID, AGENCY_ID); // 기존 email: engineer10@test.com
+            EngineerProfile profile = completedProfile(engineer, 5);
+
+            AgencyEngineerProfileUpdateRequest request =
+                    buildUpdateRequest(null, null, null, null, "dup@test.com", null, null);
+
+            given(userRepository.findById(AGENCY_USER_ID)).willReturn(Optional.of(agencyUser));
+            given(engineerProfileRepository.findByUser_Id(ENGINEER_USER_ID)).willReturn(Optional.of(profile));
+            given(userRepository.existsByEmail("dup@test.com")).willReturn(true);
+
+            // When & Then
+            assertThatThrownBy(() ->
+                    agencyEngineerService.updateAgencyEngineerProfile(AGENCY_USER_ID, ENGINEER_USER_ID, request))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessage("이미 사용 중인 이메일입니다.");
+            verify(engineer, never()).updateContact(any(), any());
+        }
+
+        @Test
+        @DisplayName("성공: 경력 시작 연도 변경 시 기술 등급이 함께 자동 재산정됨")
+        void success_updateCareerYear_recalculatesSkillLevel() throws Exception {
+            // Given
+            User agencyUser = agencyUser(AGENCY_USER_ID, AGENCY_ID);
+            User engineer   = engineerUser(ENGINEER_USER_ID, AGENCY_ID);
+            EngineerProfile profile = completedProfile(engineer, 5); // 초기 skillLevel = INTERMEDIATE
+
+            // 16년차 경력 → ADVANCED로 재산정되어야 함
+            int longAgo = LocalDate.now().getYear() - 16;
+            AgencyEngineerProfileUpdateRequest request =
+                    buildUpdateRequest(null, null, null, null, null, longAgo, null);
+
+            given(userRepository.findById(AGENCY_USER_ID)).willReturn(Optional.of(agencyUser));
+            given(engineerProfileRepository.findByUser_Id(ENGINEER_USER_ID)).willReturn(Optional.of(profile));
+            given(expertBrandRepository.findByEngineer_Id(ENGINEER_USER_ID)).willReturn(List.of());
+            given(serviceRegionRepository.findByEngineer_Id(ENGINEER_USER_ID)).willReturn(List.of());
+
+            // When
+            agencyEngineerService.updateAgencyEngineerProfile(AGENCY_USER_ID, ENGINEER_USER_ID, request);
+
+            // Then
+            assertThat(profile.getCareerStartedYear()).isEqualTo(longAgo);
+            assertThat(profile.getSkillLevel()).isEqualTo(SkillLevel.ADVANCED);
+        }
+
+        @Test
+        @DisplayName("실패: 경력 시작 연도가 미래 — IllegalArgumentException")
+        void fail_futureCareerYear_throwsException() throws Exception {
+            // Given
+            User agencyUser = agencyUser(AGENCY_USER_ID, AGENCY_ID);
+            User engineer   = engineerUser(ENGINEER_USER_ID, AGENCY_ID);
+            EngineerProfile profile = completedProfile(engineer, 5);
+
+            int futureYear = LocalDate.now().getYear() + 1;
+            AgencyEngineerProfileUpdateRequest request =
+                    buildUpdateRequest(null, null, null, null, null, futureYear, null);
+
+            given(userRepository.findById(AGENCY_USER_ID)).willReturn(Optional.of(agencyUser));
+            given(engineerProfileRepository.findByUser_Id(ENGINEER_USER_ID)).willReturn(Optional.of(profile));
+
+            // When & Then
+            assertThatThrownBy(() ->
+                    agencyEngineerService.updateAgencyEngineerProfile(AGENCY_USER_ID, ENGINEER_USER_ID, request))
+                    .isInstanceOf(IllegalArgumentException.class)
+                    .hasMessage("경력 시작 연도는 미래일 수 없습니다.");
+        }
+
+        @Test
+        @DisplayName("성공: 소개(introduction)만 수정 — 경력·등급은 변경되지 않음")
+        void success_updateIntroductionOnly() throws Exception {
+            // Given
+            User agencyUser = agencyUser(AGENCY_USER_ID, AGENCY_ID);
+            User engineer   = engineerUser(ENGINEER_USER_ID, AGENCY_ID);
+            EngineerProfile profile = completedProfile(engineer, 5); // careerStartedYear=2020, skillLevel=INTERMEDIATE
+
+            AgencyEngineerProfileUpdateRequest request =
+                    buildUpdateRequest(null, null, null, null, null, null, "새로운 소개글");
+
+            given(userRepository.findById(AGENCY_USER_ID)).willReturn(Optional.of(agencyUser));
+            given(engineerProfileRepository.findByUser_Id(ENGINEER_USER_ID)).willReturn(Optional.of(profile));
+            given(expertBrandRepository.findByEngineer_Id(ENGINEER_USER_ID)).willReturn(List.of());
+            given(serviceRegionRepository.findByEngineer_Id(ENGINEER_USER_ID)).willReturn(List.of());
+
+            // When
+            agencyEngineerService.updateAgencyEngineerProfile(AGENCY_USER_ID, ENGINEER_USER_ID, request);
+
+            // Then
+            assertThat(profile.getIntroduction()).isEqualTo("새로운 소개글");
+            assertThat(profile.getCareerStartedYear()).isEqualTo(2020);
+            assertThat(profile.getSkillLevel()).isEqualTo(SkillLevel.INTERMEDIATE);
+        }
+
+        @Test
+        @DisplayName("성공: expertBrands 빈 배열 전달 — 전체 삭제로 처리됨(기존 !isEmpty() 가드 제거 확인)")
+        void success_emptyExpertBrands_clearsAll() throws Exception {
+            // Given
+            User agencyUser = agencyUser(AGENCY_USER_ID, AGENCY_ID);
+            User engineer   = engineerUser(ENGINEER_USER_ID, AGENCY_ID);
+            EngineerProfile profile = completedProfile(engineer, 5);
+
+            AgencyEngineerProfileUpdateRequest request =
+                    buildUpdateRequest(null, List.of(), null);
+
+            given(userRepository.findById(AGENCY_USER_ID)).willReturn(Optional.of(agencyUser));
+            given(engineerProfileRepository.findByUser_Id(ENGINEER_USER_ID)).willReturn(Optional.of(profile));
+
+            // When
+            AgencyEngineerDetailResponse result =
+                    agencyEngineerService.updateAgencyEngineerProfile(AGENCY_USER_ID, ENGINEER_USER_ID, request);
+
+            // Then
+            assertThat(result.getExpertBrands()).isEmpty();
+            InOrder inOrder = inOrder(expertBrandRepository);
+            inOrder.verify(expertBrandRepository).deleteByEngineer_Id(ENGINEER_USER_ID);
+            inOrder.verify(expertBrandRepository).flush();
+            inOrder.verify(expertBrandRepository).saveAll(List.of());
+        }
+
+        @Test
+        @DisplayName("성공: serviceRegionIds 빈 배열 전달 — 전체 삭제로 처리됨(기존 !isEmpty() 가드 제거 확인)")
+        void success_emptyServiceRegionIds_clearsAll() throws Exception {
+            // Given
+            User agencyUser = agencyUser(AGENCY_USER_ID, AGENCY_ID);
+            User engineer   = engineerUser(ENGINEER_USER_ID, AGENCY_ID);
+            EngineerProfile profile = completedProfile(engineer, 5);
+
+            AgencyEngineerProfileUpdateRequest request =
+                    buildUpdateRequest(null, null, List.of());
+
+            given(userRepository.findById(AGENCY_USER_ID)).willReturn(Optional.of(agencyUser));
+            given(engineerProfileRepository.findByUser_Id(ENGINEER_USER_ID)).willReturn(Optional.of(profile));
+
+            // When
+            AgencyEngineerDetailResponse result =
+                    agencyEngineerService.updateAgencyEngineerProfile(AGENCY_USER_ID, ENGINEER_USER_ID, request);
+
+            // Then
+            assertThat(result.getServiceRegionIds()).isEmpty();
+            InOrder inOrder = inOrder(serviceRegionRepository);
+            inOrder.verify(serviceRegionRepository).deleteByEngineer_Id(ENGINEER_USER_ID);
+            inOrder.verify(serviceRegionRepository).flush();
+            inOrder.verify(serviceRegionRepository).saveAll(List.of());
+        }
+
+        @Test
+        @DisplayName("성공: 브랜드 재삽입 순서가 delete → flush → saveAll 인지 확인 (Duplicate entry 회귀 방지)")
+        void success_saveExpertBrands_flushesBeforeReinsert() throws Exception {
+            // Given
+            User agencyUser = agencyUser(AGENCY_USER_ID, AGENCY_ID);
+            User engineer   = engineerUser(ENGINEER_USER_ID, AGENCY_ID);
+            EngineerProfile profile = completedProfile(engineer, 5);
+
+            // 기존 값과 겹치는 브랜드를 포함한 새 목록 — flush 없이 재삽입하면 uk_eng_brand 위반 발생 가능
+            AgencyEngineerProfileUpdateRequest request =
+                    buildUpdateRequest(null, List.of("삼성", "LG"), null);
+
+            given(userRepository.findById(AGENCY_USER_ID)).willReturn(Optional.of(agencyUser));
+            given(engineerProfileRepository.findByUser_Id(ENGINEER_USER_ID)).willReturn(Optional.of(profile));
+
+            // When
+            agencyEngineerService.updateAgencyEngineerProfile(AGENCY_USER_ID, ENGINEER_USER_ID, request);
+
+            // Then — delete가 반드시 saveAll(insert)보다 먼저, 그리고 그 사이에 flush가 호출되어야 함
+            InOrder inOrder = inOrder(expertBrandRepository);
+            inOrder.verify(expertBrandRepository).deleteByEngineer_Id(ENGINEER_USER_ID);
+            inOrder.verify(expertBrandRepository).flush();
+            inOrder.verify(expertBrandRepository).saveAll(anyList());
+        }
     }
 
     // ══════════════════════════════════════════════════════════════
@@ -560,6 +761,12 @@ class AgencyEngineerServiceTest {
     /** AgencyEngineerProfileUpdateRequest 리플렉션 생성 */
     private AgencyEngineerProfileUpdateRequest buildUpdateRequest(
             Integer categoryId, List<String> brands, List<Integer> regionIds) {
+        return buildUpdateRequest(categoryId, brands, regionIds, null, null, null, null);
+    }
+
+    private AgencyEngineerProfileUpdateRequest buildUpdateRequest(
+            Integer categoryId, List<String> brands, List<Integer> regionIds,
+            String phone, String email, Integer careerStartedYear, String introduction) {
         try {
             Constructor<AgencyEngineerProfileUpdateRequest> constructor =
                     AgencyEngineerProfileUpdateRequest.class.getDeclaredConstructor();
@@ -568,6 +775,10 @@ class AgencyEngineerServiceTest {
             ReflectionTestUtils.setField(req, "categoryId", categoryId);
             ReflectionTestUtils.setField(req, "expertBrands", brands);
             ReflectionTestUtils.setField(req, "serviceRegionIds", regionIds);
+            ReflectionTestUtils.setField(req, "phone", phone);
+            ReflectionTestUtils.setField(req, "email", email);
+            ReflectionTestUtils.setField(req, "careerStartedYear", careerStartedYear);
+            ReflectionTestUtils.setField(req, "introduction", introduction);
             return req;
         } catch (Exception e) {
             throw new RuntimeException(e);
