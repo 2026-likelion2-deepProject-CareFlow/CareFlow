@@ -61,7 +61,7 @@ class AgenciesControllerIntegrationTest {
     @DisplayName("[signup] 성공: 최초 대행사 등록 — 201 반환 + account_requests 에 PENDING 요청 생성")
     void signup_newAgency_201_andPendingRequestSaved() throws Exception {
         AgencyCreateRequest req = buildRequest(
-                "홍길동", "super@newagency.com", "서울특별시 강남구",
+                "홍길동", "super@newagency.com",
                 "NEW-BIZ-001", "신규대행사"
         );
 
@@ -90,7 +90,7 @@ class AgenciesControllerIntegrationTest {
         Agencies approvedAgency = saveApprovedAgency("APPROVED-BIZ-001", "승인된대행사");
 
         AgencyCreateRequest req = buildRequest(
-                "김관리", "manager@approvedagency.com", "서울특별시 강남구",
+                "김관리", "manager@approvedagency.com",
                 "APPROVED-BIZ-001", "승인된대행사"
         );
 
@@ -113,7 +113,7 @@ class AgenciesControllerIntegrationTest {
         savePendingAgency("PENDING-BIZ-001", "대기중대행사");
 
         AgencyCreateRequest req = buildRequest(
-                "이중복", "dup@pending.com", "서울특별시 강남구",
+                "이중복", "dup@pending.com",
                 "PENDING-BIZ-001", "대기중대행사"
         );
 
@@ -132,7 +132,7 @@ class AgenciesControllerIntegrationTest {
         saveRejectedAgency("REJECTED-BIZ-001", "거부된대행사");
 
         AgencyCreateRequest req = buildRequest(
-                "박재도전", "retry@rejected.com", "서울특별시 강남구",
+                "박재도전", "retry@rejected.com",
                 "REJECTED-BIZ-001", "거부된대행사"
         );
 
@@ -152,7 +152,7 @@ class AgenciesControllerIntegrationTest {
         ));
 
         AgencyCreateRequest req = buildRequest(
-                "최재시도", "dup@test.com", "서울특별시 강남구",
+                "최재시도", "dup@test.com",
                 "NEW-BIZ-002", "또다른대행사"
         );
 
@@ -194,11 +194,11 @@ class AgenciesControllerIntegrationTest {
 
     // ── 공통 헬퍼 ──
 
-    private AgencyCreateRequest buildRequest(String name, String email, String regionName,
+    private AgencyCreateRequest buildRequest(String name, String email,
                                              String businessNumber, String agencyName) {
         return new AgencyCreateRequest(
                 name, email, "password123", "010-1234-5678",
-                regionName, "상세주소", businessNumber, agencyName,
+                savedRegion.getId(), "상세주소", businessNumber, agencyName,
                 "서울특별시 강남구 테헤란로 1", 5.00
         );
     }

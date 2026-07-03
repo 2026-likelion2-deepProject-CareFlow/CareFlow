@@ -63,7 +63,7 @@ class EngineerControllerIntegrationTest {
     private EngineerAccountRequest request(String email, String businessNumber) {
         return new EngineerAccountRequest(
                 "홍길동", email, "pass1234", "010-1234-5678",
-                "서울특별시 서초구", "상세주소 101호", businessNumber
+                region.getId(), "상세주소 101호", businessNumber
         );
     }
 
@@ -156,11 +156,11 @@ class EngineerControllerIntegrationTest {
     }
 
     @Test
-    @DisplayName("실패: 잘못된 지역명 — 404 Not Found")
+    @DisplayName("실패: 존재하지 않는 지역 ID — 404 Not Found")
     void signup_unknownRegion_404() throws Exception {
         EngineerAccountRequest badRegion = new EngineerAccountRequest(
                 "홍길동", "engineer@test.com", "pass1234", "010-1234-5678",
-                "존재하지않는지역", "상세주소 101호", "BIZ-APPROVED"
+                999999, "상세주소 101호", "BIZ-APPROVED"
         );
 
         mockMvc.perform(post("/api/engineer/signup")

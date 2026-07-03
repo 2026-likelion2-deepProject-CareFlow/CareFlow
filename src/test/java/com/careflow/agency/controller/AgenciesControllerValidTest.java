@@ -60,7 +60,7 @@ class AgenciesControllerValidTest {
         final String email = "ghwns6659@gmail.com";
         final String password = "123456";
         final String phoneNumber = "010-1234-5678";
-        final String regionsName = "서울 특별시 강남구"; // 사용자 거주지역 기본키 값
+        final Integer regionsName = 1; // 사용자 거주지역 기본키 값
         final String addressDetail = "서울 특별시 강남구"; // 사용자 상세 거주지역
         final String agencyName = ""; // 상호명 비어있을 때 테스트
         final String businessNumber = "123-45-67890"; // 사업자 등록번호는 보통 10자리 숫자로 구성
@@ -99,7 +99,7 @@ class AgenciesControllerValidTest {
         final String email = "ghwns6659@gmail.com";
         final String password = "123456";
         final String phoneNumber = "010-1234-5678";
-        final String regionsName = "서울 특별시 강남구"; // 사용자 거주지역 기본키 값
+        final Integer regionsName = 1; // 사용자 거주지역 기본키 값
         final String addressDetail = "서울 특별시 강남구"; // 사용자 상세 거주지역
         final String agencyName = ""; // 상호명 비어있을 때 테스트
         final String businessNumber = "123-45-67890"; // 사업자 등록번호는 보통 10자리 숫자로 구성
@@ -138,7 +138,7 @@ class AgenciesControllerValidTest {
         final String email = "ghwns6659@gmail.com";
         final String password = "123456";
         final String phoneNumber = "010-1234-5678";
-        final String regionsName = "서울 특별시 강남구"; // 사용자 거주지역 기본키 값
+        final Integer regionsName = 1; // 사용자 거주지역 기본키 값
         final String addressDetail = "서울 특별시 강남구"; // 사용자 상세 거주지역
         final String agencyName = ""; // 상호명 비어있을 때 테스트
         final String businessNumber = "123-45-67890"; // 사업자 등록번호는 보통 10자리 숫자로 구성
@@ -177,7 +177,7 @@ class AgenciesControllerValidTest {
         final String email = "ghwns6659@gmail.com";
         final String password = "123456";
         final String phoneNumber = "010-1234-5678";
-        final String regionsName = "서울 특별시 강남구"; // 사용자 거주지역 기본키 값
+        final Integer regionsName = 1; // 사용자 거주지역 기본키 값
         final String addressDetail = "서울 특별시 강남구"; // 사용자 상세 거주지역
         final String agencyName = ""; // 상호명 비어있을 때 테스트
         final String businessNumber = "123-45-67890"; // 사업자 등록번호는 보통 10자리 숫자로 구성
@@ -216,7 +216,7 @@ class AgenciesControllerValidTest {
         final String email = "ghwns6659@gmail.com";
         final String password = "123456";
         final String phoneNumber = "010-1234-5678";
-        final String regionsName = "서울 특별시 강남구"; // 사용자 거주지역 기본키 값
+        final Integer regionsName = 1; // 사용자 거주지역 기본키 값
         final String addressDetail = "서울 특별시 강남구"; // 사용자 상세 거주지역
         final String agencyName = ""; // 상호명 비어있을 때 테스트
         final String businessNumber = "123-45-67890"; // 사업자 등록번호는 보통 10자리 숫자로 구성
@@ -255,7 +255,7 @@ class AgenciesControllerValidTest {
         final String email = "ghwns6659@gmail.com";
         final String password = "123456";
         final String phoneNumber = "010-1234-5678";
-        final String regionsName = "서울 특별시 강남구"; // 사용자 거주지역 기본키 값
+        final Integer regionsName = 1; // 사용자 거주지역 기본키 값
         final String addressDetail = "서울 특별시 강남구"; // 사용자 상세 거주지역
         final String agencyName = ""; // 상호명 비어있을 때 테스트
         final String businessNumber = "123-45-67890"; // 사업자 등록번호는 보통 10자리 숫자로 구성
@@ -294,7 +294,7 @@ class AgenciesControllerValidTest {
         final String email = "ghwns6659@gmail.com";
         final String password = "123456";
         final String phoneNumber = "010-1234-5678";
-        final String regionsName = "서울 특별시 강남구"; // 사용자 거주지역 기본키 값
+        final Integer regionsName = 1; // 사용자 거주지역 기본키 값
         final String addressDetail = "서울 특별시 강남구"; // 사용자 상세 거주지역
         final String agencyName = ""; // 상호명 비어있을 때 테스트
         final String businessNumber = "123-45-67890"; // 사업자 등록번호는 보통 10자리 숫자로 구성
@@ -333,7 +333,7 @@ class AgenciesControllerValidTest {
         final String email = "ghwns6659@gmail.com";
         final String password = "123456";
         final String phoneNumber = "010-1234-5678";
-        final String regionsName = "서울 특별시 강남구"; // 사용자 거주지역 기본키 값
+        final Integer regionsName = 1; // 사용자 거주지역 기본키 값
         final String addressDetail = "서울 특별시 강남구"; // 사용자 상세 거주지역
         final String agencyName = ""; // 상호명 비어있을 때 테스트
         final String businessNumber = "123-45-67890"; // 사업자 등록번호는 보통 10자리 숫자로 구성

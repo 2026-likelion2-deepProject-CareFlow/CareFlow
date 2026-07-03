@@ -59,7 +59,7 @@ class EngineerControllerTest {
                 "engineer@test.com",
                 "pass1234",
                 "010-1234-5678",
-                "서울특별시 서초구",
+                1,
                 "상세주소 101호",
                 "BIZ-001"
         );
@@ -139,7 +139,7 @@ class EngineerControllerTest {
                     "engineer@test.com",
                     "pass1234",
                     "010-1234-5678",
-                    "서울특별시 서초구",
+                    1,
                     "상세주소 101호",
                     "BIZ-001"
             );
@@ -158,7 +158,7 @@ class EngineerControllerTest {
                     "not-an-email",
                     "pass1234",
                     "010-1234-5678",
-                    "서울특별시 서초구",
+                    1,
                     "상세주소 101호",
                     "BIZ-001"
             );
@@ -177,7 +177,7 @@ class EngineerControllerTest {
                     "engineer@test.com",
                     "pass1234",
                     "01012345678999",
-                    "서울특별시 서초구",
+                    1,
                     "상세주소 101호",
                     "BIZ-001"
             );
