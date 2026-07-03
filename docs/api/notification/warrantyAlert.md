@@ -37,7 +37,7 @@
 
 ## 5. 예외 처리 (Error Handling) 및 제약 조건
 - `execute()` 전체를 `try/catch` 로 감싸고, 오류 시 로그 기록 후 `JobExecutionException` 으로 던진다(개별 실패가 스케줄러 전체를 죽이지 않도록 한다).
-- **트랜잭션** : `@Transactional(readOnly = true)` — 배치 자체는 `appliances` 를 조회만 하며, 알림 저장은 `NotificationService` 내부 트랜잭션에서 처리된다(조회 성능 최적화).
+- **트랜잭션** : `@Transactional`(쓰기) — 배치 자체는 `appliances` 를 조회만 하지만, `NotificationService.send()` 가 **자체 트랜잭션을 열지 않아** 알림(`notifications`) INSERT 가 본 잡의 트랜잭션 안에서 일어난다. 따라서 `readOnly = true` 로 두면 안 되며 일반 `@Transactional` 을 사용한다. (구: `readOnly = true` 로 표기되어 있었으나 실제 코드는 쓰기 트랜잭션)
 - SSE 전송 실패(끊긴 연결)는 `NotificationService` 내부에서 best-effort 로 처리되어 배치 전체를 실패시키지 않는다.
 - ⚠ **(설계 주의)** 대상 조회가 `warrantyEndDate = targetDate`(정확히 30일 전 당일)인 **등치 조건**이라, 배치가 **여러 날 연속 누락**되면 그 사이 30일-경계에 걸린 코호트는 건너뛸 수 있다(소모품 알림의 `<=` 캐치업과 다른 점). 동일일 서버 다운은 Misfire(`FireAndProceed`)로 보완되나, 장기 누락 대비가 필요하면 `BETWEEN`(예: 29~30일) 또는 발송 이력 컬럼 추가를 검토할 것.
 

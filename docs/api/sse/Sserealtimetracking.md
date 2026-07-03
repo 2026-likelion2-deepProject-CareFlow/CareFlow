@@ -5,11 +5,11 @@
 - 위 파일에서 `notifications`(알림 발송 로그), `as_status_logs`(현장 상태 기록 = SSE 원천), `as_requests`, `users`, `agencies` 테이블 위주로 참조할 것
 - 해당 테이블과 매핑되는 Entity 클래스가 없을 시 테이블 구조를 참조하여 직접 생성할 것
     - `Notification`(notifications) 직접 구현. `AsStatusLog`(as_status_logs) 는 A/S 도메인과 공유(상태 기록은 담당자 C 책임). `User`·`AsRequest`·`Agencies` 는 재사용.
-- 주요 컬럼 (`notifications`) : `type`(VARCHAR, 예: `AS_STATUS`), `title`(VARCHAR), `body`(TEXT), `channel`(VARCHAR — Phase 1 은 `SSE` 고정), `created_at`
+- 주요 컬럼 (`notifications`) : `type`(ENUM `AS_STATUS`/`CONSUMABLE`/`WARRANTY`/`LMS`), `title`(VARCHAR(200)), `body`(TEXT), `channel`(ENUM `SSE`/`PUSH`/`SMS`/`KAKAO`, 기본 `SSE`), `is_read`(TINYINT(1), 기본 0), `created_at`
 - 핵심 제약 / 설계 원칙
-    - `notifications` 에는 **읽음/안읽음 컬럼이 없다** → **발송 기록(로그)** 용도. "안 읽은 알림 뱃지"는 현 구조로 미지원.
+    - **(✨변경) `notifications` 에 `is_read` 컬럼이 실재**하며 도메인 메서드 `markAsRead()` 가 있다 → 읽음/안읽음 상태 관리가 가능한 구조. (구 문서엔 "읽음 컬럼 없음"이라 되어 있었으나 현재는 컬럼이 존재함. 단, 읽음 처리 전용 API 는 아직 없음)
     - **SSE 연결(Emitter) 은 DB가 아닌 인메모리(`ConcurrentHashMap`)** 로 관리한다. 영속 대상은 알림 로그(`notifications`)와 상태 로그(`as_status_logs`) 뿐이다.
-    - Emitter 식별자(`emitterId`)는 `{userId}_{발급시각ms}` 형식 → **한 사용자(멀티탭/멀티기기)당 여러 Emitter** 허용.
+    - Emitter 식별자(`emitterId`)는 `{userId}_{UUID}` 형식 → **한 사용자(멀티탭/멀티기기)당 여러 Emitter** 허용. (구 문서엔 `{userId}_{ms}` 로 표기되어 있었으나 현재는 `UUID.randomUUID()` 사용. 단, 클라이언트로 내보내는 이벤트 ID(`eventId`)는 여전히 `{userId}_{ms}` 형식)
     - SSE의 이벤트 원천(source of truth)은 `as_status_logs` 이다. 상태 변경 시 **상태 로그를 먼저 기록한 뒤** 알림을 발송한다.
 
 ## 2. API 엔드포인트 명세
@@ -27,20 +27,23 @@
 - **설명**: 기사가 작업 단계(출발/도착/작업시작)를 변경하면, **동일 트랜잭션 내**에서 `as_status_logs` 를 기록하고 고객·대행사 대표에게 알림을 발송한다. (상태 변경 API 자체는 `EngineerTaskController` 소관)
 - **Path/Query**: `requestId`(Long), `@RequestParam AsStatus newStatus` (`ENGINEER_DEPARTED` / `ENGINEER_ARRIVED` / `IN_PROGRESS`)
 - **권한**: `role = ENGINEER` 만 허용(그 외 거부)
-- **트리거 흐름**: `AsRequestService.updateEngineerTaskStatus()` → 상태 가드 검증 → `AsStatusLog` 저장 → `notificationService.send(고객, ...)` + `send(대행사 대표, ...)`
+- **트리거 흐름**: `AsRequestService.updateEngineerTaskStatus()` → 상태 가드 검증 → `AsStatusLog` 저장 → 고객·대행사 대표에게 알림 발송. 알림 발송은 커밋 이후 이벤트 방식(`AsStatusNotificationEvent` → `@TransactionalEventListener(AFTER_COMMIT)` → `notificationService.send`)으로 처리하는 것이 현재 표준이다(아래 개선 #1 참조). *(상태 변경 API 자체는 타 도메인 담당 영역)*
 - **Response (200 OK)**: 상태 변경 결과 안내 문자열. 알림 발송은 부수 효과로 수행된다.
 
 ### (C) [내부 트리거] 보고서 제출/승인 — WorkReportService
 - **설명**: 작업 완료 보고서 제출(`POST /api/engineer/work-reports`) 및 고객 승인(`PATCH /api/engineer/work-reports/{reportId}/approve`) 시점에도 동일하게 `notificationService.send()` 로 알림을 발송한다. (보고서 흐름은 `workCompletionReport.md` 참조)
 
-### (D) [GET] /api/engineer/notifications - (권장, 현재 미구현)
-- **설명**: 사용자의 알림 발송 로그 목록을 최신순 조회한다. 가이드 STEP 7 알림 목록 화면 대응. **현재 소스에 엔드포인트 없음 — 추가 권장.**
-- **Response (200 OK)**: `List<NotificationResponse>`(type, title, body, channel, createdAt) — 정적 팩토리 `from()` 권장
+### (D) [GET] /api/engineer/notifications?type={type}&page={page}&size={size} - EngineerNotificationController.getNotifications ✨(구현됨)
+- **설명**: 기사 본인의 알림 수신함 목록을 페이징 조회한다(최신순, 타입 필터 지원). 가이드 STEP 7 알림 목록 화면 대응. (구 문서엔 "미구현/권장"으로 되어 있었으나 현재 구현 완료)
+- **Query Params**: `type`(String, 선택 — 빈 값이면 전체), `page`(int, 기본 0), `size`(int, 기본 10)
+- **Response (200 OK)**: `Page<NotificationResponse>`
+    - 각 항목 : `id`, `notificationId`(포맷 `NOT-yyyyMMdd-001`), `type`, `title`, `body`, `channel`, `createdAt`(포맷 `yyyy.MM.dd HH:mm`) — 정적 팩토리 `NotificationResponse.from()`
+    - 조회 쿼리 : `notificationRepository.findByUserIdAndTypeWithPaging(userId, filterType, pageable)`
 
 ## 3. 상세 처리 로직 (Pipeline)
 
 ### (A) 구독 — subscribe(userId, lastEventId)
-1. `emitterId = userId + "_" + System.currentTimeMillis()` 생성 후 `new SseEmitter(1시간)` 저장(`EmitterRepository.save`)
+1. `emitterId = userId + "_" + UUID.randomUUID()` 생성 후 `new SseEmitter(1시간)` 저장(`EmitterRepository.save`)
 2. **연결 종료 정리 콜백 3종** 등록 : `onCompletion` · `onTimeout` · `onError` → 각각 `deleteById(emitterId)` (dead emitter 누수 방지)
 3. **503 방지 더미 이벤트** : 구독 직후 `sendToClient(...)` 로 "EventStream Created" 1건 발송 (최초 연결 직후 데이터 미수신 시 브라우저가 503으로 처리하는 문제 방지)
 4. (개선 권장) `lastEventId` 가 존재하면 캐시에서 유실 이벤트 재전송 — **현재 TODO(미구현)**
@@ -52,19 +55,19 @@
 
 ### (C) 전송 — sendToClient(emitter, emitterId, eventId, data)
 - `emitter.send(event().id(eventId).name("sse").data(data))`
-- `IOException`(끊긴 연결) 발생 시 → `deleteById(emitterId)` 로 dead emitter 제거 + 에러 로그
+- **(✨변경) `Exception` 광범위 포착** — 끊긴 연결(`IOException`)뿐 아니라 완료/타임아웃 후 전송 시 발생하는 `IllegalStateException` 까지 잡아 `deleteById(emitterId)` 로 dead emitter 제거 + 에러 로그. (구 문서엔 `IOException` 만 처리한다고 되어 있었으나 현재는 넓게 포착 — 아래 개선 #3 반영 완료)
 
-### ⚠ 개선 권장 사항 (정합성·안정성)
-1. **[High] 커밋 이후 발송으로 분리** : 현재 알림 발송이 상태 변경 `@Transactional` **내부(커밋 전)** 에서 일어난다. 롤백 시 "고객은 푸시를 이미 받았는데 DB 는 변경되지 않은" 불일치가 생긴다. `ApplicationEventPublisher` + `@TransactionalEventListener(phase = AFTER_COMMIT)` 로 **커밋된 변경에 대해서만 발송**하도록 분리할 것 (알림 저장 실패가 본 작업을 롤백시키는 책임 분리 문제도 함께 해결).
-2. **[Med] eventCache 정리** : 캐시에 쌓되 읽지도 비우지도 않아(재전송 미구현) **무한 증가(메모리 누수)** 한다. Phase 1 에서는 캐시를 제거하거나, `Last-Event-ID` 재전송과 eviction 을 함께 구현할 것.
-3. **[Nit] 예외 범위** : `sendToClient` 가 `IOException` 만 처리한다. emitter 가 동시에 완료/타임아웃된 경우 `IllegalStateException` 도 발생할 수 있어 처리 범위를 넓히면 견고하다.
+### ✅ 개선 사항 적용 현황 (정합성·안정성)
+1. **[High] 커밋 이후 발송 분리 — 적용 완료** : 상태 변경/보고서 흐름은 `ApplicationEventPublisher.publishEvent(new AsStatusNotificationEvent(...))` 로 이벤트를 발행하고, `NotificationEventListener` 가 **`@TransactionalEventListener(phase = AFTER_COMMIT)` + `@Async`** 로 받아 `notificationService.send()` 를 호출한다. 즉 **트랜잭션 커밋 이후 비동기**로만 발송되어, 롤백 시 "푸시는 받았는데 DB 는 미변경" 불일치가 사라졌고 알림 실패가 본 작업을 롤백시키지 않는다. (예: `WorkReportService.submitWorkReport` 는 이 이벤트 방식을 사용)
+2. **[Med] eventCache 제거 — 적용 완료** : 무한 증가하던 이벤트 캐시 로직을 제거했다(`EmitterRepository` 는 Emitter 맵만 유지). 단, `Last-Event-ID` 기반 유실 이벤트 **재전송은 여전히 TODO**(현재 미구현) — 재연결 갭 보장이 필요하면 캐시 + eviction 을 함께 구현할 것.
+3. **[Nit] 예외 범위 확장 — 적용 완료** : `sendToClient` 가 `IOException` 뿐 아니라 `IllegalStateException` 등을 포함한 `Exception` 을 넓게 포착하도록 변경됨.
 
 ## 5. 예외 처리 (Error Handling) 및 제약 조건
 - 모든 에러 발생 시 공통 포맷(`{ "success": false, "message": "에러 내용" }`)으로 응답할 것. (프로젝트 공통 `ErrorResponse` + `GlobalExceptionHandler` 사용)
 - 상태 변경 API 는 `role = ENGINEER` 만 허용. 상태 전이는 직전 상태 가드로 검증(출발→도착→작업시작 순서 강제).
 - 구독은 인증 사용자만 가능(`@AuthenticationPrincipal`). 미인증 시 `401`.
 - SSE 전송 실패(끊긴 연결)는 **사용자 요청 실패로 전파하지 않고** 해당 Emitter 만 정리한다(알림은 best-effort).
-- (개선 적용 시) 알림 발송은 본 비즈니스 트랜잭션의 성패에 영향을 주지 않는다(AFTER_COMMIT).
+- **(적용 완료)** 알림 발송은 커밋 이후(`AFTER_COMMIT`) 비동기로 처리되어 본 비즈니스 트랜잭션의 성패에 영향을 주지 않는다.
 
 ## 6. 개발 및 출력 요구사항
 - 컨트롤러(`SseController`) · 서비스(`NotificationService`) · 리포지토리(`EmitterRepository`, `NotificationRepository`) · 엔티티(`Notification`) 레이어를 분리하여 구현할 것 (package-by-feature)

@@ -28,8 +28,20 @@
 - **Response (200 OK)**: `WorkReportDetailResponse`
 
 ### [PATCH] /api/engineer/work-reports/{reportId}/approve - WorkReportController.approveReport
-- **설명**: 작업 완료 보고서 고객 승인 (`customer_approved` 전환 → 결제 단계 진입). **호출 주체는 고객(CUSTOMER)** 이나 보고서 도메인 경로 하위에 위치한다(경로 재배치는 팀 협의 사항).
+- **설명**: 작업 완료 보고서 고객 승인 (`customer_approved` 전환 → 결제 단계 진입). **호출 주체는 고객(CUSTOMER)** 이나 보고서 도메인 경로 하위에 위치한다(경로 재배치는 팀 협의 사항). `@PreAuthorize("hasRole('CUSTOMER')")`.
 - **Response (200 OK)**: "작업 보고서가 성공적으로 승인되었습니다. 결제 단계로 이동합니다." 형식 문자열
+
+### [GET] /api/engineer/work-reports?page={page}&size={size} - WorkReportController.getWorkReports ✨(신규)
+- **설명**: 기사 본인의 작업 보고서 목록을 페이징 조회한다(`role=ENGINEER`). 배차(`AsAssignment`) 내역을 기준으로 보고서 유무·승인 여부에 따라 상태(`DRAFT`/`SUBMITTED`/`APPROVED`)를 매핑한다.
+- **Query Params**: `page`(int, 기본 `1` — 프론트는 1-base, 내부에서 `page-1` 로 변환), `size`(int, 기본 `20`)
+- **Response (200 OK)**: `Page<EngineerReportListResponse>`
+    - 각 항목 : `reportId`, `requestId`(포맷 `AS-yyyyMMdd-0001`), `customerName`, `productName`(브랜드+모델), `modelNo`, `workDate`(포맷 `yyyy.MM.dd (요일)`), `workTimeStart`, `workTimeEnd`(시작+2h), `status`(DRAFT/SUBMITTED/APPROVED), `diagnosisResult`, `finalAmount`, `submittedAt`, `approvedAt`
+    - 상태 매핑 : 보고서 없음 → `DRAFT`, 보고서 있고 미승인 → `SUBMITTED`, 고객 승인 완료 → `APPROVED`
+
+### [DELETE] /api/engineer/work-reports/{reportId}/approval-request - WorkReportController.cancelApprovalRequest ✨(신규)
+- **설명**: 기사가 제출한 보고서의 승인 요청을 취소한다(`role=ENGINEER`, 본인 작성 건만). A/S 상태를 `IN_PROGRESS` 로 되돌리고(`revertToInProgress`) 상태 로그를 남긴 뒤, **보고서를 물리 삭제**하고 진단서를 재동기화(`syncHealthCertificate`)한다. **이미 고객이 승인한 보고서는 취소 불가.**
+- **Path Variable**: `reportId`(Long)
+- **Response (200 OK)**: "보고서 승인 요청이 취소되었습니다." 형식 문자열
 
 ### 📦 WorkReportDetailResponse 필드 명세 (✨ 프론트 연동을 위해 확장됨)
 정적 팩토리는 `WorkReportDetailResponse.of(report, statusTimeMap)` 를 사용한다(구 `from()` 대체). `statusTimeMap` 은 해당 `requestId` 의 `as_status_logs` 를 `toStatus → createdAt` 으로 변환한 맵이다.
@@ -57,7 +69,7 @@
         - 전체 상태 흐름 : `PENDING → AGENCY_RECEIVED → ASSIGNED → ACCEPTED → IN_PROGRESS → COMPLETED → PAID`
         - 선행 전이는 배정 수락(`acceptAssignment()`: ASSIGNED→ACCEPTED), 작업 시작(`startWork()`: ACCEPTED→IN_PROGRESS)을 통해 이루어진다.
     - **보고서·부품 내역 영속화** : `work_reports` 및 `work_report_parts` 에 **Cascade** 동시 저장. 부품 단가는 `applied_unit_price` 에 스냅샷 저장(요청에 없으면 `repair_parts.base_unit_price` 사용).
-    - **건강 진단서 갱신 트리거** : 교체된 부품들 중 `repair_parts.importance` 기준 최고 중요도를 추출하여(없으면 `null`) `HealthCertificate.calculateAndUpdateHealth()` 호출. **상세 로직은 `healthCertificate.md` 참조.**
+    - **건강 진단서 갱신 트리거** : 보고서 저장·flush 직후 `syncHealthCertificate(asRequest.getAppliance())` 호출 → 해당 가전의 전체 보고서를 재집계하여 `HealthCertificate.recalculate(...)` 로 갱신(신규 시 INSERT). **상세 로직은 `healthCertificate.md` 참조.**
     - **상태 변경 로그 기록** : `as_status_logs` 에 `from_status(IN_PROGRESS)`, `to_status(COMPLETED)`, `memo` 기록 (SSE 원천·타임라인 출처).
     - **실시간 알림** : 고객·대행사 대표에게 완료 알림 발송 (SSE 상세는 `sseRealtimeTracking.md` 참조).
 3. **응답(Response) 단계** : HTTP `201`, 생성된 `reportId` 를 포함한 안내 문자열 반환
