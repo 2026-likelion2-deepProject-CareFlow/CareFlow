@@ -50,6 +50,20 @@ dependencies {
 tasks.named('test') {
 	useJUnitPlatform()
 
+	// JDK 21+에서 Mockito 인라인 모킹(byte-buddy)이 에이전트를 동적으로 self-attach 하는데,
+	// 기본 설정에서는 이게 막혀 MockitoInitializationException이 발생함 — 명시적으로 허용
+	jvmArgs '-XX:+EnableDynamicAgentLoading'
+
+	// Windows에서 사용자 홈 경로에 한글 등 비ASCII 문자가 포함되어 있으면
+	// java.io.tmpdir(기본 %TEMP%) 경로에 있는 byte-buddy 에이전트 jar를
+	// 네이티브 attach 호출이 제대로 읽지 못해 MockitoInitializationException이 발생함.
+	// 프로젝트 내부(ASCII 전용 경로)의 임시 디렉토리를 강제로 사용하도록 지정.
+	def testTmpDir = layout.buildDirectory.dir('tmp/test-tmp').get().asFile
+	doFirst {
+		testTmpDir.mkdirs()
+	}
+	systemProperty 'java.io.tmpdir', testTmpDir.absolutePath
+
 	// .env 파일(REDIS_PASSWORD 등)을 테스트 실행 환경변수로 주입 — 파일 없으면 무시(CI 등)
 	def envFile = rootProject.file('.env')
 	if (envFile.exists()) {
