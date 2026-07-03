@@ -27,7 +27,7 @@ public class EngineerSettlementResponse {
     private Integer agencyFee;
     // 기사 실수령액
     private Integer engineerNetAmount;
-    // PENDING | APPROVED | PAID | DISPUTED
+    // PENDING | PAID | DISPUTED
     private String status;
     private LocalDateTime createdAt;
 

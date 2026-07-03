@@ -1,5 +1,6 @@
 package com.careflow.agency.controller;
 
+import com.careflow.agency.dto.request.AgencyCustomerSearchRequest;
 import com.careflow.agency.dto.response.AgencyCustomerApplianceResponse;
 import com.careflow.agency.dto.response.AgencyCustomerAsRequestResponse;
 import com.careflow.agency.dto.response.AgencyCustomerListResponse;
@@ -25,12 +26,14 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.mockito.ArgumentCaptor;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.NoSuchElementException;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -114,13 +117,37 @@ class AgencyCustomerControllerTest {
         }
 
         @Test
-        @DisplayName("TC-C-4: 요청 바디 없이 호출해도 정상 동작")
-        void success_noRequestBody() throws Exception {
-            given(agencyCustomerService.searchCustomers(any(), any(), eq(null)))
+        @DisplayName("TC-C-4: 필터 쿼리 파라미터 없이 호출해도 정상 동작")
+        void success_noFilterParams() throws Exception {
+            given(agencyCustomerService.searchCustomers(any(), any(), any()))
                     .willReturn(sampleResponse());
 
             mockMvc.perform(get("/api/agency/customers?page=0&size=10"))
                     .andExpect(status().isOk());
+        }
+
+        @Test
+        @DisplayName("TC-C-5: keyword/status/joinedFrom/joinedTo 쿼리 파라미터가 Service 필터로 정확히 전달된다")
+        void success_filterQueryParamsPropagated() throws Exception {
+            given(agencyCustomerService.searchCustomers(any(), any(), any()))
+                    .willReturn(sampleResponse());
+
+            mockMvc.perform(get("/api/agency/customers")
+                            .param("keyword", "김민수")
+                            .param("status", "ACTIVE")
+                            .param("joinedFrom", "2024-01-01")
+                            .param("joinedTo", "2024-12-31"))
+                    .andExpect(status().isOk());
+
+            ArgumentCaptor<AgencyCustomerSearchRequest> captor =
+                    ArgumentCaptor.forClass(AgencyCustomerSearchRequest.class);
+            verify(agencyCustomerService).searchCustomers(any(), any(), captor.capture());
+
+            AgencyCustomerSearchRequest filter = captor.getValue();
+            assertThat(filter.keyword()).isEqualTo("김민수");
+            assertThat(filter.status()).isEqualTo("ACTIVE");
+            assertThat(filter.joinedFrom()).isEqualTo("2024-01-01");
+            assertThat(filter.joinedTo()).isEqualTo("2024-12-31");
         }
     }
 

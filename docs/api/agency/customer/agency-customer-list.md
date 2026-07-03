@@ -10,10 +10,10 @@
 ## 엔드포인트
 
 ```
-GET /api/agency/customers?page=0&size=10
+GET /api/agency/customers?keyword=&status=&grade=&joinPath=&joinedFrom=&joinedTo=&page=0&size=10
 ```
 
-> ⚠️ 본 API는 GET이지만 필터 조건을 `@RequestBody`로 전달받는다(프론트 요구사항). Spring MVC는 GET + RequestBody를 허용하므로 기능상 문제는 없으나, 향후 캐싱/프록시 호환성 이슈가 있을 수 있음을 인지하고 있을 것.
+> ⚠️ **변경 이력**: 최초 구현 시 필터 조건을 `@RequestBody`로 수신했으나(프론트 요구사항), GET 요청에 바디를 싣는 방식은 표준이 아니라 클라이언트/프록시 환경에 따라 안정적으로 전달되지 않는다는 프론트 피드백에 따라 **쿼리 파라미터 방식으로 변경**했다.
 
 ---
 
@@ -30,46 +30,31 @@ GET /api/agency/customers?page=0&size=10
 
 ### 쿼리 파라미터
 
-| 파라미터 | 타입 | 기본값 | 설명 |
-|---|---|---|---|
-| `page` | int | 0 | 페이지 번호 (0-base) |
-| `size` | int | 10 | 페이지 크기 |
-
-### 요청 바디 (`AgencyCustomerSearchRequest`)
-
-| 필드 | 타입 | 필수 | 설명 |
-|---|---|---|---|
-| `keyword` | String | N | 이름/연락처/이메일 부분 일치 검색 |
-| `status` | String | N | `ACTIVE` / `INACTIVE` / `SUSPENDED` (users.status) |
-| `grade` | String | N | `VIP`/`GOLD`/`SILVER`/`BRONZE`/`NORMAL` — **DB 미지원 필드(아래 "알려진 제약" 참고), 현재는 응답에 영향 없음** |
-| `joinPath` | String | N | `SOCIAL`/`WEB`/`APP` 등 — **DB 미지원 필드, 현재는 응답에 영향 없음** |
-| `joinedFrom` | String | N | 가입일 검색 시작 (`yyyy-MM-dd`) — `users.created_at >= joinedFrom 00:00:00` |
-| `joinedTo` | String | N | 가입일 검색 종료 (`yyyy-MM-dd`) — `users.created_at < joinedTo+1일 00:00:00` (해당일 포함) |
+| 파라미터 | 타입 | 필수 | 기본값 | 설명 |
+|---|---|---|---|---|
+| `page` | int | N | 0 | 페이지 번호 (0-base) |
+| `size` | int | N | 10 | 페이지 크기 |
+| `keyword` | String | N | - | 이름/연락처/이메일 부분 일치 검색 |
+| `status` | String | N | - | `ACTIVE` / `INACTIVE` / `SUSPENDED` (users.status) |
+| `grade` | String | N | - | `VIP`/`GOLD`/`SILVER`/`BRONZE`/`NORMAL` — **DB 미지원 필드(아래 "알려진 제약" 참고), 현재는 응답에 영향 없음** |
+| `joinPath` | String | N | - | `SOCIAL`/`WEB`/`APP` 등 — **DB 미지원 필드, 현재는 응답에 영향 없음** |
+| `joinedFrom` | String | N | - | 가입일 검색 시작 (`yyyy-MM-dd`) — `users.created_at >= joinedFrom 00:00:00` |
+| `joinedTo` | String | N | - | 가입일 검색 종료 (`yyyy-MM-dd`) — `users.created_at < joinedTo+1일 00:00:00` (해당일 포함) |
 
 ### 요청 예시
 
 ```
-GET /api/agency/customers?page=0&size=10
+GET /api/agency/customers?keyword=김민수&status=ACTIVE&joinedFrom=2024-01-01&joinedTo=2024-12-31&page=0&size=10
 Authorization: Bearer {access_token}
-Content-Type: application/json
-
-{
-  "keyword": "김민수",
-  "status": "ACTIVE",
-  "grade": null,
-  "joinPath": null,
-  "joinedFrom": "2024-01-01",
-  "joinedTo": "2024-12-31"
-}
 ```
 
-바디 생략(빈 객체 `{}` 또는 미전송) 시 전체 조회.
+필터 쿼리 파라미터 생략 시 전체 조회.
 
 ---
 
 ## 알려진 제약 (구현 전 반드시 인지할 것)
 
-- 현재 `users` 테이블에는 `grade`, `join_path` 컬럼이 **존재하지 않는다** (`sql/CareFlow_DDL_v10.sql` 확인 필요).
+- 현재 `users` 테이블에는 `grade`, `join_path` 컬럼이 **존재하지 않는다** (`sql/CareFlow_DDL_v11.sql` 확인 필요).
 - 따라서 이번 구현에서는 `grade`/`joinPath`를 `AgencyCustomerSearchRequest`에 필드로는 유지하되(프론트 계약 유지), **서비스 로직에서는 필터 조건으로 사용하지 않는다.**
 - 추후 DB 마이그레이션으로 두 컬럼이 추가되면 `AgencyCustomerService.searchCustomers()`의 Repository 쿼리에 조건을 추가해야 한다.
 - 이 사실을 코드 내 한글 주석으로 명시한다.
@@ -224,4 +209,5 @@ Content-Type: application/json
 - TC-C-1. 인증된 AGENCY 역할 — 200 OK + 응답 JSON 구조(stats/content/totalElements 등) 검증
 - TC-C-2. 인증 없음(anonymous) — 401
 - TC-C-3. page/size 쿼리 파라미터 기본값 적용 검증(미전달 시 page=0, size=10으로 Service 호출)
-- TC-C-4. 요청 바디 없이 호출 시에도 정상 동작(빈 필터로 처리)
+- TC-C-4. 필터 쿼리 파라미터 없이 호출 시에도 정상 동작(빈 필터로 처리)
+- TC-C-5. keyword/status/joinedFrom/joinedTo 쿼리 파라미터가 Service 필터로 정확히 전달되는지 검증

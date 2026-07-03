@@ -194,10 +194,9 @@ public class AgencySettlementService {
     /**
      * 정산 상태 변경 (PATCH /api/agency/settlements/{settlementId}/status)
      *
-     * 전이 규칙:
+     * 전이 규칙 ([DDL v11] APPROVED 제거 — 월초 일괄 승인 단계가 상태 전이 없이 바로 지급으로 이어짐):
      *   - PAID 상태이면 어떤 변경도 불가
-     *   - PAID 로 변경하려면 현재 상태가 반드시 APPROVED 이어야 함
-     *   - 그 외(PENDING↔APPROVED↔DISPUTED 간 전이)는 허용
+     *   - 그 외(PENDING↔DISPUTED 간 전이, PENDING/DISPUTED → PAID)는 자유롭게 허용
      * 소속 대행사 검증: 요청자의 agencyId 와 정산의 agencyId 가 일치해야 함
      */
     @Transactional
@@ -226,14 +225,8 @@ public class AgencySettlementService {
             throw new IllegalStateException("지급 완료된 정산은 상태를 변경할 수 없습니다.");
         }
 
-        // PAID 로의 전이는 APPROVED 에서만 허용
-        if ("PAID".equals(target) && !"APPROVED".equals(current)) {
-            throw new IllegalStateException("지급 완료 처리는 승인(APPROVED) 상태에서만 가능합니다.");
-        }
-
         // 도메인 메서드로 상태 전이 (더티 체킹으로 UPDATE)
         switch (target) {
-            case "APPROVED"  -> settlement.approve();
             case "PAID"      -> settlement.markPaid();
             case "DISPUTED"  -> settlement.dispute();
             case "PENDING"   -> settlement.revertToPending();

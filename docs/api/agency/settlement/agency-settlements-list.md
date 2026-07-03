@@ -10,10 +10,10 @@
 ## 엔드포인트
 
 ```
-GET /api/agency/settlements?page=0&size=10
+GET /api/agency/settlements?status=&keyword=&dateFrom=&dateTo=&page=0&size=10
 ```
 
-> ⚠️ 본 API는 GET이지만 필터 조건을 `@RequestBody`로 전달받는다(프론트 요구사항 — `GET /api/agency/reviews`와 동일 패턴).
+> ⚠️ **변경 이력**: 최초 구현 시 필터 조건(status/keyword/dateFrom/dateTo)을 `@RequestBody`로 수신하도록 설계했으나(`GET /api/agency/reviews`와 동일 패턴), GET 요청에 바디를 싣는 방식은 표준이 아니라 클라이언트/프록시 환경에 따라 안정적으로 전달되지 않는다는 프론트 피드백에 따라 **쿼리 파라미터 방식으로 변경**했다.
 
 ---
 
@@ -30,42 +30,29 @@ GET /api/agency/settlements?page=0&size=10
 
 ### 쿼리 파라미터
 
-| 파라미터 | 타입 | 기본값 | 설명 |
-|---|---|---|---|
-| `page` | int | 0 | 페이지 번호 (0-base) |
-| `size` | int | 10 | 페이지 크기 |
+| 파라미터 | 타입 | 필수 | 기본값 | 설명 |
+|---|---|---|---|---|
+| `page` | int | N | 0 | 페이지 번호 (0-base) |
+| `size` | int | N | 10 | 페이지 크기 |
+| `status` | String | N | 전체 | `PENDING` / `PAID` / `DISPUTED`, 생략 시 전체 |
+| `keyword` | String | N | - | 기사명 부분 일치 검색 (숫자만 입력 시 정산 ID 정확 일치로 자동 분기 — 서비스 레이어 처리) |
+| `dateFrom` | String | N | - | 정산 생성일 검색 시작 (`yyyy-MM-dd`) |
+| `dateTo` | String | N | - | 정산 생성일 검색 종료 (`yyyy-MM-dd`), 해당일 포함 |
 
-### 요청 바디 (`AgencySettlementSearchRequest`)
-
-| 필드 | 타입 | 필수 | 설명 |
-|---|---|---|---|
-| `status` | String | N | `PENDING` / `APPROVED` / `PAID` / `DISPUTED`, null이면 전체 |
-| `keyword` | String | N | 기사명 부분 일치 검색 |
-| `dateFrom` | String | N | 정산 생성일 검색 시작 (`yyyy-MM-dd`) |
-| `dateTo` | String | N | 정산 생성일 검색 종료 (`yyyy-MM-dd`), 해당일 포함 |
-
-바디 생략 시 전체 조회.
+필터 파라미터 생략 시 전체 조회.
 
 ### 요청 예시
 
 ```
-GET /api/agency/settlements?page=0&size=10
+GET /api/agency/settlements?status=PAID&keyword=김현수&dateFrom=2024-06-01&dateTo=2024-06-30&page=0&size=10
 Authorization: Bearer {access_token}
-Content-Type: application/json
-
-{
-  "status": "PAID",
-  "keyword": "김현수",
-  "dateFrom": "2024-06-01",
-  "dateTo": "2024-06-30"
-}
 ```
 
 ---
 
 ## 알려진 제약 (구현 전 반드시 인지할 것)
 
-- **`status` 값 불일치**: 프론트 mock은 `SUCCESS/READY/FAILED/CANCELLED`를 사용하지만 DB `settlements.status`는 `PENDING/APPROVED/PAID/DISPUTED`이다. 백엔드 API는 DB 값 기준으로 요청/응답하며, 프론트가 매핑 테이블을 별도로 유지한다.
+- **`status` 값 불일치**: 프론트 mock은 `SUCCESS/READY/FAILED/CANCELLED`를 사용하지만 DB `settlements.status`는 [DDL v11] `PENDING/PAID/DISPUTED`(APPROVED 제거)이다. 백엔드 API는 DB 값 기준으로 요청/응답하며, 프론트가 매핑 테이블을 별도로 유지한다.
 - **`period` 파생 필드**: `settlements` 테이블에 기간 컬럼이 없다. `periodStart` = `created_at` 월의 1일, `periodEnd` = `created_at` 월의 마지막 날로 파생한다. 추후 DB 마이그레이션 시 수정 가능.
 - **`completedCount`**: 1건의 settlement = 1건의 A/S 작업이므로 항상 1로 반환한다.
 - **`type`**: 현재 `settlements` 테이블은 기사(ENGINEER) 단위 정산만 지원하므로 항상 `"ENGINEER"`로 반환한다. AGENCY 타입 정산은 미구현이다.
@@ -125,7 +112,7 @@ Content-Type: application/json
 |---|---|---|
 | `stats.thisMonthGrossAmount` | long | 이번 달 전체 정산 총액 합계 (status 무관) |
 | `stats.paidAmount` | long | 이번 달 PAID 상태 gross_amount 합계 |
-| `stats.pendingAmount` | long | 이번 달 PENDING+APPROVED 상태 gross_amount 합계 |
+| `stats.pendingAmount` | long | 이번 달 PENDING 상태 gross_amount 합계 |
 | `stats.disputedAmount` | long | 이번 달 DISPUTED 상태 gross_amount 합계 |
 | `stats.thisMonthCount` | long | 이번 달 생성된 정산 건수 |
 | `stats.prevMonthCountDiff` | long | 이번 달 건수 - 전월 건수 |
@@ -145,7 +132,7 @@ Content-Type: application/json
 | `content[].agencyFeeRate` | BigDecimal | 대행사 수수료율 스냅샷 (%) |
 | `content[].agencyFee` | int | 대행사 수수료 (원) |
 | `content[].engineerNetAmount` | int | 기사 실수령액 (원) |
-| `content[].status` | String | `PENDING` / `APPROVED` / `PAID` / `DISPUTED` |
+| `content[].status` | String | `PENDING` / `PAID` / `DISPUTED` |
 | `content[].settledAt` | LocalDateTime | 지급 일시 (`settlements.paid_at`, null 가능) |
 | `content[].payMethod` | String | 지급 방식 — **미구현, 항상 null** (미래 bank_accounts 테이블 예정) |
 | `content[].bankAccount` | String | 지급 계좌 — **미구현, 항상 null** (미래 bank_accounts 테이블 예정) |
@@ -213,7 +200,7 @@ Content-Type: application/json
 - TC-I-5. 페이징 — 11건 INSERT 후 size=10 조회 시 1페이지 10건, totalPages=2
 - TC-I-6. stats 이번 달/전월 분리 — 이번 달 생성 정산만 thisMonthCount에 반영
 - TC-I-7. periodStart/periodEnd — H2 실제 INSERT 후 createdAt 월의 1일/말일로 정확히 파생
-- TC-I-8. pendingAmount — PENDING+APPROVED 합산이 stats에 정확히 반영
+- TC-I-8. pendingAmount — PENDING 합산이 stats에 정확히 반영 ([DDL v11] APPROVED 제거)
 
 ### JUnit 5 컨트롤러 테스트 (`@WebMvcTest`)
 
@@ -223,4 +210,5 @@ Content-Type: application/json
 - TC-C-1. 인증된 AGENCY — 200 OK, 응답 JSON 구조 검증 (stats/content/totalElements)
 - TC-C-2. 인증 없음 — 401
 - TC-C-3. page/size 기본값 검증 (미전달 시 page=0, size=10)
-- TC-C-4. 요청 바디 없이 호출해도 정상 동작
+- TC-C-4. 필터 쿼리 파라미터 없이 호출해도 정상 동작
+- TC-C-5. status/keyword/dateFrom/dateTo 쿼리 파라미터가 Service 필터로 정확히 전달되는지 검증

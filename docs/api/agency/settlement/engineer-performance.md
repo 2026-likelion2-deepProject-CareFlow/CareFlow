@@ -92,7 +92,7 @@ Authorization: Bearer {accessToken}
 | `settlements[].agencyFeeRate` | BigDecimal | 대행사 수수료율 (%) 스냅샷 |
 | `settlements[].agencyFee` | int | 대행사 수수료 (원) |
 | `settlements[].engineerNetAmount` | int | 기사 실지급액 (원) |
-| `settlements[].status` | String | `PENDING` / `PAID` / `APPROVED` / `DISPUTED` |
+| `settlements[].status` | String | `PENDING` / `PAID` / `DISPUTED` |
 | `settlements[].settledAt` | LocalDateTime | 지급 완료 일시 (null: 미지급) |
 | `totalElements` | long | 필터 적용 후 전체 건수 |
 | `totalPages` | int | 전체 페이지 수 |

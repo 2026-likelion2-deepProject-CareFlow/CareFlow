@@ -76,12 +76,15 @@ public class Settlement {
     private Integer engineerNetAmount;
 
     // columnDefinition 삭제하지 말아주세요(H2 DB 테스트에 필요)
+    // [DDL v11] APPROVED 제거 — 월초 일괄 승인 단계가 상태 전이 없이 바로 지급으로 이어져 실익 없음
     @Column(name = "status", nullable = false, length = 20,
-            columnDefinition = "ENUM('PENDING','APPROVED','PAID','DISPUTED') DEFAULT 'PENDING'")
+            columnDefinition = "ENUM('PENDING','PAID','DISPUTED') DEFAULT 'PENDING'")
     private String status = "PENDING";
 
-    @Column(name = "approved_at")
-    private LocalDateTime approvedAt;
+    // [DDL v11 신규] 이 건의 platform_fee가 집계된 월별 대행사→플랫폼 정산 (집계 전 NULL)
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "platform_settlement_id", nullable = true)
+    private PlatformSettlement platformSettlement;
 
     @Column(name = "paid_at")
     private LocalDateTime paidAt;
@@ -127,13 +130,7 @@ public class Settlement {
                 .build();
     }
 
-    // 정산 승인 처리 — 더티 체킹으로 UPDATE
-    public void approve() {
-        this.status = "APPROVED";
-        this.approvedAt = LocalDateTime.now();
-    }
-
-    // 기사 지급 완료 처리 — APPROVED 상태에서만 호출 가능, 더티 체킹으로 UPDATE
+    // 기사 지급 완료 처리 — [DDL v11] PENDING/DISPUTED 상태에서 바로 호출 가능(APPROVED 경유 불필요), 더티 체킹으로 UPDATE
     public void markPaid() {
         this.status = "PAID";
         this.paidAt = LocalDateTime.now();
@@ -147,5 +144,10 @@ public class Settlement {
     // 지급 대기로 복귀 (DISPUTED → PENDING 재검토) — 더티 체킹으로 UPDATE
     public void revertToPending() {
         this.status = "PENDING";
+    }
+
+    // [DDL v11 신규] 월초 배치 Job이 platform_settlements 1건을 생성하며 이 건의 집계 소속을 채움
+    public void assignPlatformSettlement(PlatformSettlement platformSettlement) {
+        this.platformSettlement = platformSettlement;
     }
 }

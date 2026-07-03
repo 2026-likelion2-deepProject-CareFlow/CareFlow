@@ -1,5 +1,6 @@
 package com.careflow.agency.controller;
 
+import com.careflow.agency.dto.request.AgencyReviewSearchRequest;
 import com.careflow.agency.dto.response.AgencyReviewListResponse;
 import com.careflow.agency.service.AgencyReviewService;
 import com.careflow.auth.security.CustomOAuth2UserService;
@@ -24,10 +25,12 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.mockito.ArgumentCaptor;
 
 import java.time.LocalDateTime;
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -119,13 +122,41 @@ class AgencyReviewControllerTest {
         }
 
         @Test
-        @DisplayName("TC-C-4: 요청 바디 없이 호출해도 정상 동작")
-        void success_noRequestBody() throws Exception {
+        @DisplayName("TC-C-4: 필터 쿼리 파라미터 없이 호출해도 정상 동작")
+        void success_noFilterParams() throws Exception {
             given(agencyReviewService.getReviews(any(), any(), any()))
                     .willReturn(sampleResponse());
 
             mockMvc.perform(get("/api/agency/reviews?page=0&size=10"))
                     .andExpect(status().isOk());
+        }
+
+        @Test
+        @DisplayName("TC-C-5: rating/engineerId/isVisible/dateFrom/dateTo/keyword 쿼리 파라미터가 Service 필터로 정확히 전달된다")
+        void success_filterQueryParamsPropagated() throws Exception {
+            given(agencyReviewService.getReviews(any(), any(), any()))
+                    .willReturn(sampleResponse());
+
+            mockMvc.perform(get("/api/agency/reviews")
+                            .param("rating", "5")
+                            .param("engineerId", "123")
+                            .param("isVisible", "true")
+                            .param("dateFrom", "2024-01-01")
+                            .param("dateTo", "2024-12-31")
+                            .param("keyword", "김민수"))
+                    .andExpect(status().isOk());
+
+            ArgumentCaptor<AgencyReviewSearchRequest> captor =
+                    ArgumentCaptor.forClass(AgencyReviewSearchRequest.class);
+            verify(agencyReviewService).getReviews(any(), captor.capture(), any());
+
+            AgencyReviewSearchRequest filter = captor.getValue();
+            assertThat(filter.getRating()).isEqualTo(5);
+            assertThat(filter.getEngineerId()).isEqualTo(123L);
+            assertThat(filter.getIsVisible()).isTrue();
+            assertThat(filter.getDateFrom()).isEqualTo("2024-01-01");
+            assertThat(filter.getDateTo()).isEqualTo("2024-12-31");
+            assertThat(filter.getKeyword()).isEqualTo("김민수");
         }
     }
 }

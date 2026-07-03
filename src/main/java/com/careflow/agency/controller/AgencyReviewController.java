@@ -11,8 +11,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 /**
@@ -28,21 +28,24 @@ public class AgencyReviewController {
 
     /**
      * 대행사 리뷰 목록 조회
-     * GET /api/agency/reviews?page=0&size=10
+     * GET /api/agency/reviews?rating=&engineerId=&isVisible=&dateFrom=&dateTo=&keyword=&page=0&size=10
      *
-     * - 필터 조건(rating/engineerId/isVisible/dateFrom/dateTo/keyword)은 RequestBody 로 수신
-     * - 바디 생략 시 전체 조회로 처리
+     * - 필터 조건(rating/engineerId/isVisible/dateFrom/dateTo/keyword)은 쿼리 파라미터로 수신
+     * - 파라미터 생략 시 전체 조회로 처리
      */
     @GetMapping
     public ResponseEntity<AgencyReviewListResponse> getReviews(
             @AuthenticationPrincipal CustomUserDetails userDetails,
-            @RequestBody(required = false) AgencyReviewSearchRequest filter,
+            @RequestParam(required = false) Integer rating,
+            @RequestParam(required = false) Long engineerId,
+            @RequestParam(required = false) Boolean isVisible,
+            @RequestParam(required = false) String dateFrom,
+            @RequestParam(required = false) String dateTo,
+            @RequestParam(required = false) String keyword,
             @PageableDefault(size = 10) Pageable pageable) throws IllegalAccessException {
 
-        // 바디 미전송 시 빈 필터로 처리
-        if (filter == null) {
-            filter = new AgencyReviewSearchRequest();
-        }
+        AgencyReviewSearchRequest filter =
+                new AgencyReviewSearchRequest(rating, engineerId, isVisible, dateFrom, dateTo, keyword);
 
         return ResponseEntity.ok(agencyReviewService.getReviews(userDetails, filter, pageable));
     }

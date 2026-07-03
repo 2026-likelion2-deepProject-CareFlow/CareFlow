@@ -90,6 +90,8 @@ class AgencyAsRequestServiceTest {
             assertThat(result).hasSize(1);
             assertThat(result.get(0).requestId()).isEqualTo(REQUEST_ID);
             assertThat(result.get(0).status()).isEqualTo(AsStatus.ASSIGNED);
+            assertThat(result.get(0).brand()).isEqualTo("삼성");
+            assertThat(result.get(0).modelName()).isEqualTo("Q9000");
         }
 
         @Test

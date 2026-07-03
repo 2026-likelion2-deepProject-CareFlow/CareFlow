@@ -24,6 +24,8 @@
   | status | AsStatus | 요청 상태 (PENDING 제외, COMPLETED 제외) |
   | customerName | String | 신청 고객명 |
   | customerPhone | String | 고객 연락처 |
+  | brand | String | 가전 브랜드 (목록 화면 "제품 정보" 컬럼 표시용, 프론트 피드백 반영) |
+  | modelName | String | 가전 모델명 (위와 동일 목적) |
   | symptomName | String | 증상명 (한글) |
   | symptomDesc | String | 증상 상세 설명 |
   | visitRegionName | String | 방문 지역명 |
@@ -97,7 +99,7 @@
    - `as_requests` 테이블에서 `agency_id = 현재_대행사_id` AND `status != COMPLETED` 조건으로 조회
    - 필터링 조회 시: 추가로 `scheduledDate = date` (date 파라미터 존재 시), `status = 요청_상태` (status 파라미터 존재 시) 조건 적용
    - status 파라미터로 COMPLETED가 전달된 경우 서비스 레이어에서 빈 리스트 반환
-   - N+1 방지를 위해 symptom, customer, visitRegion JOIN FETCH 사용
+   - N+1 방지를 위해 symptom, customer, appliance, visitRegion JOIN FETCH 사용
 3. **응답(Response) 단계**
    - 결과 있음 → 200 OK + `List<AgencyAsRequestListResponse>`
    - 결과 없음 → 204 No Content

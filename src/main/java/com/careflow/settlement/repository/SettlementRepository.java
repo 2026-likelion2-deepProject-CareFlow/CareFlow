@@ -62,7 +62,7 @@ public interface SettlementRepository extends JpaRepository<Settlement, Long> {
 
     /**
      * 특정 대행사의 해당 월 정산 합산 집계
-     * - createdAt 범위 기준으로 전체 status 포함 집계 (PENDING/APPROVED/PAID/DISPUTED 모두)
+     * - createdAt 범위 기준으로 전체 status 포함 집계 ([DDL v11] PENDING/PAID/DISPUTED 모두, APPROVED 제거)
      * - CASE WHEN 으로 상태별 gross 합산 분리 (UI 통계카드 대응)
      * - 전체 합산을 DB 레벨에서 한 번에 처리
      */
@@ -70,7 +70,7 @@ public interface SettlementRepository extends JpaRepository<Settlement, Long> {
             SELECT COUNT(s.id) AS totalCount,
                    COALESCE(SUM(s.grossAmount), 0) AS totalGrossAmount,
                    COALESCE(SUM(CASE WHEN s.status = 'PAID' THEN s.grossAmount ELSE 0 END), 0) AS paidAmount,
-                   COALESCE(SUM(CASE WHEN s.status IN ('PENDING','APPROVED') THEN s.grossAmount ELSE 0 END), 0) AS pendingAmount,
+                   COALESCE(SUM(CASE WHEN s.status = 'PENDING' THEN s.grossAmount ELSE 0 END), 0) AS pendingAmount,
                    COALESCE(SUM(CASE WHEN s.status = 'DISPUTED' THEN s.grossAmount ELSE 0 END), 0) AS disputedAmount,
                    COALESCE(SUM(s.platformFee), 0) AS totalPlatformFee,
                    COALESCE(SUM(s.agencyFee), 0) AS totalAgencyFee,
@@ -87,7 +87,7 @@ public interface SettlementRepository extends JpaRepository<Settlement, Long> {
 
     /**
      * 특정 기사(engineer)의 해당 기간 정산 합산 집계 — 기사 대시보드 실적/정산 요약(GET /api/engineer/settlements/summary)용.
-     * - createdAt 범위 기준, 전체 status 포함(PENDING/APPROVED/PAID/DISPUTED)
+     * - createdAt 범위 기준, 전체 status 포함([DDL v11] PENDING/PAID/DISPUTED, APPROVED 제거)
      * - settlements 테이블에 저장된 실제 스냅샷 컬럼(grossAmount·platformFee·agencyFee·engineerNetAmount)을 그대로 합산
      *   → 하드코딩 수수료율(10%/5%) 대신 정산 시점의 실제 값을 사용하며, net = gross - platform - agency 로 정합.
      * - agency 용 findMonthlySummary 와 동일한 MonthlySummaryProjection 을 재사용(모수만 engineer 로 교체).
@@ -96,7 +96,7 @@ public interface SettlementRepository extends JpaRepository<Settlement, Long> {
             SELECT COUNT(s.id) AS totalCount,
                    COALESCE(SUM(s.grossAmount), 0) AS totalGrossAmount,
                    COALESCE(SUM(CASE WHEN s.status = 'PAID' THEN s.grossAmount ELSE 0 END), 0) AS paidAmount,
-                   COALESCE(SUM(CASE WHEN s.status IN ('PENDING','APPROVED') THEN s.grossAmount ELSE 0 END), 0) AS pendingAmount,
+                   COALESCE(SUM(CASE WHEN s.status = 'PENDING' THEN s.grossAmount ELSE 0 END), 0) AS pendingAmount,
                    COALESCE(SUM(CASE WHEN s.status = 'DISPUTED' THEN s.grossAmount ELSE 0 END), 0) AS disputedAmount,
                    COALESCE(SUM(s.platformFee), 0) AS totalPlatformFee,
                    COALESCE(SUM(s.agencyFee), 0) AS totalAgencyFee,
@@ -176,14 +176,14 @@ public interface SettlementRepository extends JpaRepository<Settlement, Long> {
 
     /**
      * 대행사 정산 통계 집계 (stats 용, 특정 기간)
-     * - 전체 건수 / 총 gross_amount / PAID 합계 / PENDING+APPROVED 합계 / DISPUTED 합계
+     * - 전체 건수 / 총 gross_amount / PAID 합계 / PENDING 합계 / DISPUTED 합계 ([DDL v11] APPROVED 제거)
      * - result.get(0): Object[] { count, totalGross, paidGross, pendingGross, disputedGross }
      */
     @Query("""
             SELECT COUNT(s),
                    COALESCE(SUM(s.grossAmount), 0L),
                    COALESCE(SUM(CASE WHEN s.status = 'PAID'     THEN s.grossAmount ELSE 0 END), 0L),
-                   COALESCE(SUM(CASE WHEN s.status IN ('PENDING','APPROVED') THEN s.grossAmount ELSE 0 END), 0L),
+                   COALESCE(SUM(CASE WHEN s.status = 'PENDING'  THEN s.grossAmount ELSE 0 END), 0L),
                    COALESCE(SUM(CASE WHEN s.status = 'DISPUTED' THEN s.grossAmount ELSE 0 END), 0L)
             FROM Settlement s
             WHERE s.agency.id = :agencyId

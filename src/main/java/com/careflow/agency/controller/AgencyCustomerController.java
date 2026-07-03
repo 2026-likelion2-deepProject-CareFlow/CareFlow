@@ -15,8 +15,8 @@ import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
@@ -33,16 +33,24 @@ public class AgencyCustomerController {
     private final AgencyCustomerService agencyCustomerService;
 
     /**
-     * [GET] /api/agency/customers?page=0&size=10
+     * [GET] /api/agency/customers?keyword=&status=&grade=&joinPath=&joinedFrom=&joinedTo=&page=0&size=10
      * 본인 대행사 소속 기사에게 COMPLETED 서비스를 1회 이상 받은 고객 목록을 검색/페이징 조회한다.
-     * - 요청 바디(keyword/status/grade/joinPath/joinedFrom/joinedTo)는 선택 — 미전송 시 전체 조회
+     * - 필터 조건(keyword/status/grade/joinPath/joinedFrom/joinedTo)은 쿼리 파라미터로 수신 — 전부 선택, 미전달 시 전체 조회
      * - role != AGENCY → Security 설정에서 403/401 처리
      */
     @GetMapping
     public ResponseEntity<AgencyCustomerListResponse> getCustomers(
             @PageableDefault(page = 0, size = 10) Pageable pageable,
-            @RequestBody(required = false) AgencyCustomerSearchRequest request,
+            @RequestParam(required = false) String keyword,
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String grade,
+            @RequestParam(required = false) String joinPath,
+            @RequestParam(required = false) String joinedFrom,
+            @RequestParam(required = false) String joinedTo,
             @AuthenticationPrincipal CustomUserDetails userDetails) throws IllegalAccessException {
+
+        AgencyCustomerSearchRequest request =
+                new AgencyCustomerSearchRequest(keyword, status, grade, joinPath, joinedFrom, joinedTo);
 
         AgencyCustomerListResponse response =
                 agencyCustomerService.searchCustomers(userDetails, pageable, request);

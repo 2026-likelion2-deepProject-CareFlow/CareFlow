@@ -212,7 +212,7 @@ class EngineerStep2And3IntegrationTest {
                         42500
                 )
         );
-        settlement.approve();
+        settlement.markPaid();
         settlementRepository.flush();
 
         engineerToken = jwtProvider.generateAccessToken(
@@ -246,6 +246,6 @@ class EngineerStep2And3IntegrationTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.content[0].grossAmount").value(50000))
                 .andExpect(jsonPath("$.content[0].engineerNetAmount").value(42500))
-                .andExpect(jsonPath("$.content[0].status").value("APPROVED"));
+                .andExpect(jsonPath("$.content[0].status").value("PAID"));
     }
 }

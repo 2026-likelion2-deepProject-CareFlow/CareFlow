@@ -51,10 +51,9 @@ Authorization: Bearer {accessToken}
 
 ## 알려진 제약 (구현 전 반드시 인지할 것)
 
-- **상태 전이 범위 (중요한 설계 결정)**: `settlements.status`는 기존에 `PENDING → APPROVED → PAID`(또는 `DISPUTED`) 4단계 상태 머신을 가지며, `AgencySettlementService.updateStatus()`는 AGENCY가 **본인 대행사 정산 건**을 이 4단계로 세밀하게 관리하는 데 사용된다.
-  본 Admin API는 이와는 **관점이 다른 별도의 액션**이다 — "CareFlow가 대행사에 정산금을 실제로 송금했다"는 이벤트를 나타내며, 프론트 UI(`AdminSettlementPage.jsx`)에도 `PENDING → PAID` 단일 전이만 존재하고 `APPROVED` 중간 상태는 노출되지 않는다.
-  따라서 본 API는 대상 월의 해당 대행사 정산 중 **`PAID`가 아닌 모든 건**(`PENDING`/`APPROVED`/`DISPUTED`)을 `Settlement.markPaid()`를 호출해 **직접 `PAID`로 전이**시킨다 (`APPROVED` 상태를 반드시 거쳐야 한다는 제약을 admin 승인 경로에서는 적용하지 않는다).
-  > 이 설계가 실제 운영 요구사항과 다르다면(예: DISPUTED 건은 admin이 임의로 PAID 처리하면 안 됨 등) 추후 조정이 필요할 수 있으므로, PR 시 리뷰어에게 이 결정을 명시적으로 알린다.
+- **상태 전이 범위**: [DDL v11]에서 `settlements.status` ENUM이 실제로 `PENDING → PAID`(또는 `DISPUTED`) 3단계로 재정비되어 `APPROVED`가 완전히 제거됐다 — "월초 일괄 승인 단계가 상태 전이 없이 바로 지급으로 이어지는 구조라 APPROVED가 별도 상태로 존재할 실익이 없다"는 DDL 변경 사유가 이 Admin API 설계 의도와 정확히 일치한다.
+  본 API는 대상 월의 해당 대행사 정산 중 **`PAID`가 아닌 모든 건**(`PENDING`/`DISPUTED`)을 `Settlement.markPaid()`를 호출해 **직접 `PAID`로 전이**시킨다.
+  > DISPUTED 건까지 admin이 일괄 PAID 처리하는 것이 실제 운영 요구사항과 다르다면(예: DISPUTED는 별도 검토 후 처리해야 함 등) 추후 조정이 필요할 수 있으므로, PR 시 리뷰어에게 이 결정을 명시적으로 알린다.
 - **멱등성**: 이미 전부 `PAID`인 경우(미지급 건 0개)에도 에러 없이 200 OK를 반환한다 (버튼 중복 클릭·재요청에 안전).
 - **`paidAt` 값**: 처리 시점의 `LocalDateTime.now()`로 일괄 설정한다 (건별로 시각이 약간씩 달라질 수 있음 — 정밀한 동시성 제어가 필요한 도메인이 아니므로 허용).
 - **더티 체킹 사용**: 벌크 JPQL UPDATE가 아니라 엔티티를 조회해 `Settlement.markPaid()` 도메인 메서드를 호출하고 트랜잭션 커밋 시점에 더티 체킹으로 반영한다 (CLAUDE.md 컨벤션 — Setter 대신 도메인 메서드로 상태 변경).
@@ -107,7 +106,7 @@ Authorization: Bearer {accessToken}
 
 **파일**: `src/test/java/com/careflow/admin/service/AdminSettlementServiceTest.java` (⑨ 전용 `@Nested` 그룹)
 
-- TC-1. 정상 승인 — 미지급 정산 3건(PENDING/APPROVED/DISPUTED 혼합) → 전부 `markPaid()` 호출 검증(Mockito verify)
+- TC-1. 정상 승인 — 미지급 정산 3건(PENDING/DISPUTED 혼합) → 전부 `markPaid()` 호출 검증(Mockito verify)
 - TC-2. role이 ADMIN이 아닌 경우 → `IllegalAccessException`
 - TC-3. 존재하지 않는 agencyId → `NoSuchElementException`
 - TC-4. month가 0 또는 13 → `IllegalArgumentException`

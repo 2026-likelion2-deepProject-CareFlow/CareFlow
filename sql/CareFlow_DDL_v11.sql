@@ -1,8 +1,26 @@
 -- ============================================================
--- CareFlow DDL v10
--- DB명세서 v24 기준 / 모든 FK를 CREATE TABLE 내부 CONSTRAINT로 정의
+-- CareFlow DDL v11
+-- DB명세서 v25 기준 / 모든 FK를 CREATE TABLE 내부 CONSTRAINT로 정의
 --
--- ※ v10 변경 사항 (DB명세서 v24 반영)
+-- ※ v11 변경 사항 (DB명세서 v25 반영 — 정산 워크플로우 재정비)
+--
+--   [v25 변경]
+--   - platform_settlements 테이블 신규 추가
+--     · 대행사→플랫폼 정산(수수료 납부)을 "월 단위 집계 1건"으로 관리하는 배치성 테이블
+--     · settlements(기사·대행사 정산)는 A/S 신청 1건당 1행(1:1)이지만,
+--       대행사→플랫폼 정산은 애초에 "해당 대행사의 지난 달 platform_fee 합계"라는
+--       월 단위 집계 그 자체이므로 별도 배치 테이블로 분리 (agency_id, settlement_year, settlement_month 당 1행)
+--     · settlements.platform_settlement_id(NULL 허용 FK)로 개별 정산 건이 어느 월별 플랫폼 정산에
+--       집계되었는지 역추적 가능 (정산 완료 후 배치 Job이 채움)
+--   - settlements.status ENUM에서 'APPROVED' 제거
+--     · ENUM('PENDING','APPROVED','PAID','DISPUTED') → ENUM('PENDING','PAID','DISPUTED') 정산 워크플로우 재검토 결과,
+--       "월초 일괄 승인" 단계가 실제로는 상태 전이 없이 바로 지급(PAID)으로 이어지는 구조라
+--       APPROVED가 별도 상태로 존재할 실익이 없어 삭제. 오류 발생 시에는 기존과 동일하게 DISPUTED로 전이.
+--   - settlements.approved_at 컬럼 삭제
+--     · APPROVED 상태 제거에 따라 대응 컬럼도 함께 삭제 (더 이상 어떤 시점도 기록하지 않는 죽은 컬럼이 되므로)
+--   - platform_settlements.status도 동일하게 ENUM('PENDING','PAID','DISPUTED')로 설계 (APPROVED 없음)
+--
+-- ※ v10 변경 사항 (DB명세서 v24 반영, 아래는 과거 이력)
 --
 --   [v24 변경]
 --   - quiz_questions.quiz_year (YEAR NOT NULL) 컬럼 신규 추가
@@ -586,24 +604,61 @@ CREATE TABLE `payments` (
 );
 
 -- ============================================================
--- 25. settlements
+-- 25. platform_settlements
+-- [v25 신규] 대행사→플랫폼 정산 (수수료 납부) — 월 단위 집계 배치 테이블
+--   - settlements(기사·대행사 정산)는 A/S 신청 1건당 1행이지만,
+--     대행사→플랫폼 정산은 "해당 대행사의 지난 달 platform_fee 합계"라는
+--     월 단위 집계 그 자체이므로 agency_id + settlement_year + settlement_month 당 1행으로 관리
+--   - 워크플로우: ① 매월 초 배치 Job이 전월 settlements(해당 agency_id, status='PAID')를 집계하여
+--     1행 생성(PENDING) + 대상 settlements.platform_settlement_id를 이 행의 ID로 채움
+--     ② 대행사가 플랫폼에 수수료 납부 ③ status를 PAID로 변경
+--   - 집계 과정 오류 시 status를 DISPUTED로 전이 (settlements와 동일 패턴)
+--   - settlements보다 먼저 생성 (settlements.platform_settlement_id FK가 이 테이블을 참조하므로 선행 필요)
+-- ============================================================
+CREATE TABLE `platform_settlements` (
+    `platform_settlement_id` BIGINT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT '대행사→플랫폼 정산 ID',
+    `agency_id`               BIGINT UNSIGNED NOT NULL                            COMMENT '대행사 ID',
+    `settlement_year`         YEAR            NOT NULL                            COMMENT '정산 대상 연도 (집계 대상 settlements.paid_at 기준)',
+    `settlement_month`        TINYINT UNSIGNED NOT NULL                          COMMENT '정산 대상 월 (1~12)',
+    `total_gross_amount`      INT UNSIGNED    NOT NULL                            COMMENT '집계 대상 settlements.gross_amount 합계 (원) — 검증·감사용',
+    `total_platform_fee`      INT UNSIGNED    NOT NULL                            COMMENT '집계 대상 settlements.platform_fee 합계 (원) — 대행사가 플랫폼에 납부할 금액',
+    `settlement_count`        INT UNSIGNED    NOT NULL DEFAULT 0                  COMMENT '집계된 settlements 건수',
+    `status`                  ENUM('PENDING','PAID','DISPUTED') NOT NULL DEFAULT 'PENDING' COMMENT '정산 상태 (APPROVED 없음 — settlements와 동일 사유)',
+    `paid_at`                 DATETIME        NULL     DEFAULT NULL               COMMENT '플랫폼 수수료 납부 완료 일시',
+    `created_at`              DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT '집계(배치 생성) 일시',
+
+    CONSTRAINT FK_agencies_TO_platform_settlements
+        FOREIGN KEY (`agency_id`) REFERENCES `agencies` (`agency_id`),
+
+    UNIQUE uk_platform_settlement_period (agency_id, settlement_year, settlement_month),
+    INDEX  idx_platform_settlement_status (status, settlement_year, settlement_month)
+);
+
+-- ============================================================
+-- 26. settlements
+-- [v25] status ENUM에서 'APPROVED' 제거 → ENUM('PENDING','PAID','DISPUTED')
+-- [v25] approved_at 컬럼 삭제 (대응 상태 제거로 죽은 컬럼이 되어 삭제)
+-- [v25] platform_settlement_id 컬럼 신규 추가 (NULL 허용 FK)
+--   - 이 정산 건의 platform_fee가 어느 월별 대행사→플랫폼 정산(platform_settlements)에
+--     집계되었는지 역추적하는 컬럼. 월초 배치 Job이 platform_settlements 1건을 생성하며 채움.
+--   - 아직 집계 전(월 마감 전)이거나 DISPUTED 상태인 건은 NULL
 -- ============================================================
 CREATE TABLE `settlements` (
-    `settlement_id`       BIGINT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT '정산 ID',
-    `payment_id`          BIGINT UNSIGNED NOT NULL                            COMMENT '결제 ID (1:1)',
-    `request_id`          BIGINT UNSIGNED NOT NULL                            COMMENT 'A/S 신청 ID',
-    `engineer_id`         BIGINT UNSIGNED NOT NULL                            COMMENT '기사 user_id',
-    `agency_id`           BIGINT UNSIGNED NOT NULL                            COMMENT '소속 대행사 ID',
-    `gross_amount`        INT UNSIGNED    NOT NULL                            COMMENT '작업 총 금액 (원)',
-    `platform_fee`        INT UNSIGNED    NOT NULL                            COMMENT 'CareFlow 수수료 (원)',
-    `fee_rate`            DECIMAL(5,2)    NOT NULL                            COMMENT 'CareFlow 수수료율(%) 스냅샷',
-    `agency_fee`          INT UNSIGNED    NOT NULL                            COMMENT '대행사 수수료 (원)',
-    `agency_fee_rate`     DECIMAL(5,2)    NOT NULL                            COMMENT '대행사 수수료율(%) 스냅샷',
-    `engineer_net_amount` INT UNSIGNED    NOT NULL                            COMMENT '기사 실수령액 (원)',
-    `status`              ENUM('PENDING','APPROVED','PAID','DISPUTED') NOT NULL DEFAULT 'PENDING' COMMENT '정산 상태',
-    `approved_at`         DATETIME        NULL     DEFAULT NULL               COMMENT '승인 일시',
-    `paid_at`             DATETIME        NULL     DEFAULT NULL               COMMENT '지급 일시',
-    `created_at`          DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT '생성일',
+    `settlement_id`          BIGINT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT '정산 ID',
+    `payment_id`             BIGINT UNSIGNED NOT NULL                            COMMENT '결제 ID (1:1)',
+    `request_id`             BIGINT UNSIGNED NOT NULL                            COMMENT 'A/S 신청 ID',
+    `engineer_id`            BIGINT UNSIGNED NOT NULL                            COMMENT '기사 user_id',
+    `agency_id`              BIGINT UNSIGNED NOT NULL                            COMMENT '소속 대행사 ID',
+    `gross_amount`           INT UNSIGNED    NOT NULL                            COMMENT '작업 총 금액 (원)',
+    `platform_fee`           INT UNSIGNED    NOT NULL                            COMMENT 'CareFlow 수수료 (원)',
+    `fee_rate`               DECIMAL(5,2)    NOT NULL                            COMMENT 'CareFlow 수수료율(%) 스냅샷',
+    `agency_fee`             INT UNSIGNED    NOT NULL                            COMMENT '대행사 수수료 (원)',
+    `agency_fee_rate`        DECIMAL(5,2)    NOT NULL                            COMMENT '대행사 수수료율(%) 스냅샷',
+    `engineer_net_amount`    INT UNSIGNED    NOT NULL                            COMMENT '기사 실수령액 (원)',
+    `status`                 ENUM('PENDING','PAID','DISPUTED') NOT NULL DEFAULT 'PENDING' COMMENT '[v25] 정산 상태 — APPROVED 제거 (월초 일괄 승인 단계가 상태 전이 없이 바로 지급으로 이어져 실익 없음)',
+    `platform_settlement_id` BIGINT UNSIGNED NULL     DEFAULT NULL               COMMENT '[v25 신규] 이 건의 platform_fee가 집계된 월별 대행사→플랫폼 정산 ID (platform_settlements FK, 집계 전 NULL)',
+    `paid_at`                DATETIME        NULL     DEFAULT NULL               COMMENT '지급 일시',
+    `created_at`             DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT '생성일',
 
     CONSTRAINT FK_payments_TO_settlements
         FOREIGN KEY (`payment_id`) REFERENCES `payments` (`payment_id`),
@@ -613,15 +668,18 @@ CREATE TABLE `settlements` (
         FOREIGN KEY (`engineer_id`) REFERENCES `users` (`user_id`),
     CONSTRAINT FK_agencies_TO_settlements
         FOREIGN KEY (`agency_id`) REFERENCES `agencies` (`agency_id`),
+    CONSTRAINT FK_platform_settlements_TO_settlements
+        FOREIGN KEY (`platform_settlement_id`) REFERENCES `platform_settlements` (`platform_settlement_id`),
 
-    UNIQUE uk_settlement_payment   (payment_id),
-    INDEX  idx_settlement_engineer (engineer_id, status, created_at),
-    INDEX  idx_settlement_agency   (agency_id, status, created_at),
-    INDEX  idx_settlement_status   (status, created_at)
+    UNIQUE uk_settlement_payment       (payment_id),
+    INDEX  idx_settlement_engineer     (engineer_id, status, created_at),
+    INDEX  idx_settlement_agency       (agency_id, status, created_at),
+    INDEX  idx_settlement_status       (status, created_at),
+    INDEX  idx_settlement_platform_stl (platform_settlement_id)
 );
 
 -- ============================================================
--- 26. bank_accounts
+-- 27. bank_accounts
 -- 기사(엔지니어) 정산금 지급 계좌 정보. DB명세서 v21 반영.
 -- ============================================================
 CREATE TABLE `bank_accounts` (
@@ -641,7 +699,7 @@ CREATE TABLE `bank_accounts` (
 );
 
 -- ============================================================
--- 27. notifications
+-- 28. notifications
 -- ============================================================
 CREATE TABLE `notifications` (
     `notification_id` BIGINT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT '알림 ID',
@@ -662,7 +720,7 @@ CREATE TABLE `notifications` (
 );
 
 -- ============================================================
--- 28. lms_contents
+-- 29. lms_contents
 -- [v22] video_url 컬럼 신규 추가
 --   - content_type = 'VIDEO' 일 때 YouTube 영상 URL 저장
 --   - content_type = 'TEXT'  일 때 NULL
@@ -692,7 +750,7 @@ CREATE TABLE `lms_contents` (
 );
 
 -- ============================================================
--- 29. lms_confirmations
+-- 30. lms_confirmations
 -- [v23 변경] is_active 컬럼 추가
 --   - OX퀴즈 3회 불합격 시 재이수 강제를 위한 논리 삭제 컬럼
 --   - is_active=0: 재이수 강제로 비활성화된 이수 이력 (물리 삭제 없이 이력 보존)
@@ -720,7 +778,7 @@ CREATE TABLE `lms_confirmations` (
 
 
 -- ============================================================
--- 30. quiz_questions (OX퀴즈 문항 마스터)
+-- 31. quiz_questions (OX퀴즈 문항 마스터)
 -- [v23 신규] LMS OX퀴즈 확장 — 카테고리 × 기술 등급 계층별 문항 마스터
 -- [v24 변경] quiz_year 컬럼 추가 — 연도별 문항 독립 관리
 --   - 12월 중 ADMIN이 내년도 문항 사전 등록 (is_active=0, quiz_year=내년)
@@ -753,7 +811,7 @@ CREATE TABLE `quiz_questions` (
 );
 
 -- ============================================================
--- 31. quiz_attempts (OX퀴즈 응시 이력)
+-- 32. quiz_attempts (OX퀴즈 응시 이력)
 -- [v23 신규] 기사별 계층별 응시 이력 및 합격 여부 관리
 -- [v24 변경] quiz_year 컬럼 추가 — 응시 연도 스냅샷
 --   - is_passed: score >= 4 (5문항 중 4개 이상 정답)

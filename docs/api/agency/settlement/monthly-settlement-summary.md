@@ -58,7 +58,7 @@ Authorization: Bearer {accessToken}
 | `totalCount` | long | 해당 월 정산 건수 (모든 status 포함) |
 | `totalGrossAmount` | long | 총 매출 합계 (모든 status의 gross_amount 합산, 원) |
 | `paidAmount` | long | 지급 완료 금액 (status = PAID인 gross_amount 합산, 원) |
-| `pendingAmount` | long | 지급 대기 금액 (status IN (PENDING, APPROVED) gross_amount 합산, 원) |
+| `pendingAmount` | long | 지급 대기 금액 (status = PENDING인 gross_amount 합산, 원) |
 | `disputedAmount` | long | 보류 금액 (status = DISPUTED인 gross_amount 합산, 원) |
 | `totalPlatformFee` | long | CareFlow 수수료 합계 (platform_fee 합산, 원) |
 | `totalAgencyFee` | long | 대행사 수수료 합계 (agency_fee 합산, 원) |
@@ -85,14 +85,14 @@ Authorization: Bearer {accessToken}
    - `COUNT(*)` → `totalCount`
    - `SUM(gross_amount)` → `totalGrossAmount` (전체)
    - `SUM(CASE WHEN status = 'PAID' THEN gross_amount ELSE 0 END)` → `paidAmount`
-   - `SUM(CASE WHEN status IN ('PENDING','APPROVED') THEN gross_amount ELSE 0 END)` → `pendingAmount`
+   - `SUM(CASE WHEN status = 'PENDING' THEN gross_amount ELSE 0 END)` → `pendingAmount`
    - `SUM(CASE WHEN status = 'DISPUTED' THEN gross_amount ELSE 0 END)` → `disputedAmount`
    - `SUM(platform_fee)` → `totalPlatformFee`
    - `SUM(agency_fee)` → `totalAgencyFee`
    - `SUM(engineer_net_amount)` → `totalEngineerPayout`
 4. 집계 결과가 없으면(0건) 모든 금액을 0으로 채운 응답을 반환한다.
 
-> **날짜 기준**: `created_at` 기준으로 월 범위를 필터링한다. PENDING/APPROVED/DISPUTED 상태의 정산은 `paid_at` 이 없으므로 `paid_at` 기준 사용 불가.
+> **날짜 기준**: `created_at` 기준으로 월 범위를 필터링한다. PENDING/DISPUTED 상태의 정산은 `paid_at` 이 없으므로 `paid_at` 기준 사용 불가.
 
 ---
 
@@ -109,7 +109,8 @@ settlements
   - agency_fee        : 대행사 수수료
   - agency_fee_rate   : 대행사 수수료율 스냅샷
   - engineer_net_amount : 기사 실수령액
-  - status ENUM('PENDING','APPROVED','PAID','DISPUTED')
+  - status ENUM('PENDING','PAID','DISPUTED')  -- [DDL v11] APPROVED 제거
+  - platform_settlement_id (FK → platform_settlements, [DDL v11 신규], 집계 전 NULL)
   - paid_at
   - created_at        ← 월 범위 필터링 기준 컬럼
 
