@@ -66,4 +66,17 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
             @Param("customerId") Long customerId,
             @Param("from") LocalDateTime from,
             @Param("to") LocalDateTime to);
+
+    // 고객 월별 결제액 추이용 — 해당 고객의 [from, to) 범위 SUCCESS 결제 내역 전체 (월별 집계는 서비스 레이어에서 수행)
+    @Query("SELECT p FROM Payment p " +
+           "WHERE p.customer.id = :customerId " +
+           "AND p.status = com.careflow.common.enums.PaymentStatus.SUCCESS " +
+           "AND p.paidAt >= :from AND p.paidAt < :to")
+    List<Payment> findSuccessByCustomerIdAndPaidAtBetween(
+            @Param("customerId") Long customerId,
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to);
+
+    // 고객 결제 내역 전체 조회용 — 상태 필터 없이 최신순(생성일 기준) 전체 반환
+    List<Payment> findByCustomer_IdOrderByCreatedAtDesc(Long customerId);
 }
