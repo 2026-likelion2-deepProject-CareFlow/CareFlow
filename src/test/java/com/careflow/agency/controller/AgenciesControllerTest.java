@@ -69,7 +69,7 @@ class AgenciesControllerTest {
                 "test@careflow.com",
                 "password123",
                 "010-1234-5678",
-                "서울특별시 강남구",
+                1,
                 "서울특별시 강남구 테헤란로 123",
                 "123-45-67890",
                 "테스트대행사",
@@ -151,7 +151,7 @@ class AgenciesControllerTest {
         void signup_blankName_400() throws Exception {
             AgencyCreateRequest req = new AgencyCreateRequest(
                     "", "test@careflow.com", "password123", "010-1234-5678",
-                    "서울특별시 강남구", "상세주소", "테스트대행사", "123-45-67890", "대행사주소", 5.20);
+                    1, "상세주소", "테스트대행사", "123-45-67890", "대행사주소", 5.20);
 
             mockMvc.perform(post("/api/agencies/signup")
                             .contentType(MediaType.APPLICATION_JSON)
@@ -166,7 +166,7 @@ class AgenciesControllerTest {
         void signup_invalidEmail_400() throws Exception {
             AgencyCreateRequest req = new AgencyCreateRequest(
                     "홍길동", "이메일아님", "password123", "010-1234-5678",
-                    "서울특별시 강남구", "상세주소", "테스트대행사", "123-45-67890", "대행사주소", 5.20);
+                    1, "상세주소", "테스트대행사", "123-45-67890", "대행사주소", 5.20);
 
             mockMvc.perform(post("/api/agencies/signup")
                             .contentType(MediaType.APPLICATION_JSON)
@@ -181,7 +181,7 @@ class AgenciesControllerTest {
         void signup_invalidPhoneNumber_400() throws Exception {
             AgencyCreateRequest req = new AgencyCreateRequest(
                     "홍길동", "test@careflow.com", "password123", "01012345678형식아님",
-                    "서울특별시 강남구", "상세주소", "테스트대행사", "123-45-67890", "대행사주소", 5.20);
+                    1, "상세주소", "테스트대행사", "123-45-67890", "대행사주소", 5.20);
 
             mockMvc.perform(post("/api/agencies/signup")
                             .contentType(MediaType.APPLICATION_JSON)
@@ -196,7 +196,7 @@ class AgenciesControllerTest {
         void signup_blankAgencyName_400() throws Exception {
             AgencyCreateRequest req = new AgencyCreateRequest(
                     "홍길동", "test@careflow.com", "password123", "010-1234-5678",
-                    "서울특별시 강남구", "상세주소", "", "123-45-67890", "대행사주소", 5.20);
+                    1, "상세주소", "", "123-45-67890", "대행사주소", 5.20);
 
             mockMvc.perform(post("/api/agencies/signup")
                             .contentType(MediaType.APPLICATION_JSON)
@@ -211,7 +211,7 @@ class AgenciesControllerTest {
         void signup_blankBusinessNumber_400() throws Exception {
             AgencyCreateRequest req = new AgencyCreateRequest(
                     "홍길동", "test@careflow.com", "password123", "010-1234-5678",
-                    "서울특별시 강남구", "상세주소", "테스트대행사", "", "대행사주소", 5.20);
+                    1, "상세주소", "테스트대행사", "", "대행사주소", 5.20);
 
             mockMvc.perform(post("/api/agencies/signup")
                             .contentType(MediaType.APPLICATION_JSON)
@@ -227,7 +227,7 @@ class AgenciesControllerTest {
             String longAddress = "주".repeat(256);
             AgencyCreateRequest req = new AgencyCreateRequest(
                     "홍길동", "test@careflow.com", "password123", "010-1234-5678",
-                    "서울특별시 강남구", "상세주소", "테스트대행사", "123-45-67890", longAddress, 5.20);
+                    1, "상세주소", "테스트대행사", "123-45-67890", longAddress, 5.20);
 
             mockMvc.perform(post("/api/agencies/signup")
                             .contentType(MediaType.APPLICATION_JSON)
@@ -242,7 +242,7 @@ class AgenciesControllerTest {
         void signup_nullFeeRate_400() throws Exception {
             AgencyCreateRequest req = new AgencyCreateRequest(
                     "홍길동", "test@careflow.com", "password123", "010-1234-5678",
-                    "서울특별시 강남구", "상세주소", "테스트대행사", "123-45-67890", "대행사주소", null);
+                    1, "상세주소", "테스트대행사", "123-45-67890", "대행사주소", null);
 
             mockMvc.perform(post("/api/agencies/signup")
                             .contentType(MediaType.APPLICATION_JSON)
@@ -258,7 +258,7 @@ class AgenciesControllerTest {
             // @Digits(integer = 5, fraction = 2) 위반: 소수점 3자리
             AgencyCreateRequest req = new AgencyCreateRequest(
                     "홍길동", "test@careflow.com", "password123", "010-1234-5678",
-                    "서울특별시 강남구", "상세주소", "테스트대행사", "123-45-67890", "대행사주소", 5.123);
+                    1, "상세주소", "테스트대행사", "123-45-67890", "대행사주소", 5.123);
 
             mockMvc.perform(post("/api/agencies/signup")
                             .contentType(MediaType.APPLICATION_JSON)
