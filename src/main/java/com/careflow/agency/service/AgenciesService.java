@@ -117,9 +117,10 @@ public class AgenciesService {
     }
 
     // 대행사 내 정보 조회 (설정 페이지용)
+    // JWT의 agencyId 기준으로 조회 — 대표 계정뿐 아니라 소속 staff 계정도 자기 대행사 정보를 조회할 수 있어야 함
     @Transactional(readOnly = true)
-    public AgencyProfileResponse getProfile(Long userId) {
-        Agencies agencies = agenciesRepository.findByRepresentativeById(userId)
+    public AgencyProfileResponse getProfile(Long agencyId) {
+        Agencies agencies = agenciesRepository.findById(agencyId)
                 .orElseThrow(() -> new NoSuchElementException("해당 사용자의 대행사 정보를 찾을 수 없습니다."));
         return AgencyProfileResponse.from(agencies);
     }

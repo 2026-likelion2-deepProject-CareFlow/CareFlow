@@ -59,6 +59,64 @@ class AgencySettingsControllerTest {
         return new CustomUserDetails(1L, "agency@test.com", "", "AGENCY", null);
     }
 
+    // GET /api/agency/me 는 agencyId 기준 조회이므로 agencyId가 채워진 사용자 픽스처 필요
+    // (대표든 staff든 role=AGENCY 면 동일하게 agencyId가 채워짐)
+    private CustomUserDetails agencyUser(Long userId, Long agencyId) {
+        return new CustomUserDetails(userId, "agency@test.com", "", "AGENCY", agencyId);
+    }
+
+    // ─────────────────────────────────────────────
+    //  GET /api/agency/me
+    // ─────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("GET /api/agency/me — 대행사 정보 조회")
+    class GetProfile {
+
+        @Test
+        @DisplayName("성공: 대표 계정 — 200 OK")
+        void getProfile_representative_200() throws Exception {
+            AgencyProfileResponse resp = new AgencyProfileResponse(5L, "테스트대행사", "서울특별시 강남구 테헤란로 1");
+            given(agenciesService.getProfile(eq(5L))).willReturn(resp);
+
+            mockMvc.perform(get("/api/agency/me")
+                            .with(user(agencyUser(1L, 5L))))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.agencyName").value("테스트대행사"));
+        }
+
+        @Test
+        @DisplayName("성공: staff(비대표) 계정도 agencyId 기준으로 동일하게 조회 — 200 OK")
+        void getProfile_staff_200() throws Exception {
+            AgencyProfileResponse resp = new AgencyProfileResponse(5L, "테스트대행사", "서울특별시 강남구 테헤란로 1");
+            given(agenciesService.getProfile(eq(5L))).willReturn(resp);
+
+            // userId=2L(대표 아님)이라도 토큰의 agencyId=5L만 일치하면 조회 성공해야 함
+            mockMvc.perform(get("/api/agency/me")
+                            .with(user(agencyUser(2L, 5L))))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.agencyName").value("테스트대행사"));
+        }
+
+        @Test
+        @DisplayName("실패: 인증 토큰 없음 — 401 Unauthorized")
+        void getProfile_noAuth_401() throws Exception {
+            mockMvc.perform(get("/api/agency/me"))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        @Test
+        @DisplayName("실패: 대행사 정보 없음(서비스 NoSuchElementException) — 404 Not Found")
+        void getProfile_notFound_404() throws Exception {
+            given(agenciesService.getProfile(eq(5L)))
+                    .willThrow(new NoSuchElementException("해당 사용자의 대행사 정보를 찾을 수 없습니다."));
+
+            mockMvc.perform(get("/api/agency/me")
+                            .with(user(agencyUser(1L, 5L))))
+                    .andExpect(status().isNotFound());
+        }
+    }
+
     // ─────────────────────────────────────────────
     //  PATCH /api/agencies/profile
     // ─────────────────────────────────────────────

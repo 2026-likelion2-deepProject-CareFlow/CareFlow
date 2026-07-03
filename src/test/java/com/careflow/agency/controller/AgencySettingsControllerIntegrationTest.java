@@ -75,6 +75,57 @@ class AgencySettingsControllerIntegrationTest {
     }
 
     // ─────────────────────────────────────────────
+    //  GET /api/agency/me
+    // ─────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("GET /api/agency/me — 대행사 정보 조회")
+    class GetProfile {
+
+        @Test
+        @DisplayName("성공: 대표 계정 — 200 OK")
+        void getProfile_representative_200() throws Exception {
+            String repToken = jwtProvider.generateAccessToken(
+                    representative.getId(), representative.getEmail(), "AGENCY", agency.getId());
+
+            mockMvc.perform(get("/api/agency/me")
+                            .header("Authorization", "Bearer " + repToken))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.agencyName").value("테스트대행사"))
+                    .andExpect(jsonPath("$.agencyAddress").value("서울특별시 강남구 테헤란로 1"));
+        }
+
+        @Test
+        @DisplayName("성공: staff(비대표) 계정도 자기 소속 대행사 정보를 조회할 수 있어야 함 — 200 OK")
+        void getProfile_staff_200() throws Exception {
+            // representative_user_id 로는 매칭되지 않는 소속 staff 계정
+            User staff = userRepository.save(User.builder()
+                    .email("agency-staff@test.com")
+                    .passwordHash("hashed")
+                    .name("대행사직원")
+                    .phone("010-2222-3333")
+                    .role(Role.AGENCY)
+                    .agency(agency)
+                    .build());
+
+            String staffToken = jwtProvider.generateAccessToken(
+                    staff.getId(), staff.getEmail(), "AGENCY", agency.getId());
+
+            mockMvc.perform(get("/api/agency/me")
+                            .header("Authorization", "Bearer " + staffToken))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.agencyName").value("테스트대행사"));
+        }
+
+        @Test
+        @DisplayName("실패: 인증 토큰 없음 — 401 Unauthorized")
+        void getProfile_noAuth_401() throws Exception {
+            mockMvc.perform(get("/api/agency/me"))
+                    .andExpect(status().isUnauthorized());
+        }
+    }
+
+    // ─────────────────────────────────────────────
     //  PATCH /api/agencies/profile
     // ─────────────────────────────────────────────
 
