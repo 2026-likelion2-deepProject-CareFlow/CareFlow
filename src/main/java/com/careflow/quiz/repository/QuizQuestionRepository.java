@@ -11,17 +11,31 @@ import java.util.List;
 public interface QuizQuestionRepository extends JpaRepository<QuizQuestion, Long> {
 
     // 응시 자격 검증 + 채점용: 현재 연도 활성 문항 조회
-    List<QuizQuestion> findByCategory_CategoryIdAndRequiredLevelAndQuizYearAndIsActiveTrue(
-            Integer categoryId,
-            QuizQuestion.RequiredLevel requiredLevel,
-            Integer quizYear
+    @Query("""
+        SELECT q FROM QuizQuestion q
+        WHERE q.category.categoryId = :categoryId
+          AND q.requiredLevel = :requiredLevel
+          AND q.quizYear = :quizYear
+          AND q.isActive = true
+        """)
+    List<QuizQuestion> findByCategoryIdAndRequiredLevelAndQuizYearAndIsActiveTrue(
+            @Param("categoryId") Integer categoryId,
+            @Param("requiredLevel") QuizQuestion.RequiredLevel requiredLevel,
+            @Param("quizYear") Integer quizYear
     );
 
     // 문항 수 확인 (5개 미만이면 응시 불가)
-    long countByCategory_CategoryIdAndRequiredLevelAndQuizYearAndIsActiveTrue(
-            Integer categoryId,
-            QuizQuestion.RequiredLevel requiredLevel,
-            Integer quizYear
+    @Query("""
+        SELECT COUNT(q) FROM QuizQuestion q
+        WHERE q.category.categoryId = :categoryId
+          AND q.requiredLevel = :requiredLevel
+          AND q.quizYear = :quizYear
+          AND q.isActive = true
+        """)
+    long countByCategoryIdAndRequiredLevelAndQuizYearAndIsActiveTrue(
+            @Param("categoryId") Integer categoryId,
+            @Param("requiredLevel") QuizQuestion.RequiredLevel requiredLevel,
+            @Param("quizYear") Integer quizYear
     );
 
     // 관리자 목록 조회 (연도·카테고리·등급 필터, is_active 무관)
