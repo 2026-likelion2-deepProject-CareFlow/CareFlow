@@ -1,10 +1,12 @@
 package com.careflow.agency.dto.request;
 
+import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 @Getter
 @NoArgsConstructor
+@AllArgsConstructor
 public class AgencySettlementSearchRequest {
 
     // 정산 상태 필터 (PENDING/APPROVED/PAID/DISPUTED), null 이면 전체

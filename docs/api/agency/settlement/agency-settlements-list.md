@@ -10,10 +10,10 @@
 ## 엔드포인트
 
 ```
-GET /api/agency/settlements?page=0&size=10
+GET /api/agency/settlements?status=&keyword=&dateFrom=&dateTo=&page=0&size=10
 ```
 
-> ⚠️ 본 API는 GET이지만 필터 조건을 `@RequestBody`로 전달받는다(프론트 요구사항 — `GET /api/agency/reviews`와 동일 패턴).
+> ⚠️ **변경 이력**: 최초 구현 시 필터 조건(status/keyword/dateFrom/dateTo)을 `@RequestBody`로 수신하도록 설계했으나(`GET /api/agency/reviews`와 동일 패턴), GET 요청에 바디를 싣는 방식은 표준이 아니라 클라이언트/프록시 환경에 따라 안정적으로 전달되지 않는다는 프론트 피드백에 따라 **쿼리 파라미터 방식으로 변경**했다.
 
 ---
 
@@ -30,35 +30,22 @@ GET /api/agency/settlements?page=0&size=10
 
 ### 쿼리 파라미터
 
-| 파라미터 | 타입 | 기본값 | 설명 |
-|---|---|---|---|
-| `page` | int | 0 | 페이지 번호 (0-base) |
-| `size` | int | 10 | 페이지 크기 |
+| 파라미터 | 타입 | 필수 | 기본값 | 설명 |
+|---|---|---|---|---|
+| `page` | int | N | 0 | 페이지 번호 (0-base) |
+| `size` | int | N | 10 | 페이지 크기 |
+| `status` | String | N | 전체 | `PENDING` / `APPROVED` / `PAID` / `DISPUTED`, 생략 시 전체 |
+| `keyword` | String | N | - | 기사명 부분 일치 검색 (숫자만 입력 시 정산 ID 정확 일치로 자동 분기 — 서비스 레이어 처리) |
+| `dateFrom` | String | N | - | 정산 생성일 검색 시작 (`yyyy-MM-dd`) |
+| `dateTo` | String | N | - | 정산 생성일 검색 종료 (`yyyy-MM-dd`), 해당일 포함 |
 
-### 요청 바디 (`AgencySettlementSearchRequest`)
-
-| 필드 | 타입 | 필수 | 설명 |
-|---|---|---|---|
-| `status` | String | N | `PENDING` / `APPROVED` / `PAID` / `DISPUTED`, null이면 전체 |
-| `keyword` | String | N | 기사명 부분 일치 검색 |
-| `dateFrom` | String | N | 정산 생성일 검색 시작 (`yyyy-MM-dd`) |
-| `dateTo` | String | N | 정산 생성일 검색 종료 (`yyyy-MM-dd`), 해당일 포함 |
-
-바디 생략 시 전체 조회.
+필터 파라미터 생략 시 전체 조회.
 
 ### 요청 예시
 
 ```
-GET /api/agency/settlements?page=0&size=10
+GET /api/agency/settlements?status=PAID&keyword=김현수&dateFrom=2024-06-01&dateTo=2024-06-30&page=0&size=10
 Authorization: Bearer {access_token}
-Content-Type: application/json
-
-{
-  "status": "PAID",
-  "keyword": "김현수",
-  "dateFrom": "2024-06-01",
-  "dateTo": "2024-06-30"
-}
 ```
 
 ---
@@ -223,4 +210,5 @@ Content-Type: application/json
 - TC-C-1. 인증된 AGENCY — 200 OK, 응답 JSON 구조 검증 (stats/content/totalElements)
 - TC-C-2. 인증 없음 — 401
 - TC-C-3. page/size 기본값 검증 (미전달 시 page=0, size=10)
-- TC-C-4. 요청 바디 없이 호출해도 정상 동작
+- TC-C-4. 필터 쿼리 파라미터 없이 호출해도 정상 동작
+- TC-C-5. status/keyword/dateFrom/dateTo 쿼리 파라미터가 Service 필터로 정확히 전달되는지 검증

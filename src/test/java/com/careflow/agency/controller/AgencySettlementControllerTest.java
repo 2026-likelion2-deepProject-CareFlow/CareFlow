@@ -1,5 +1,6 @@
 package com.careflow.agency.controller;
 
+import com.careflow.agency.dto.request.AgencySettlementSearchRequest;
 import com.careflow.agency.dto.response.AgencySettlementListResponse;
 import com.careflow.agency.service.AgencySettlementService;
 import com.careflow.auth.security.CustomOAuth2UserService;
@@ -23,11 +24,13 @@ import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
+import org.mockito.ArgumentCaptor;
 
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
@@ -125,13 +128,37 @@ class AgencySettlementControllerTest {
         }
 
         @Test
-        @DisplayName("TC-C-4: 요청 바디 없이 호출해도 정상 동작")
-        void success_noRequestBody() throws Exception {
+        @DisplayName("TC-C-4: 필터 쿼리 파라미터 없이 호출해도 정상 동작")
+        void success_noFilterParams() throws Exception {
             given(agencySettlementService.getSettlements(any(), any(), any()))
                     .willReturn(sampleResponse());
 
             mockMvc.perform(get("/api/agency/settlements?page=0&size=10"))
                     .andExpect(status().isOk());
+        }
+
+        @Test
+        @DisplayName("TC-C-5: status/keyword/dateFrom/dateTo 쿼리 파라미터가 Service 필터로 정확히 전달된다")
+        void success_filterQueryParamsPropagated() throws Exception {
+            given(agencySettlementService.getSettlements(any(), any(), any()))
+                    .willReturn(sampleResponse());
+
+            mockMvc.perform(get("/api/agency/settlements")
+                            .param("status", "PAID")
+                            .param("keyword", "김현수")
+                            .param("dateFrom", "2024-06-01")
+                            .param("dateTo", "2024-06-30"))
+                    .andExpect(status().isOk());
+
+            ArgumentCaptor<AgencySettlementSearchRequest> captor =
+                    ArgumentCaptor.forClass(AgencySettlementSearchRequest.class);
+            verify(agencySettlementService).getSettlements(any(), captor.capture(), any());
+
+            AgencySettlementSearchRequest filter = captor.getValue();
+            assertThat(filter.getStatus()).isEqualTo("PAID");
+            assertThat(filter.getKeyword()).isEqualTo("김현수");
+            assertThat(filter.getDateFrom()).isEqualTo("2024-06-01");
+            assertThat(filter.getDateTo()).isEqualTo("2024-06-30");
         }
     }
 }

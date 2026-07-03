@@ -1,10 +1,12 @@
 package com.careflow.agency.dto.request;
 
+import lombok.AllArgsConstructor;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 
 @Getter
 @NoArgsConstructor
+@AllArgsConstructor
 public class AgencyReviewSearchRequest {
 
     // 평점 필터 (1~5), null 이면 전체
