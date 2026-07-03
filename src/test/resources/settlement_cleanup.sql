@@ -2,6 +2,7 @@
 SET REFERENTIAL_INTEGRITY FALSE;
 DELETE FROM reviews;
 DELETE FROM settlements;
+DELETE FROM platform_settlements;
 DELETE FROM payments;
 DELETE FROM work_report_parts;
 DELETE FROM work_reports;

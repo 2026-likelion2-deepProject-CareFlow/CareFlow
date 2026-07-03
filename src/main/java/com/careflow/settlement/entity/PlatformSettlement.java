@@ -100,6 +100,13 @@ public class PlatformSettlement {
                 .build();
     }
 
+    // [월별 정산 배치 재실행 대비] 동일 기간(agency+year+month)에 대해 추가로 집계된 건을 기존 합계에 누적 — 더티 체킹으로 UPDATE
+    public void accumulate(int additionalGrossAmount, int additionalPlatformFee, int additionalCount) {
+        this.totalGrossAmount += additionalGrossAmount;
+        this.totalPlatformFee += additionalPlatformFee;
+        this.settlementCount += additionalCount;
+    }
+
     // 플랫폼 수수료 납부 완료 처리 — 더티 체킹으로 UPDATE
     public void markPaid() {
         this.status = "PAID";
