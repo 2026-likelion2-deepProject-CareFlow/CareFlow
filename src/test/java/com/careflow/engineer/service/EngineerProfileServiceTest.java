@@ -20,6 +20,7 @@ import com.careflow.user.repository.UserRepository;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -35,7 +36,9 @@ import java.util.Optional;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
 
 @ExtendWith(MockitoExtension.class)
@@ -328,5 +331,46 @@ class EngineerProfileServiceTest {
         assertThat(response.getCareerStartedYear()).isEqualTo(advancedYear);
         assertThat(response.getSkillLevel()).isEqualTo(SkillLevel.ADVANCED.name()); // 🎯 등급 재산정 완벽 검증!
         assertThat(response.getIntroduction()).isEqualTo("경력 수정 테스트");
+    }
+
+    @Test
+    @DisplayName("성공: 프로필 수정 시 브랜드 재삽입 순서가 delete → flush → saveAll (Duplicate entry 회귀 방지)")
+    void updateProfile_saveExpertBrands_flushesBeforeReinsert() throws Exception {
+        // Given — EngineerExpertBrand/EngineerServiceRegion은 GenerationType.IDENTITY라
+        // saveAll의 INSERT가 즉시 나가는 반면 derived delete는 flush 시점까지 지연되어,
+        // flush 없이 재삽입하면 겹치는 값에서 uk_eng_brand/uk_eng_region 위반이 발생했었음(PUT /api/engineer/profile 409)
+        User user = engineer(USER_ID);
+        EngineerProfile profile = EngineerProfile.createInitial(user);
+        profile.completeProfile(category(10, 2), 2020, SkillLevel.BEGINNER, "기존 소개글");
+
+        Constructor<UpdateProfileRequest> constructor = UpdateProfileRequest.class.getDeclaredConstructor();
+        constructor.setAccessible(true);
+        UpdateProfileRequest request = constructor.newInstance();
+        // 기존 값과 겹치는 브랜드를 포함한 새 목록
+        ReflectionTestUtils.setField(request, "expertBrands", List.of("삼성", "LG"));
+        ReflectionTestUtils.setField(request, "serviceRegionIds", List.of(99));
+
+        Regions regionMock = region(2);
+        ReflectionTestUtils.setField(regionMock, "id", 99);
+
+        given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
+        given(profileRepository.findByUser_Id(USER_ID)).willReturn(Optional.of(profile));
+        given(expertBrandRepository.findByEngineer_Id(USER_ID)).willReturn(List.of());
+        given(serviceRegionRepository.findByEngineer_Id(USER_ID)).willReturn(List.of());
+        given(regionRepository.findById(99)).willReturn(Optional.of(regionMock));
+
+        // When
+        engineerProfileService.updateProfile(USER_ID, request);
+
+        // Then — delete가 saveAll(insert)보다 먼저, 그 사이에 반드시 flush가 호출되어야 함
+        InOrder brandOrder = inOrder(expertBrandRepository);
+        brandOrder.verify(expertBrandRepository).deleteByEngineer_Id(USER_ID);
+        brandOrder.verify(expertBrandRepository).flush();
+        brandOrder.verify(expertBrandRepository).saveAll(anyList());
+
+        InOrder regionOrder = inOrder(serviceRegionRepository);
+        regionOrder.verify(serviceRegionRepository).deleteByEngineer_Id(USER_ID);
+        regionOrder.verify(serviceRegionRepository).flush();
+        regionOrder.verify(serviceRegionRepository).saveAll(anyList());
     }
 }
