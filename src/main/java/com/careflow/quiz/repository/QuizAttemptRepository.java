@@ -26,7 +26,16 @@ public interface QuizAttemptRepository extends JpaRepository<QuizAttempt, Long> 
     List<QuizAttempt> findByUser_IdAndQuizYearOrderByAttemptedAtDesc(Long userId, Integer quizYear);
 
     // 현재 사이클 응시 횟수 집계
-    // lms_confirmations.is_active=0이 된 최신 시각 이후의 attempts만 카운트
+    //
+    // [수정] 이전 버전은 lms_confirmations.is_active=false가 된 시점(=재이수 강제 시점)을
+    // 사이클 경계로 삼았는데, 재이수를 완료하면 is_active가 다시 true로 바뀌면서
+    // 그 경계 신호 자체가 사라져버려 재이수 직후 예전 응시 이력까지 전부 다시 카운트되는
+    // 버그가 있었음 (LmsConfirmation.reactivate() 도입으로 인한 회귀).
+    //
+    // 대신 "현재 활성 상태인(is_active=true) 이수 이력의 confirmed_at"을 사이클 경계로 삼는다.
+    // confirmed_at은 최초 이수든 재이수든 매번 "이수를 완료(갱신)한 시각"으로 채워지고,
+    // is_active=true 상태에서는 절대 사라지지 않는 값이라 안정적인 앵커가 된다.
+    // → 재이수를 몇 번을 반복하든, 매번 그 시점 이후의 응시만 정확히 카운트됨.
     @Query("""
         SELECT COUNT(qa) FROM QuizAttempt qa
         WHERE qa.user.id = :userId
@@ -34,12 +43,12 @@ public interface QuizAttemptRepository extends JpaRepository<QuizAttempt, Long> 
           AND qa.requiredLevel = :level
           AND qa.quizYear = :year
           AND qa.attemptedAt >= (
-              SELECT COALESCE(MAX(lc.updatedAt), '1970-01-01 00:00:00')
+              SELECT COALESCE(MAX(lc.confirmedAt), '1970-01-01 00:00:00')
               FROM LmsConfirmation lc
               WHERE lc.user.id = :userId
                 AND lc.content.category.categoryId = :categoryId
                 AND lc.completionYear = :year
-                AND lc.isActive = false
+                AND lc.isActive = true
           )
         """)
     long countCurrentCycleAttempts(

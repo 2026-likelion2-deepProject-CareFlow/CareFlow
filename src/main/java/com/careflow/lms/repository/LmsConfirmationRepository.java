@@ -7,6 +7,7 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 import java.util.List;
+import java.util.Optional;
 
 public interface LmsConfirmationRepository extends JpaRepository<LmsConfirmation, Long> {
 
@@ -65,12 +66,22 @@ public interface LmsConfirmationRepository extends JpaRepository<LmsConfirmation
             @Param("year") int year
     );
 
-    // ─────────────────────────────────────────────
-    // 기존 메서드 (변경 없음)
-    // ─────────────────────────────────────────────
 
-    boolean existsByUserIdAndContentContentIdAndCompletionYear(
-            Long userId, Long contentId, int completionYear
+    /**
+     * [신규] (user, content, year) 조합의 이수 이력을 활성 여부와 무관하게 단건 조회.
+     * completeContent()에서 INSERT(최초 이수) vs UPDATE 재활성화(재이수) 분기 판단에 사용.
+     * uk_lms_confirm_year UNIQUE 제약 덕분에 결과는 최대 1건이므로 Optional로 반환.
+     */
+    @Query("""
+        SELECT c FROM LmsConfirmation c
+        WHERE c.user.id = :userId
+          AND c.content.contentId = :contentId
+          AND c.completionYear = :year
+        """)
+    Optional<LmsConfirmation> findByUserIdAndContentIdAndYear(
+            @Param("userId") Long userId,
+            @Param("contentId") Long contentId,
+            @Param("year") int year
     );
 
     @Query("""
