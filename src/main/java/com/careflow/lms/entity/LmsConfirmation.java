@@ -64,11 +64,11 @@ public class LmsConfirmation {
     private Integer completionYear;
 
 
-    @Column(name = "confirmed_version", nullable = false, updatable = false, length = 10)
+    @Column(name = "confirmed_version", nullable = false, length = 10)
     private String confirmedVersion;
 
 
-    @Column(name = "confirmed_at", nullable = false, updatable = false)
+    @Column(name = "confirmed_at", nullable = false)
     private LocalDateTime confirmedAt;
 
     @Column(name = "is_active", nullable = false)
@@ -121,5 +121,27 @@ public class LmsConfirmation {
     public void deactivate() {
         this.isActive  = false;
         this.updatedAt = LocalDateTime.now();
+    }
+
+    /**
+     * [신규] 재이수 강제(is_active=false)로 비활성화됐던 이수 이력을
+     * "새로 이수 완료"한 것으로 재활성화한다.
+     *
+     * INSERT가 아니라 UPDATE이므로 uk_lms_confirm_year(user_id, content_id, completion_year)
+     * UNIQUE 제약과 절대 충돌하지 않는다. LmsService.completeContent()에서
+     * "같은 (user, content, year) 조합의 행이 이미 존재하지만 is_active=false"인
+     * 케이스에서만 호출한다.
+     *
+     * @param newVersion 재이수 시점의 lms_contents.version (콘텐츠가 개정됐을 수 있으므로 스냅샷 갱신)
+     */
+    public void reactivate(String newVersion) {
+        if (this.isActive) {
+            throw new IllegalStateException("이미 활성 상태인 이수 이력입니다. confirmationId=" + this.confirmationId);
+        }
+
+        this.isActive        = true;
+        this.confirmedVersion = newVersion;
+        this.confirmedAt      = LocalDateTime.now();
+        this.updatedAt         = LocalDateTime.now();
     }
 }

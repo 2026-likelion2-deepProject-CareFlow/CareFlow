@@ -23,6 +23,7 @@ import java.time.LocalDateTime;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -80,22 +81,41 @@ public class LmsService {
      * [v10 변경] completeLms() 호출 제거
      * OX퀴즈 도입으로 is_lms_completed 갱신 책임이 QuizService.submitQuiz()로 이전.
      * 콘텐츠를 전부 이수해도 OX퀴즈 합격 전까지 is_lms_completed=0 유지.
+     *
+     * [v11 수정] existsBy...() 사전 체크 → is_active 무관 단건 조회 후 3분기로 교체
+     *  1) 행이 아예 없음            → 최초 이수. 신규 INSERT (기존과 동일)
+     *  2) 행이 있고 is_active=true  → 진짜 중복 완료 요청. 403 (기존과 동일한 사용자 경험)
+     *  3) 행이 있고 is_active=false → 재이수 강제로 비활성화됐던 이력.
+     *                               INSERT가 아니라 UPDATE로 재활성화하여
+     *                               uk_lms_confirm_year UNIQUE 제약과 충돌하지 않도록 처리
+     * (기존 버그: 3번 케이스도 1번과 동일하게 "이미 이수함"으로 오판해 403을 던졌음)
      */
     @Transactional
     public void completeContent(Long engineerUserId, Long contentId) {
         int currentYear = LocalDate.now().getYear();
 
-        // 1. 중복 이수 체크
-        if (lmsConfirmationRepository.existsByUserIdAndContentContentIdAndCompletionYear(
-                engineerUserId, contentId, currentYear)) {
-            throw new IllegalStateException("이미 이수한 콘텐츠입니다.");
+        User engineer       = getUserOrThrow(engineerUserId);
+        LmsContent content  = getContentOrThrow(contentId);
+
+        Optional<LmsConfirmation> existing = lmsConfirmationRepository
+                .findByUserIdAndContentIdAndYear(engineerUserId, contentId, currentYear);
+
+        if (existing.isPresent()) {
+            LmsConfirmation confirmation = existing.get();
+
+            if (confirmation.isActive()) {
+                // 진짜 중복 완료 요청 — 기존과 동일한 메시지/상태 코드 유지
+                throw new IllegalStateException("이미 이수한 콘텐츠입니다.");
+            }
+
+            // 재이수 강제(is_active=false)로 비활성화됐던 이력 → 재활성화 (INSERT 아님)
+            confirmation.reactivate(content.getVersion());
+
+        } else {
+            // 최초 이수 → 신규 INSERT (기존 로직과 동일)
+            lmsConfirmationRepository.save(LmsConfirmation.of(engineer, content, currentYear));
         }
 
-        User engineer  = getUserOrThrow(engineerUserId);
-        LmsContent content = getContentOrThrow(contentId);
-
-        // 2. 이수 이력 저장
-        lmsConfirmationRepository.save(LmsConfirmation.of(engineer, content, currentYear));
         lmsConfirmationRepository.flush();
 
         // [v10 변경] 콘텐츠 전부 이수 시 completeLms() 호출하지 않음

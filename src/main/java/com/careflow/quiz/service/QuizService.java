@@ -325,7 +325,15 @@ public class QuizService {
 
     /**
      * 응시 자격 검증
-     * 순서: 합격 여부 → 문항 등록 여부 → 콘텐츠 이수 여부 → 응시 횟수
+     * 순서: 합격 여부 → 문항 등록 여부 → 콘텐츠 이수 여부
+     *
+     * [정책 변경] 응시 횟수 상한 체크 제거 — 재응시는 무제한 허용.
+     * "3회 불합격 → 재이수 강제" 트리거는 submitQuiz() 5번 로직에 그대로 유지되며,
+     * 재이수가 필요한 상태인지는 3번(isQuizEligible)이 정확히 걸러준다.
+     * (재이수 강제 발동 시 forceReLearn()이 lms_confirmations.is_active=false로 만들기 때문에,
+     *  재이수 전까지는 3번에서 자연스럽게 차단되고, 재이수를 마치면 다시 응시 가능해진다.
+     *  이전에 있던 별도의 응시 횟수 상한 체크는 재이수 완료 직후에도 예전 사이클의 응시
+     *  이력을 계속 카운트해 버그를 유발했던 지점이라 제거함.)
      */
     private void validateEligibility(Long engineerUserId, Integer categoryId,
                                      RequiredLevel level, int currentYear) {
@@ -345,16 +353,9 @@ public class QuizService {
         }
 
         // 3. 콘텐츠 전부 이수 여부 확인 (is_active=true 이수 이력 기준)
+        //    재이수 강제 상태(is_active=false)라면 여기서 정확히 차단됨
         if (!lmsService.isQuizEligible(engineerUserId)) {
             throw new IllegalStateException("콘텐츠를 모두 이수한 후 응시할 수 있습니다.");
-        }
-
-        // 4. 현재 사이클 응시 횟수 확인
-        long attemptCount = quizAttemptRepository
-                .countCurrentCycleAttempts(engineerUserId, categoryId, level, currentYear);
-        if (attemptCount >= MAX_ATTEMPTS) {
-            throw new IllegalStateException(
-                    "최대 응시 횟수를 초과했습니다. 교육 콘텐츠를 재이수하세요.");
         }
     }
 
