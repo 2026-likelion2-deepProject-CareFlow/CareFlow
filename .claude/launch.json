@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "backend",
+      "runtimeExecutable": "C:\\Pro2026\\DeepProject\\CareFlow\\gradlew.bat",
+      "runtimeArgs": ["bootRun"],
+      "port": 8080
+    },
+    {
+      "name": "frontend",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["--prefix", "C:\\Pro2026\\DeepProject\\careflow-frontend", "run", "dev"],
+      "port": 5173
+    }
+  ]
+}
