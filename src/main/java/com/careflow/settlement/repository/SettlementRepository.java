@@ -224,6 +224,100 @@ public interface SettlementRepository extends JpaRepository<Settlement, Long> {
             @Param("settlementId") Long settlementId,
             Pageable pageable);
 
+    // ─────────────────────────────────────────────────────────────
+    // GET /api/admin/settlements 전용 쿼리 (⑦~⑩)
+    // ─────────────────────────────────────────────────────────────
+
+    /**
+     * [⑦] 전체 대행사 대상 월별 정산 집계 (승인된 대행사만 포함)
+     * - Agencies 기준으로 Settlement를 LEFT JOIN(ON agency + createdAt 범위)하여
+     *   해당 월 정산이 0건인 대행사도 결과에 포함시킨다 (asCount=0)
+     * - unpaidCount: status <> 'PAID'인 건수 — 서비스 레이어에서 대행사별 status(PENDING/PAID/NONE) 파생에 사용
+     * - agencyPay는 서비스 레이어에서 totalRevenue - careflowFee로 계산(프로젝션에는 원본 careflowFee까지만 포함)
+     */
+    @Query("""
+            SELECT a.id AS agencyId,
+                   a.agencyName AS agencyName,
+                   COUNT(s.id) AS asCount,
+                   COALESCE(SUM(s.grossAmount), 0) AS totalRevenue,
+                   COALESCE(SUM(s.platformFee), 0) AS careflowFee,
+                   COALESCE(SUM(CASE WHEN s.status <> 'PAID' THEN 1 ELSE 0 END), 0) AS unpaidCount
+            FROM Agencies a
+            LEFT JOIN Settlement s
+                ON s.agency = a
+                AND s.createdAt >= :from
+                AND s.createdAt < :to
+            WHERE a.approvalStatus = com.careflow.common.enums.AgencyStatus.APPROVED
+            GROUP BY a.id, a.agencyName
+            ORDER BY a.id
+            """)
+    List<AdminAgencySettlementProjection> findAllAgenciesMonthlySummary(
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to);
+
+    /**
+     * [⑧] 특정 대행사의 월별 건별 정산 내역 조회
+     * - JOIN FETCH로 asRequest → appliance → category, asRequest → customer N+1 방지
+     * - createdAt ASC 정렬 (오래된 건부터)
+     */
+    @Query("""
+            SELECT s FROM Settlement s
+            JOIN FETCH s.asRequest r
+            JOIN FETCH r.appliance app
+            JOIN FETCH app.category
+            JOIN FETCH r.customer
+            WHERE s.agency.id = :agencyId
+              AND s.createdAt >= :from
+              AND s.createdAt < :to
+            ORDER BY s.createdAt ASC
+            """)
+    List<Settlement> findAgencySettlementDetails(
+            @Param("agencyId") Long agencyId,
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to);
+
+    /**
+     * [⑨] 특정 대행사의 월별 미지급 정산 목록 (지급 승인 대상)
+     * - status <> 'PAID'인 건만 조회 → 서비스 레이어에서 각각 markPaid() 호출
+     */
+    @Query("""
+            SELECT s FROM Settlement s
+            WHERE s.agency.id = :agencyId
+              AND s.createdAt >= :from
+              AND s.createdAt < :to
+              AND s.status <> 'PAID'
+            """)
+    List<Settlement> findUnpaidByAgencyAndMonth(
+            @Param("agencyId") Long agencyId,
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to);
+
+    /**
+     * [⑩] 전체 대행사 대상 월별 미지급 정산 목록 (일괄 지급 승인 대상)
+     * - agencyId 필터 없이 status <> 'PAID'인 전체 건 조회
+     */
+    @Query("""
+            SELECT s FROM Settlement s
+            WHERE s.createdAt >= :from
+              AND s.createdAt < :to
+              AND s.status <> 'PAID'
+            """)
+    List<Settlement> findUnpaidByMonth(
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to);
+
+    /**
+     * [⑦] 대행사별 월별 정산 집계 프로젝션
+     */
+    interface AdminAgencySettlementProjection {
+        Long getAgencyId();
+        String getAgencyName();
+        Long getAsCount();
+        Long getTotalRevenue();
+        Long getCareflowFee();
+        Long getUnpaidCount();
+    }
+
     /**
      * 합산 집계 결과를 받을 인터페이스 프로젝션
      * - 상태별 gross 합산(paidAmount/pendingAmount/disputedAmount)은 CASE WHEN 쿼리 결과와 매핑
