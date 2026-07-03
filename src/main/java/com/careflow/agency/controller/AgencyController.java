@@ -42,11 +42,12 @@ public class AgencyController {
     // ─────────────────────────────────────────────
 
     // 대행사 내 정보 조회 (설정 페이지)
+    // agencyId 기준 조회 — 대표뿐 아니라 소속 staff 계정도 조회 가능 (수정 API는 대표 전용 정책 유지)
     @GetMapping("/me")
     public ResponseEntity<AgencyProfileResponse> getAgencyProfile(
             @AuthenticationPrincipal CustomUserDetails userDetails) {
 
-        AgencyProfileResponse response = agenciesService.getProfile(userDetails.getUserId());
+        AgencyProfileResponse response = agenciesService.getProfile(userDetails.getAgencyId());
         return ResponseEntity.ok(response);
     }
 
