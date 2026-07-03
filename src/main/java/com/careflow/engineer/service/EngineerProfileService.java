@@ -91,6 +91,9 @@ public class EngineerProfileService {
 
     private List<Integer> saveServiceRegions(User user, List<Integer> serviceRegionIds) {
         serviceRegionRepository.deleteByEngineer_Id(user.getId());
+        // EngineerServiceRegion은 GenerationType.IDENTITY라 뒤이은 saveAll의 INSERT가 즉시 나가는 반면,
+        // derived delete 메서드의 DELETE는 flush 시점까지 지연됨 — flush로 삭제를 먼저 반영해 uk_eng_region 위반 방지
+        serviceRegionRepository.flush();
 
         List<EngineerServiceRegion> entities = new ArrayList<>();
         List<Integer> result = new ArrayList<>();
@@ -109,6 +112,8 @@ public class EngineerProfileService {
 
     private List<String> saveExpertBrands(User user, List<String> expertBrands) {
         expertBrandRepository.deleteByEngineer_Id(user.getId());
+        // 위 saveServiceRegions와 동일한 이유(IDENTITY 즉시 INSERT vs 지연되는 DELETE)로 flush 선행 — uk_eng_brand 위반 방지
+        expertBrandRepository.flush();
 
         List<String> distinctBrands = expertBrands.stream()
                 .filter(b -> b != null && !b.isBlank())
