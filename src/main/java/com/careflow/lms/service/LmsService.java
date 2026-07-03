@@ -20,6 +20,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
@@ -29,12 +30,12 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class LmsService {
 
-    private final LmsContentRepository      lmsContentRepository;
-    private final LmsConfirmationRepository lmsConfirmationRepository;
-    private final EngineerProfileRepository engineerProfileRepository;
-    private final UserRepository            userRepository;
-    private final ApplianceCategoryRepository  applianceCategoryRepository;
-    private final NotificationService notificationService;
+    private final LmsContentRepository       lmsContentRepository;
+    private final LmsConfirmationRepository  lmsConfirmationRepository;
+    private final EngineerProfileRepository  engineerProfileRepository;
+    private final UserRepository             userRepository;
+    private final ApplianceCategoryRepository applianceCategoryRepository;
+    private final NotificationService        notificationService;
 
     // ─────────────────────────────────────────────
     // 기사용
@@ -42,9 +43,7 @@ public class LmsService {
 
     /**
      * [기사] 본인 이수 대상 콘텐츠 목록 조회
-     *
-     * 기사의 category_id + skill_level 기준으로 필터링
-     * 각 콘텐츠에 당해 연도 이수 여부(completed)를 함께 반환
+     * is_active=true인 이수 이력만 완료로 인정
      */
     @Transactional(readOnly = true)
     public List<LmsContentWithStatusDto> getRequiredContentsWithStatus(Long engineerUserId) {
@@ -57,8 +56,9 @@ public class LmsService {
                 requiredLevel
         );
 
+        // [v10 변경] is_active=true 조건 추가 — 재이수 강제로 논리 삭제된 이력 제외
         Map<Long, LocalDateTime> confirmedAtMap = lmsConfirmationRepository
-                .findByUserIdAndYear(engineerUserId, currentYear)
+                .findByUserIdAndYearAndIsActive(engineerUserId, currentYear, true)
                 .stream()
                 .collect(Collectors.toMap(
                         c -> c.getContent().getContentId(),
@@ -77,11 +77,9 @@ public class LmsService {
     /**
      * [기사] 콘텐츠 이수 처리
      *
-     * 처리 순서:
-     * 1. 중복 이수 여부 체크
-     * 2. lms_confirmations INSERT
-     * 3. 전체 이수 완료 여부 판정
-     * 4. 완료 시 engineer_profiles.is_lms_completed = 1 갱신
+     * [v10 변경] completeLms() 호출 제거
+     * OX퀴즈 도입으로 is_lms_completed 갱신 책임이 QuizService.submitQuiz()로 이전.
+     * 콘텐츠를 전부 이수해도 OX퀴즈 합격 전까지 is_lms_completed=0 유지.
      */
     @Transactional
     public void completeContent(Long engineerUserId, Long contentId) {
@@ -93,46 +91,43 @@ public class LmsService {
             throw new IllegalStateException("이미 이수한 콘텐츠입니다.");
         }
 
-        User engineer   = getUserOrThrow(engineerUserId);
+        User engineer  = getUserOrThrow(engineerUserId);
         LmsContent content = getContentOrThrow(contentId);
 
         // 2. 이수 이력 저장
         lmsConfirmationRepository.save(LmsConfirmation.of(engineer, content, currentYear));
-
-        // 3. 변경 이력 즉시 반영
         lmsConfirmationRepository.flush();
 
-        // 4. 전체 이수 완료 판정 후 is_lms_completed 갱신
-        updateLmsCompletionStatus(engineer, currentYear);
+        // [v10 변경] 콘텐츠 전부 이수 시 completeLms() 호출하지 않음
+        // → QuizService.submitQuiz() 합격 시에만 is_lms_completed=1로 갱신
     }
 
     /**
-     * 전체 이수 완료 판정
+     * [v10 신규] OX퀴즈 응시 자격 충족 여부 반환
+     * QuizService.validateEligibility()에서 호출
      *
-     * 이수 대상 content_id 전체 집합 == 이수 완료 content_id 집합 이면 완료 처리
+     * is_active=true인 이수 이력만 집계 —
+     * 재이수 강제(deactivate)된 이력은 제외하여 재이수 필요 상태를 정확히 반영
      */
-    private void updateLmsCompletionStatus(User engineer, int currentYear) {
-        EngineerProfile profile = getEngineerProfile(engineer.getId());
+    @Transactional(readOnly = true)
+    public boolean isQuizEligible(Long engineerUserId) {
+        int currentYear = LocalDate.now().getYear();
+        EngineerProfile profile = getEngineerProfile(engineerUserId);
         RequiredLevel requiredLevel = RequiredLevel.valueOf(profile.getSkillLevel().name());
 
         Set<Long> requiredIds = lmsContentRepository
-                .findRequiredContents(
-                        profile.getCategory().getCategoryId(),
-                        requiredLevel
-                )
+                .findRequiredContents(profile.getCategory().getCategoryId(), requiredLevel)
                 .stream()
                 .map(LmsContent::getContentId)
                 .collect(Collectors.toSet());
 
-        Set<Long> completedIds = lmsConfirmationRepository
-                .findContentIdsByUserIdAndYear(engineer.getId(), currentYear)
-                .stream()
-                .collect(Collectors.toSet());
+        // is_active=true인 이수 이력만 집계
+        Set<Long> completedIds = new HashSet<>(
+                lmsConfirmationRepository.findContentIdsByUserIdAndYearAndIsActive(
+                        engineerUserId, currentYear, true)
+        );
 
-        // 이수 대상 전부 완료했을 때만 갱신
-        if (completedIds.containsAll(requiredIds)) {
-            profile.completeLms();
-        }
+        return completedIds.containsAll(requiredIds);
     }
 
     @Transactional(readOnly = true)
@@ -147,8 +142,9 @@ public class LmsService {
                 requiredLevel
         ).size();
 
+        // [v10 변경] is_active=true 조건 추가
         int completedCount = lmsConfirmationRepository
-                .findContentIdsByUserIdAndYear(engineerUserId, currentYear)
+                .findContentIdsByUserIdAndYearAndIsActive(engineerUserId, currentYear, true)
                 .size();
 
         return new LmsAnnualStatusDto(totalCount, completedCount, profile.isLmsCompleted());
@@ -158,9 +154,6 @@ public class LmsService {
     // 관리자용
     // ─────────────────────────────────────────────
 
-    /**
-     * [관리자] 콘텐츠 등록 (M-13)
-     */
     @Transactional
     public LmsContentResponseDto createContent(LmsContentCreateDto dto, Long adminUserId) {
         User admin = getUserOrThrow(adminUserId);
@@ -182,14 +175,11 @@ public class LmsService {
         return LmsContentResponseDto.from(lmsContentRepository.save(content));
     }
 
-
-    // 콘텐츠 단 건 조회
     @Transactional(readOnly = true)
     public LmsContentResponseDto getContent(Long contentId) {
         return LmsContentResponseDto.from(getContentOrThrow(contentId));
     }
 
-    // 콘텐츠 전체 조회
     @Transactional(readOnly = true)
     public List<LmsContentResponseDto> getAllContents() {
         return lmsContentRepository
@@ -199,7 +189,6 @@ public class LmsService {
                 .toList();
     }
 
-    // 콘텐츠 필터링 조회
     @Transactional(readOnly = true)
     public List<LmsContentResponseDto> getContentsByFilters(
             Integer categoryId,
@@ -212,34 +201,22 @@ public class LmsService {
                 .toList();
     }
 
-    /**
-     * [관리자] 콘텐츠 수정 (M-13)
-     */
     @Transactional
     public void updateContent(Long contentId, LmsContentUpdateDto dto) {
         LmsContent content = getContentOrThrow(contentId);
         content.update(dto.title(), dto.body(), dto.videoUrl(), dto.requiredLevel(), dto.version());
     }
 
-    /**
-     * [관리자] 콘텐츠 비활성화 (M-13)
-     */
     @Transactional
     public void deactivateContent(Long contentId) {
         getContentOrThrow(contentId).deactivate();
     }
 
-    /**
-     * [관리자] 콘텐츠 활성화 (M-13)
-     */
     @Transactional
     public void activateContent(Long contentId) {
         getContentOrThrow(contentId).activate();
     }
 
-    /**
-     * [관리자] 기사별 연도별 이수 현황 조회 (M-14)
-     */
     @Transactional(readOnly = true)
     public List<LmsConfirmationResponseDto> getEngineerConfirmations(Long engineerUserId, Integer year) {
         List<LmsConfirmation> confirmations;
@@ -253,20 +230,15 @@ public class LmsService {
                 .toList();
     }
 
-
-    // 대행사의 소속 엔지니어 LMS상태 전체 조회
     @Transactional(readOnly = true)
     public List<LmsEngineerStatusDto> getAgencyEngineersLmsStatus(Long agencyId, Long requestUserId) {
-
         User requestUser = getUserOrThrow(requestUserId);
-
         if (!requestUser.getRole().equals(Role.ADMIN) &&
                 !agencyId.equals(requestUser.getAgency().getId())) {
             throw new IllegalStateException("본인 소속 대행사만 조회할 수 있습니다.");
         }
 
         int currentYear = LocalDate.now().getYear();
-
         List<EngineerProfile> engineers = engineerProfileRepository.findByAgencyId(agencyId);
 
         return engineers.stream()
@@ -279,8 +251,9 @@ public class LmsService {
                             requiredLevel
                     ).size();
 
+                    // [v10 변경] is_active=true 조건 추가
                     int completedCount = lmsConfirmationRepository
-                            .findContentIdsByUserIdAndYear(userId, currentYear)
+                            .findContentIdsByUserIdAndYearAndIsActive(userId, currentYear, true)
                             .size();
 
                     return new LmsEngineerStatusDto(
@@ -296,34 +269,21 @@ public class LmsService {
                 .toList();
     }
 
-    /**
-     * [대행사] 미이수 기사에게 LMS 이수 독려 알림 발송
-     *
-     * 처리 순서:
-     * 1. 요청자 권한 검증 (ADMIN 또는 본인 소속 대행사)
-     * 2. 대상 기사 미이수 여부 확인
-     * 3. 이미 이수 완료한 기사에게는 알림 발송 안 함
-     * 4. notifications 테이블 INSERT + SSE 실시간 발송
-     */
     @Transactional
     public void sendLmsNotification(Long agencyId, Long engineerUserId, Long requestUserId) {
-        // 1. 권한 검증
         User requestUser = getUserOrThrow(requestUserId);
         if (!requestUser.getRole().equals(Role.ADMIN) &&
                 !agencyId.equals(requestUser.getAgency().getId())) {
             throw new IllegalStateException("본인 소속 대행사의 기사에게만 알림을 발송할 수 있습니다.");
         }
 
-        // 2. 대상 기사 조회
         User engineer = getUserOrThrow(engineerUserId);
         EngineerProfile profile = getEngineerProfile(engineerUserId);
 
-        // 3. 이미 이수 완료한 기사에게는 알림 발송 안 함
         if (profile.isLmsCompleted()) {
             throw new IllegalStateException("이미 LMS 교육을 이수한 기사입니다.");
         }
 
-        // 4. 미이수 콘텐츠 수 계산
         int currentYear = LocalDate.now().getYear();
         RequiredLevel requiredLevel = RequiredLevel.valueOf(profile.getSkillLevel().name());
 
@@ -332,13 +292,13 @@ public class LmsService {
                 requiredLevel
         ).size();
 
+        // [v10 변경] is_active=true 조건 추가
         int completedCount = lmsConfirmationRepository
-                .findContentIdsByUserIdAndYear(engineerUserId, currentYear)
+                .findContentIdsByUserIdAndYearAndIsActive(engineerUserId, currentYear, true)
                 .size();
 
         int remainingCount = totalCount - completedCount;
 
-        // 5. 알림 발송 (notifications INSERT + SSE)
         notificationService.send(
                 engineer,
                 "LMS",

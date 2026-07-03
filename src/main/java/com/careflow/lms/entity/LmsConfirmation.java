@@ -71,6 +71,9 @@ public class LmsConfirmation {
     @Column(name = "confirmed_at", nullable = false, updatable = false)
     private LocalDateTime confirmedAt;
 
+    @Column(name = "is_active", nullable = false)
+    private boolean isActive = true;
+
     @Column(name = "updated_at", nullable = false)
     private LocalDateTime updatedAt;
 
@@ -112,6 +115,11 @@ public class LmsConfirmation {
 
     @PreUpdate
     private void preUpdate() {
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    public void deactivate() {
+        this.isActive  = false;
         this.updatedAt = LocalDateTime.now();
     }
 }
