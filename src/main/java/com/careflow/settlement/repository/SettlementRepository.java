@@ -196,6 +196,34 @@ public interface SettlementRepository extends JpaRepository<Settlement, Long> {
             @Param("to") LocalDateTime to);
 
     /**
+     * 대행사 정산 통계 집계 (stats 용, 현재 조회 필터 기준)
+     * - findAgencySettlements(목록 조회)와 동일한 WHERE 조건을 사용해 "현재 필터로 조회된 결과 전체"와 stats가 항상 일치하도록 함
+     * - 필터 파라미터가 모두 null이면 전체 기간 집계
+     * - result.get(0): Object[] { count, totalGross, paidGross, pendingGross, disputedGross }
+     */
+    @Query("""
+            SELECT COUNT(s),
+                   COALESCE(SUM(s.grossAmount), 0L),
+                   COALESCE(SUM(CASE WHEN s.status = 'PAID'     THEN s.grossAmount ELSE 0 END), 0L),
+                   COALESCE(SUM(CASE WHEN s.status = 'PENDING'  THEN s.grossAmount ELSE 0 END), 0L),
+                   COALESCE(SUM(CASE WHEN s.status = 'DISPUTED' THEN s.grossAmount ELSE 0 END), 0L)
+            FROM Settlement s
+            WHERE s.agency.id = :agencyId
+              AND (:status IS NULL OR s.status = :status)
+              AND (:dateFrom IS NULL OR s.createdAt >= :dateFrom)
+              AND (:dateTo IS NULL OR s.createdAt < :dateTo)
+              AND (:nameKeyword IS NULL OR s.engineer.name LIKE %:nameKeyword%)
+              AND (:settlementId IS NULL OR s.id = :settlementId)
+            """)
+    List<Object[]> findAgencySettlementStatsByFilter(
+            @Param("agencyId") Long agencyId,
+            @Param("status") String status,
+            @Param("dateFrom") LocalDateTime dateFrom,
+            @Param("dateTo") LocalDateTime dateTo,
+            @Param("nameKeyword") String nameKeyword,
+            @Param("settlementId") Long settlementId);
+
+    /**
      * 기사별 정산 목록 조회 (GET /api/agency/settlements/engineers/performance)
      *
      * 동적 필터:

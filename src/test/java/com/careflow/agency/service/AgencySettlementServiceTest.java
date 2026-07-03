@@ -273,11 +273,61 @@ class AgencySettlementServiceTest {
         }
     }
 
+    @Nested
+    @DisplayName("TC-10. stats 필터 기준 집계 / 전월 대비 diff")
+    class StatsFilterBehavior {
+
+        @Test
+        void 필터_없으면_stats는_전체기간_기준이고_전월대비_diff가_계산됨() throws Exception {
+            // 필터 없이 조회했을 때의 stats(전체 기간 기준) — findAgencySettlementStatsByFilter 결과
+            stubStats(5L, 500000L, 300000L, 150000L, 50000L);
+            // 이번 달 / 전월 각각 별도 집계 — 전월 대비 diff 계산용
+            given(settlementRepository.findAgencySettlementStatsByPeriod(eq(AGENCY_ID), any(), any()))
+                    .willReturn(statsResult(3L, 300000L, 0L, 0L, 0L))  // 이번 달
+                    .willReturn(statsResult(1L, 100000L, 0L, 0L, 0L)); // 전월
+            given(settlementRepository.findAgencySettlements(any(), any(), any(), any(), any(), any(), any()))
+                    .willReturn(Page.empty(PAGEABLE));
+
+            AgencySettlementListResponse result = agencySettlementService.getSettlements(
+                    agencyUser, new AgencySettlementSearchRequest(), PAGEABLE);
+
+            // stats 본문은 필터(=없음) 결과인 전체 기간 집계값 그대로
+            assertThat(result.stats().thisMonthCount()).isEqualTo(5L);
+            assertThat(result.stats().thisMonthGrossAmount()).isEqualTo(500000L);
+            // 전월 대비 diff는 이번 달(3건/300000원) - 전월(1건/100000원) 별도 집계로 계산
+            assertThat(result.stats().prevMonthCountDiff()).isEqualTo(2L);
+            assertThat(result.stats().prevMonthGrossDiff()).isEqualTo(200000L);
+        }
+
+        @Test
+        void 필터_있으면_stats는_필터결과_기준이고_전월대비_diff는_null() throws Exception {
+            stubStats(2L, 120000L, 120000L, 0L, 0L);
+            given(settlementRepository.findAgencySettlements(any(), any(), any(), any(), any(), any(), any()))
+                    .willReturn(Page.empty(PAGEABLE));
+
+            AgencySettlementSearchRequest filter = new AgencySettlementSearchRequest();
+            ReflectionTestUtils.setField(filter, "status", "PAID");
+
+            AgencySettlementListResponse result = agencySettlementService.getSettlements(
+                    agencyUser, filter, PAGEABLE);
+
+            assertThat(result.stats().thisMonthCount()).isEqualTo(2L);
+            assertThat(result.stats().thisMonthGrossAmount()).isEqualTo(120000L);
+            assertThat(result.stats().prevMonthCountDiff()).isNull();
+            assertThat(result.stats().prevMonthGrossDiff()).isNull();
+
+            // 필터가 걸린 경우 전월/이번달 별도 집계 쿼리는 아예 호출되지 않아야 함
+            verify(settlementRepository, org.mockito.Mockito.never())
+                    .findAgencySettlementStatsByPeriod(any(), any(), any());
+        }
+    }
+
     // ── 헬퍼 ──────────────────────────────────────────────────────
 
     private void stubStats(long count, long gross, long paid, long pending, long disputed) {
         List<Object[]> rows = statsResult(count, gross, paid, pending, disputed);
-        given(settlementRepository.findAgencySettlementStatsByPeriod(eq(AGENCY_ID), any(), any()))
+        given(settlementRepository.findAgencySettlementStatsByFilter(
+                eq(AGENCY_ID), any(), any(), any(), any(), any()))
                 .willReturn(rows);
     }
 

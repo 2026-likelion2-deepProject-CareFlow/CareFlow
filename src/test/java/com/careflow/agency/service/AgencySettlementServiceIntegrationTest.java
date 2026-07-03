@@ -159,7 +159,7 @@ class AgencySettlementServiceIntegrationTest {
     class StatusFilter {
 
         @Test
-        void PAID_필터시_content_PAID만_포함_stats는_전체기준() throws Exception {
+        void PAID_필터시_content_PAID만_포함_stats도_필터결과_기준() throws Exception {
             createSettlement(engineerUser, agency, 100000, "PAID",    null);
             createSettlement(engineerUser, agency, 80000,  "PENDING", null);
 
@@ -171,8 +171,12 @@ class AgencySettlementServiceIntegrationTest {
 
             assertThat(result.content()).hasSize(1);
             assertThat(result.content().get(0).status()).isEqualTo("PAID");
-            // stats 는 전체 모수(2건) 기준
-            assertThat(result.stats().thisMonthCount()).isEqualTo(2L);
+            // stats도 content와 동일한 필터(PAID)가 적용되어 1건만 집계됨
+            assertThat(result.stats().thisMonthCount()).isEqualTo(1L);
+            assertThat(result.stats().thisMonthGrossAmount()).isEqualTo(100000L);
+            // 필터가 걸려있으므로 전월 대비 diff는 계산되지 않음
+            assertThat(result.stats().prevMonthCountDiff()).isNull();
+            assertThat(result.stats().prevMonthGrossDiff()).isNull();
         }
     }
 
@@ -206,7 +210,7 @@ class AgencySettlementServiceIntegrationTest {
     class DateRangeFilter {
 
         @Test
-        void 범위_내_정산만_포함_경계값_포함() throws Exception {
+        void 범위_내_정산만_포함_경계값_포함_stats도_해당범위로_집계() throws Exception {
             createSettlement(engineerUser, agency, 100000, "PAID",
                     LocalDateTime.of(2024, 6, 1, 0, 0));   // 포함 (경계)
             createSettlement(engineerUser, agency, 80000, "PAID",
@@ -222,6 +226,11 @@ class AgencySettlementServiceIntegrationTest {
                     agencyUserDetails(), filter, PAGEABLE);
 
             assertThat(result.content()).hasSize(2);
+            // stats도 dateFrom~dateTo 범위(2건, 180000원)로 집계되고 7월 건은 제외됨
+            assertThat(result.stats().thisMonthCount()).isEqualTo(2L);
+            assertThat(result.stats().thisMonthGrossAmount()).isEqualTo(180000L);
+            assertThat(result.stats().prevMonthCountDiff()).isNull();
+            assertThat(result.stats().prevMonthGrossDiff()).isNull();
         }
     }
 
@@ -245,24 +254,28 @@ class AgencySettlementServiceIntegrationTest {
     }
 
     @Nested
-    @DisplayName("TC-I-6. stats 이번 달 / 전월 분리")
-    class StatsMonthSeparation {
+    @DisplayName("TC-I-6. stats 필터 없음 — 전체 기간 집계 + 전월 대비 diff")
+    class StatsNoFilter {
 
         @Test
-        void 이번달_정산만_thisMonthCount에_반영된다() throws Exception {
+        void 필터_없으면_이번달_전월_정산_모두_전체기간으로_집계되고_전월대비_diff는_별도_계산된다() throws Exception {
             YearMonth now = YearMonth.now();
             // 이번 달 정산
             createSettlement(engineerUser, agency, 100000, "PAID",
                     now.atDay(1).atStartOfDay());
-            // 전월 정산 — thisMonthCount 에서 제외되어야 함
+            // 전월 정산
             createSettlement(engineerUser, agency, 80000, "PAID",
                     now.minusMonths(1).atDay(1).atStartOfDay());
 
             AgencySettlementListResponse result = agencySettlementService.getSettlements(
                     agencyUserDetails(), new AgencySettlementSearchRequest(), PAGEABLE);
 
-            assertThat(result.stats().thisMonthCount()).isEqualTo(1L);
-            assertThat(result.stats().thisMonthGrossAmount()).isEqualTo(100000L);
+            // 필터가 없으므로 stats 는 전체 기간(이번 달 + 전월) 합산
+            assertThat(result.stats().thisMonthCount()).isEqualTo(2L);
+            assertThat(result.stats().thisMonthGrossAmount()).isEqualTo(180000L);
+            // 전월 대비 diff는 "이번 달(1건/100000원) vs 전월(1건/80000원)" 별도 집계로 계산됨
+            assertThat(result.stats().prevMonthCountDiff()).isEqualTo(0L);
+            assertThat(result.stats().prevMonthGrossDiff()).isEqualTo(20000L);
         }
     }
 

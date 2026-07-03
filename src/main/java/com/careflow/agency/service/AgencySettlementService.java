@@ -40,8 +40,8 @@ public class AgencySettlementService {
      * 처리 순서:
      * 1. AGENCY 역할 검증
      * 2. 날짜 파싱 (fail-fast — DB 조회 전 잘못된 형식 차단)
-     * 3. stats 집계 (이번 달 / 전월 각각, 필터 무관 전체 모수)
-     * 4. keyword 분기 — 순수 숫자: settlementId 정확 일치 / 문자: 기사명 LIKE
+     * 3. keyword 분기 — 순수 숫자: settlementId 정확 일치 / 문자: 기사명 LIKE
+     * 4. stats 집계 (현재 필터로 조회된 결과 전체 기준, 필터 없으면 전체 기간)
      * 5. content 조회 (필터 + 페이징)
      * 6. bank_accounts 일괄 조회 (N+1 방지)
      * 7. Settlement 엔티티 → DTO 매핑 (period 파생 등)
@@ -63,10 +63,7 @@ public class AgencySettlementService {
         LocalDateTime dateFrom = parseDate(filter.getDateFrom(), false);
         LocalDateTime dateTo   = parseDate(filter.getDateTo(), true);
 
-        // 3. stats 집계
-        AgencySettlementListResponse.Stats stats = buildStats(agencyId);
-
-        // 4. keyword 분기 — 숫자이면 정산 ID 검색, 아니면 기사명 LIKE 검색
+        // 3. keyword 분기 — 숫자이면 정산 ID 검색, 아니면 기사명 LIKE 검색
         String raw = filter.getKeyword();
         String trimmed = (raw != null) ? raw.strip() : null;
 
@@ -82,6 +79,10 @@ public class AgencySettlementService {
                 nameKeyword = trimmed;
             }
         }
+
+        // 4. stats 집계 — content 조회와 동일한 필터 조건 적용
+        AgencySettlementListResponse.Stats stats = buildStats(
+                agencyId, filter.getStatus(), dateFrom, dateTo, nameKeyword, settlementId);
 
         // 5. content 조회 (필터 + 페이징)
         Page<Settlement> settlementPage = settlementRepository.findAgencySettlements(
@@ -113,42 +114,65 @@ public class AgencySettlementService {
     }
 
     /**
-     * stats 집계 — 이번 달 / 전월 각각 조회 후 차이 계산
-     * - 필터 조건 무관, 항상 해당 대행사의 전체 모수 기준
+     * stats 집계 — 현재 조회 필터(status/dateFrom/dateTo/keyword)로 조회된 결과 전체 기준
+     * - 필터가 하나도 없으면 전체 기간 집계
+     * - prevMonthCountDiff/prevMonthGrossDiff(전월 대비)는 필터가 걸리면 의미가 없어지므로,
+     *   필터가 전혀 없을 때(=이번 달 뷰)만 별도로 "이번 달 vs 전월"을 집계해 계산하고, 그 외에는 null
      */
-    private AgencySettlementListResponse.Stats buildStats(Long agencyId) {
-        YearMonth thisMonth  = YearMonth.now();
-        YearMonth prevMonth  = thisMonth.minusMonths(1);
+    private AgencySettlementListResponse.Stats buildStats(
+            Long agencyId, String status, LocalDateTime dateFrom, LocalDateTime dateTo,
+            String nameKeyword, Long settlementId) {
 
-        LocalDateTime thisMonthStart = thisMonth.atDay(1).atStartOfDay();
-        LocalDateTime nextMonthStart = thisMonth.plusMonths(1).atDay(1).atStartOfDay();
-        LocalDateTime prevMonthStart = prevMonth.atDay(1).atStartOfDay();
+        List<Object[]> rows = settlementRepository.findAgencySettlementStatsByFilter(
+                agencyId, status, dateFrom, dateTo, nameKeyword, settlementId);
 
-        List<Object[]> thisRows = settlementRepository.findAgencySettlementStatsByPeriod(
-                agencyId, thisMonthStart, nextMonthStart);
-        List<Object[]> prevRows = settlementRepository.findAgencySettlementStatsByPeriod(
-                agencyId, prevMonthStart, thisMonthStart);
+        Object[] r = rows.isEmpty() ? new Object[]{0L, 0L, 0L, 0L, 0L} : rows.get(0);
 
-        Object[] t = thisRows.isEmpty() ? new Object[]{0L, 0L, 0L, 0L, 0L} : thisRows.get(0);
-        Object[] p = prevRows.isEmpty() ? new Object[]{0L, 0L, 0L, 0L, 0L} : prevRows.get(0);
+        long count          = ((Number) r[0]).longValue();
+        long grossAmount    = ((Number) r[1]).longValue();
+        long paidAmount     = ((Number) r[2]).longValue();
+        long pendingAmount  = ((Number) r[3]).longValue();
+        long disputedAmount = ((Number) r[4]).longValue();
 
-        long thisMonthCount      = ((Number) t[0]).longValue();
-        long thisMonthGrossAmount = ((Number) t[1]).longValue();
-        long paidAmount          = ((Number) t[2]).longValue();
-        long pendingAmount       = ((Number) t[3]).longValue();
-        long disputedAmount      = ((Number) t[4]).longValue();
+        boolean hasFilter = status != null || dateFrom != null || dateTo != null
+                || nameKeyword != null || settlementId != null;
 
-        long prevMonthCount      = ((Number) p[0]).longValue();
-        long prevMonthGross      = ((Number) p[1]).longValue();
+        Long prevMonthCountDiff = null;
+        Long prevMonthGrossDiff = null;
+
+        if (!hasFilter) {
+            YearMonth thisMonth = YearMonth.now();
+            YearMonth prevMonth = thisMonth.minusMonths(1);
+
+            LocalDateTime thisMonthStart = thisMonth.atDay(1).atStartOfDay();
+            LocalDateTime nextMonthStart = thisMonth.plusMonths(1).atDay(1).atStartOfDay();
+            LocalDateTime prevMonthStart = prevMonth.atDay(1).atStartOfDay();
+
+            List<Object[]> thisRows = settlementRepository.findAgencySettlementStatsByPeriod(
+                    agencyId, thisMonthStart, nextMonthStart);
+            List<Object[]> prevRows = settlementRepository.findAgencySettlementStatsByPeriod(
+                    agencyId, prevMonthStart, thisMonthStart);
+
+            Object[] t = thisRows.isEmpty() ? new Object[]{0L, 0L, 0L, 0L, 0L} : thisRows.get(0);
+            Object[] p = prevRows.isEmpty() ? new Object[]{0L, 0L, 0L, 0L, 0L} : prevRows.get(0);
+
+            long thisMonthCount = ((Number) t[0]).longValue();
+            long thisMonthGross = ((Number) t[1]).longValue();
+            long prevMonthCount = ((Number) p[0]).longValue();
+            long prevMonthGross = ((Number) p[1]).longValue();
+
+            prevMonthCountDiff = thisMonthCount - prevMonthCount;
+            prevMonthGrossDiff = thisMonthGross - prevMonthGross;
+        }
 
         return new AgencySettlementListResponse.Stats(
-                thisMonthGrossAmount,
+                grossAmount,
                 paidAmount,
                 pendingAmount,
                 disputedAmount,
-                thisMonthCount,
-                thisMonthCount - prevMonthCount,
-                thisMonthGrossAmount - prevMonthGross
+                count,
+                prevMonthCountDiff,
+                prevMonthGrossDiff
         );
     }
 

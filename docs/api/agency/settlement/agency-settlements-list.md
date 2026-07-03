@@ -57,7 +57,9 @@ Authorization: Bearer {access_token}
 - **`completedCount`**: 1건의 settlement = 1건의 A/S 작업이므로 항상 1로 반환한다.
 - **`type`**: 현재 `settlements` 테이블은 기사(ENGINEER) 단위 정산만 지원하므로 항상 `"ENGINEER"`로 반환한다. AGENCY 타입 정산은 미구현이다.
 - **`payMethod` / `bankAccount`**: 별도 `bank_accounts` 테이블 미존재로 현재 `null` 반환. 추후 해당 테이블 추가 시 매핑 예정이며 코드 내 한글 주석으로 명시한다.
-- **`stats` 집계 기준**: `created_at` 기준 이번 달 / 전월 데이터를 각각 집계한다. `paidAmount`/`pendingAmount`/`disputedAmount`는 이번 달 해당 상태 건의 `gross_amount` 합계이다.
+- **`stats` 집계 기준** ([변경] 프론트 피드백 반영): `stats`는 **현재 조회 필터(status/dateFrom/dateTo/keyword)로 조회된 결과 전체** 기준으로 집계한다(= `content` 조회와 동일한 WHERE 조건). 필터를 아예 지정하지 않으면 전체 기간 기준으로 집계된다. `paidAmount`/`pendingAmount`/`disputedAmount`도 이 필터링된 범위 내 해당 상태 건의 `gross_amount` 합계이다.
+  - 필드명(`thisMonthGrossAmount`/`thisMonthCount`)은 프론트 하위 호환을 위해 그대로 유지하지만, 필터가 걸린 경우 실제로는 "이번 달"이 아니라 "필터링된 기간"의 값을 의미한다.
+- **`prevMonthCountDiff`/`prevMonthGrossDiff`(전월 대비)**: 필터가 하나라도 걸려 있으면 의미가 없어지므로 **필터가 전혀 없을 때만** "이번 달 vs 전월"을 별도로 집계해서 계산한다. 필터가 하나라도 걸려 있으면 `null`로 반환한다.
 
 ---
 
@@ -110,13 +112,13 @@ Authorization: Bearer {access_token}
 
 | 필드 | 타입 | 설명 |
 |---|---|---|
-| `stats.thisMonthGrossAmount` | long | 이번 달 전체 정산 총액 합계 (status 무관) |
-| `stats.paidAmount` | long | 이번 달 PAID 상태 gross_amount 합계 |
-| `stats.pendingAmount` | long | 이번 달 PENDING 상태 gross_amount 합계 |
-| `stats.disputedAmount` | long | 이번 달 DISPUTED 상태 gross_amount 합계 |
-| `stats.thisMonthCount` | long | 이번 달 생성된 정산 건수 |
-| `stats.prevMonthCountDiff` | long | 이번 달 건수 - 전월 건수 |
-| `stats.prevMonthGrossDiff` | long | 이번 달 총액 - 전월 총액 |
+| `stats.thisMonthGrossAmount` | long | 현재 필터로 조회된 결과 전체의 정산 총액 합계 (필터 없으면 전체 기간, status 무관) |
+| `stats.paidAmount` | long | 현재 필터 범위 내 PAID 상태 gross_amount 합계 |
+| `stats.pendingAmount` | long | 현재 필터 범위 내 PENDING 상태 gross_amount 합계 |
+| `stats.disputedAmount` | long | 현재 필터 범위 내 DISPUTED 상태 gross_amount 합계 |
+| `stats.thisMonthCount` | long | 현재 필터로 조회된 결과 전체 건수 |
+| `stats.prevMonthCountDiff` | Long (nullable) | 이번 달 건수 - 전월 건수. **필터가 하나라도 걸려 있으면 `null`** |
+| `stats.prevMonthGrossDiff` | Long (nullable) | 이번 달 총액 - 전월 총액. **필터가 하나라도 걸려 있으면 `null`** |
 | `content[].settlementId` | Long | 정산 ID |
 | `content[].type` | String | 항상 `"ENGINEER"` (현재 DB 미지원으로 AGENCY 타입 없음) |
 | `content[].engineerId` | Long | 기사 user_id |
@@ -154,10 +156,12 @@ Authorization: Bearer {access_token}
 
 1. **검증**: `userDetails.getRole() == "AGENCY"` 확인 → 아니면 `IllegalAccessException`
 2. **날짜 파싱** (fail-fast): dateFrom/dateTo → LocalDateTime, 오류 시 `IllegalArgumentException`
-3. **stats 집계** (이번 달 / 전월, 필터 무관 전체 모수):
-   - `SettlementRepository`에 집계 쿼리 2개 추가 (이번 달/전월 각각)
-4. **content 조회**: `JOIN FETCH s.engineer, s.agency`로 N+1 방지, 필터 조건 적용 후 `createdAt DESC` 정렬
-5. **DTO 매핑**: `createdAt`에서 periodStart/periodEnd 파생, payMethod/bankAccount는 null 반환
+3. **keyword 분기**: 순수 숫자면 `settlementId` 정확 일치, 아니면 `nameKeyword` LIKE 검색
+4. **stats 집계** (현재 필터 결과 전체 기준):
+   - `SettlementRepository.findAgencySettlementStatsByFilter(...)` — `content` 조회와 동일한 WHERE 조건 사용
+   - 필터가 하나도 없을 때만 `findAgencySettlementStatsByPeriod(...)`를 이번 달/전월 각각 추가 호출해 `prevMonthCountDiff`/`prevMonthGrossDiff` 계산, 필터가 있으면 두 필드 모두 `null`
+5. **content 조회**: `JOIN FETCH s.engineer, s.agency`로 N+1 방지, 필터 조건 적용 후 `createdAt DESC` 정렬
+6. **DTO 매핑**: `createdAt`에서 periodStart/periodEnd 파생, payMethod/bankAccount는 null 반환
 
 ---
 
@@ -194,11 +198,11 @@ Authorization: Bearer {access_token}
 
 - `AgencyReviewServiceIntegrationTest` 패턴 동일 적용 (`@Sql("/cleanup.sql")`, `@BeforeEach` 픽스처 구성)
 - TC-I-1. 본 대행사 정산만 조회 — 타 대행사 정산 제외 검증
-- TC-I-2. status 필터 — PAID 상태만 content에 포함, stats는 전체 기준 유지
+- TC-I-2. status 필터 — PAID 상태만 content에 포함, stats도 동일 필터(PAID) 기준으로 집계되고 전월 대비 diff는 null
 - TC-I-3. keyword 필터 — 기사명 부분 일치 시 정상 매칭
-- TC-I-4. dateFrom/dateTo 범위 — 범위 내 정산만 포함, 경계값(해당일) 포함 검증
+- TC-I-4. dateFrom/dateTo 범위 — 범위 내 정산만 포함, 경계값(해당일) 포함 검증, stats도 해당 범위로 집계되고 전월 대비 diff는 null
 - TC-I-5. 페이징 — 11건 INSERT 후 size=10 조회 시 1페이지 10건, totalPages=2
-- TC-I-6. stats 이번 달/전월 분리 — 이번 달 생성 정산만 thisMonthCount에 반영
+- TC-I-6. stats 필터 없음 — 이번 달/전월 정산 모두 전체 기간으로 합산, 전월 대비 diff는 별도 계산되어 채워짐
 - TC-I-7. periodStart/periodEnd — H2 실제 INSERT 후 createdAt 월의 1일/말일로 정확히 파생
 - TC-I-8. pendingAmount — PENDING 합산이 stats에 정확히 반영 ([DDL v11] APPROVED 제거)
 

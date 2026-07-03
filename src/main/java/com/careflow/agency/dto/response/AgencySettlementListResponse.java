@@ -15,14 +15,21 @@ public record AgencySettlementListResponse(
         int size
 ) {
 
+    /**
+     * thisMonthGrossAmount/paidAmount/pendingAmount/disputedAmount/thisMonthCount:
+     *   현재 조회 필터(status/dateFrom/dateTo/keyword) 적용 결과 전체 기준 집계. 필터 미지정 시 전체 기간 기준.
+     *   (필드명은 프론트 하위 호환을 위해 유지하나, 필터가 걸린 경우 "이번 달"이 아닌 "필터링된 기간"을 의미함)
+     * prevMonthCountDiff/prevMonthGrossDiff:
+     *   필터가 전혀 없을 때(=이번 달 뷰)만 "이번 달 대비 전월" 차이를 계산해 내려주고, 필터가 하나라도 걸려 있으면 null.
+     */
     public record Stats(
             long thisMonthGrossAmount,
             long paidAmount,
             long pendingAmount,
             long disputedAmount,
             long thisMonthCount,
-            long prevMonthCountDiff,
-            long prevMonthGrossDiff
+            Long prevMonthCountDiff,
+            Long prevMonthGrossDiff
     ) {}
 
     public record SettlementSummary(
