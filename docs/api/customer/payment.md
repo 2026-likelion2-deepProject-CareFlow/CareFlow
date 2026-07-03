@@ -120,3 +120,102 @@ report/
 - `@SpringBootTest` + H2 인메모리
 - 정상 흐름: 상태를 COMPLETED까지 올린 뒤 보고서 생성 → `customer_approved=true` 설정 → POST 결제 → status=PAID, payment row 확인
 - 결제 후 재결제 시도 → 403 확인
+
+---
+
+## API — 고객 결제 대시보드 (요약/추이/내역)
+
+프론트 결제 대시보드 화면에서 사용하는 조회 전용 API 3종. 모두 로그인한 본인(`customerId`)의 데이터만 반환하며, 클라이언트가 별도로 넘기는 `customerId` 파라미터는 없음(JWT에서 추출).
+
+| 항목 | 내용 |
+|---|---|
+| 인증 | Bearer JWT (`Authorization: Bearer {accessToken}`), 미인증 시 401 |
+| 책임 도메인 | `payment` |
+| 컨트롤러 | `payment/controller/CustomerPaymentSummaryController.java` |
+
+### 1. `GET /api/customer/payments/summary` — 결제 요약 KPI
+
+Request: 없음 (쿼리/바디 없음)
+
+응답 예시 (200 OK)
+```json
+{
+  "totalAmount": 150000,
+  "thisMonthAmount": 50000,
+  "unpaidCount": 2,
+  "partsAmount": 60000,
+  "otherAmount": 90000
+}
+```
+
+| 필드 | 설명 |
+|---|---|
+| `totalAmount` | `payments.status='SUCCESS'` 전체 합계(원) |
+| `thisMonthAmount` | 위 중 이번 달(`paid_at` 기준) 합계(원) |
+| `unpaidCount` | `as_requests.status='COMPLETED'`(결제 대기) 건수 |
+| `partsAmount` | SUCCESS 결제 건 기준 부품비 합계 |
+| `otherAmount` | `totalAmount - partsAmount` (출장비+수리비 등 나머지) — 비용 3분할(출장비/부품비/수리비)은 DB 스키마상 불가하여 부품비 vs 기타 2분할로 확정 |
+
+### 2. `GET /api/customer/payments/monthly` — 월별 결제액 추이
+
+Request: 없음
+
+응답 예시 (200 OK) — 이번 달 포함 최근 6개월 고정, 데이터 없는 달은 `amount: 0`으로 채워서 오래된 달 → 최신 달 순으로 반환 (배열 길이 항상 6)
+```json
+[
+  { "yearMonth": "2026-02", "amount": 0 },
+  { "yearMonth": "2026-03", "amount": 30000 },
+  { "yearMonth": "2026-04", "amount": 0 },
+  { "yearMonth": "2026-05", "amount": 45000 },
+  { "yearMonth": "2026-06", "amount": 0 },
+  { "yearMonth": "2026-07", "amount": 50000 }
+]
+```
+
+### 3. `GET /api/customer/payments` — 결제 내역 전체 목록
+
+Request: 없음 (상태 필터 없음 — READY/FAILED/CANCELLED/REFUNDED/SUCCESS 전체를 최신순으로 반환)
+
+응답 예시 (200 OK)
+```json
+[
+  {
+    "paymentId": 3,
+    "requestId": 30,
+    "amount": 50000,
+    "status": "SUCCESS",
+    "pgProvider": "MOCK",
+    "paidAt": "2026-07-01T10:00:00"
+  },
+  {
+    "paymentId": 2,
+    "requestId": 20,
+    "amount": 30000,
+    "status": "FAILED",
+    "pgProvider": "MOCK",
+    "paidAt": null
+  }
+]
+```
+- `status`가 `SUCCESS`가 아니면 `paidAt`은 `null`로 내려감
+- 결제 내역이 없으면 `[]` (빈 배열, 200 OK — 204 아님)
+
+### 공통 오류
+
+| 상황 | HTTP |
+|---|---|
+| Authorization 헤더 없음/만료된 토큰 | 401 |
+
+### 구현 위치
+
+```
+payment/
+├── controller/CustomerPaymentSummaryController.java
+├── dto/CustomerPaymentSummaryResponse.java
+├── dto/CustomerMonthlyPaymentResponse.java
+└── dto/PaymentResponse.java (내역 목록에서 재사용)
+```
+
+### 테스트
+
+- `CustomerPaymentSummaryControllerTest` (`@WebMvcTest`) — 3개 엔드포인트 × (성공/빈값·401) 케이스, 총 8개 전부 통과 확인
