@@ -167,4 +167,32 @@ class EngineerProfileServiceIntegrationTest {
         assertThat(updatedProfile.getCareerStartedYear()).isEqualTo(intermediateYear);
         assertThat(updatedProfile.getSkillLevel()).isEqualTo(SkillLevel.INTERMEDIATE);
     }
+
+    @Test
+    @DisplayName("성공: 기존 브랜드·지역과 겹치는 값으로 재수정해도 uk_eng_brand/uk_eng_region 위반 없이 성공 " +
+            "(PUT /api/engineer/profile 409 Duplicate entry 회귀 방지)")
+    void updateProfile_overlappingBrandsAndRegions_noDuplicateKeyError() throws Exception {
+        // Given — 기존에 "삼성","LG" / testRegion 저장, 새 목록에도 "삼성" / testRegion이 그대로 포함됨
+        EngineerProfile profile = EngineerProfile.createInitial(testUser);
+        profile.completeProfile(testCategory, 2020, SkillLevel.BEGINNER, "소개글");
+        profileRepository.save(profile);
+        expertBrandRepository.save(EngineerExpertBrand.builder().engineer(testUser).brandName("삼성").build());
+        expertBrandRepository.save(EngineerExpertBrand.builder().engineer(testUser).brandName("LG").build());
+        serviceRegionRepository.save(EngineerServiceRegion.builder().engineer(testUser).region(testRegion).build());
+        Regions newRegion = regionRepository.save(Regions.create("겹치지않는구", null, 2, 0));
+
+        UpdateProfileRequest request = newUpdateRequest(
+                null, null, List.of("삼성", "위니아"), List.of(testRegion.getId(), newRegion.getId()));
+
+        // When & Then — EngineerExpertBrand/EngineerServiceRegion은 GenerationType.IDENTITY라
+        // flush 없이 delete 후 재삽입하면 겹치는 값에서 유니크 제약 위반이 발생했었음
+        ProfileResponse response = engineerProfileService.updateProfile(testUser.getId(), request);
+
+        assertThat(response.getExpertBrands()).containsExactlyInAnyOrder("삼성", "위니아");
+        assertThat(response.getServiceRegionIds()).containsExactlyInAnyOrder(testRegion.getId(), newRegion.getId());
+
+        List<String> brandsInDb = expertBrandRepository.findByEngineer_Id(testUser.getId())
+                .stream().map(EngineerExpertBrand::getBrandName).toList();
+        assertThat(brandsInDb).containsExactlyInAnyOrder("삼성", "위니아");
+    }
 }

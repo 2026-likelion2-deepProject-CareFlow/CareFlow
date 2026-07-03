@@ -3,6 +3,7 @@ package com.careflow.payment.service;
 import com.careflow.as_request.entity.AsRequest;
 import com.careflow.as_request.repository.AsRequestRepository;
 import com.careflow.common.enums.AsStatus;
+import com.careflow.payment.dto.CustomerMonthlyPaymentResponse;
 import com.careflow.payment.dto.CustomerPaymentSummaryResponse;
 import com.careflow.payment.dto.PaymentResponse;
 import com.careflow.payment.entity.Payment;
@@ -17,7 +18,13 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.YearMonth;
+import java.time.format.DateTimeFormatter;
+import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.stream.Collectors;
+import java.util.stream.IntStream;
 
 @Service
 @RequiredArgsConstructor
@@ -122,5 +129,52 @@ public class PaymentService {
         long otherAmount = totalAmount - partsAmount;
 
         return new CustomerPaymentSummaryResponse(totalAmount, thisMonthAmount, unpaidCount, partsAmount, otherAmount);
+    }
+
+    /**
+     * 고객 월별 결제액 추이 조회 (customerId 기준 — 본인 데이터만)
+     * - 이번 달을 포함한 최근 6개월, 오래된 달부터 최신 달 순으로 반환
+     * - 결제 내역이 없는 달은 0으로 채움
+     */
+    @Transactional(readOnly = true)
+    public List<CustomerMonthlyPaymentResponse> getMonthlyPayments(Long customerId) {
+
+        YearMonth thisMonth = YearMonth.now();
+        List<YearMonth> months = IntStream.rangeClosed(0, 5)
+                .mapToObj(i -> thisMonth.minusMonths(5 - i))
+                .toList();
+
+        LocalDateTime from = months.get(0).atDay(1).atStartOfDay();
+        LocalDateTime to = thisMonth.plusMonths(1).atDay(1).atStartOfDay();
+
+        Map<YearMonth, Long> amountsByMonth = paymentRepository
+                .findSuccessByCustomerIdAndPaidAtBetween(customerId, from, to).stream()
+                .collect(Collectors.groupingBy(
+                        p -> YearMonth.from(p.getPaidAt()),
+                        Collectors.summingLong(Payment::getAmount)));
+
+        return months.stream()
+                .map(month -> new CustomerMonthlyPaymentResponse(
+                        month.format(DateTimeFormatter.ofPattern("yyyy-MM")),
+                        amountsByMonth.getOrDefault(month, 0L)))
+                .toList();
+    }
+
+    /**
+     * 고객 결제 내역 전체 조회 (customerId 기준 — 본인 데이터만)
+     * - 상태 필터 없이 전체 반환, 생성일 기준 최신순 정렬
+     */
+    @Transactional(readOnly = true)
+    public List<PaymentResponse> getPaymentList(Long customerId) {
+
+        return paymentRepository.findByCustomer_IdOrderByCreatedAtDesc(customerId).stream()
+                .map(p -> new PaymentResponse(
+                        p.getId(),
+                        p.getAsRequest().getId(),
+                        p.getAmount(),
+                        p.getStatus().name(),
+                        p.getPgProvider().name(),
+                        p.getPaidAt()))
+                .toList();
     }
 }

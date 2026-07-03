@@ -12,8 +12,8 @@ public record AgencyCreateRequest(
         String password, // 비밀번호 추후 기본 입력 최소,최대길이 지정 필요
         @Pattern(regexp = "^010[- ]?\\d{3,4}[- ]?\\d{4}$")
         String phoneNumber,
-        @NotBlank
-        String regionName,
+        @NotNull
+        Integer regionId,
         @NotBlank
         String addressDetail, // 가입자 거주지
         @NotBlank
