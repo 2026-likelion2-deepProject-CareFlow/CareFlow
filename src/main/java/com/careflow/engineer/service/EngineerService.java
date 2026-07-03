@@ -42,7 +42,7 @@ public class EngineerService {
         // approval_status : APPROVED 인 대행사라면 수리기사 계청 요청 생성
         Long accountRequestId = null;
         if (agencies.getApprovalStatus() == AgencyStatus.APPROVED){
-            Regions regions = regionRepository.findByName(request.regionName()).orElseThrow(() -> new NoSuchElementException("입력받은 지역 정보가 존재하지 않습니다."));
+            Regions regions = regionRepository.findById(request.regionId()).orElseThrow(() -> new NoSuchElementException("입력받은 지역 정보가 존재하지 않습니다."));
 
             AccountRequests accountRequests = AccountRequests.create(agencies,
                     request.email(),
