@@ -128,7 +128,6 @@ public class EngineerProfile {
     // LMS 교육 이수 시 실행 메서드
     public void completeLms() {
         this.isLmsCompleted = true;
-        this.updatedAt = LocalDateTime.now();
     }
 
     // 리뷰 저장 후 역정규화 필드 갱신 — 호출 전 새 평균/총 건수를 계산해서 넘길 것

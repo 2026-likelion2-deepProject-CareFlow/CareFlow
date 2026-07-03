@@ -56,7 +56,7 @@ public class AgenciesService {
             // approval_status : APPROVED 인 대행사라면 일반 관리자 계청 요청 생성
             Long accountRequestId = null;
             if (agencies.getApprovalStatus() == AgencyStatus.APPROVED){
-                Regions regions = regionRepository.findByName(agencyCreateRequest.regionName()).orElseThrow(() -> new NoSuchElementException("입력받은 지역 정보가 존재하지 않습니다."));
+                Regions regions = regionRepository.findById(agencyCreateRequest.regionId()).orElseThrow(() -> new NoSuchElementException("입력받은 지역 정보가 존재하지 않습니다."));
 
                 AccountRequests accountRequests = AccountRequests.create(agencies,
                         agencyCreateRequest.email(),
@@ -93,7 +93,7 @@ public class AgenciesService {
             agencies = agenciesRepository.findById(agencyId).orElseThrow(() -> new NoSuchElementException("대행사 정보가 저장되지 않았습니다."));
 
             // 2. 계정 요청 테이블에 저장한 대행사 agency_id 값(Agencies 객체)과 함께 적재
-            Regions regions = regionRepository.findByName(agencyCreateRequest.regionName()).orElseThrow(() -> new NoSuchElementException("입력받은 지역 정보가 존재하지 않습니다."));
+            Regions regions = regionRepository.findById(agencyCreateRequest.regionId()).orElseThrow(() -> new NoSuchElementException("입력받은 지역 정보가 존재하지 않습니다."));
 
             AccountRequests accountRequests = AccountRequests.create(agencies,
                     agencyCreateRequest.email(),
