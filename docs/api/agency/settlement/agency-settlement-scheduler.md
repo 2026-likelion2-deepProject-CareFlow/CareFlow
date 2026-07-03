@@ -43,7 +43,10 @@ SettlementGenerationJob.execute()
         ├─ 4. Settlement.create() 호출 → settlementRepository.save()
         │       status = PENDING (기본값)
         │
-        └─ 5. 로그 출력 (생성 건수 / 스킵 건수 / 오류 건수)
+        ├─ 5. 로그 출력 (생성 건수 / 스킵 건수 / 오류 건수)
+        │
+        └─ 6. [DDL v11 신규] 생성된 Settlement를 대행사·연·월 단위로 집계해
+                platform_settlements 레코드 생성 (자세한 내용: platform-settlement-aggregation.md)
 ```
 
 ---

@@ -1,10 +1,13 @@
 package com.careflow.agency.scheduler;
 
+import com.careflow.agency.entity.Agencies;
 import com.careflow.assignment.entity.AsAssignment;
 import com.careflow.assignment.repository.AsAssignmentRepository;
 import com.careflow.payment.entity.Payment;
 import com.careflow.payment.repository.PaymentRepository;
+import com.careflow.settlement.entity.PlatformSettlement;
 import com.careflow.settlement.entity.Settlement;
+import com.careflow.settlement.repository.PlatformSettlementRepository;
 import com.careflow.settlement.repository.SettlementRepository;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -15,7 +18,10 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 월별 정산 자동 생성 서비스
@@ -35,6 +41,7 @@ public class SettlementGenerationService {
     private final PaymentRepository paymentRepository;
     private final SettlementRepository settlementRepository;
     private final AsAssignmentRepository asAssignmentRepository;
+    private final PlatformSettlementRepository platformSettlementRepository;
 
 
     /**
@@ -58,12 +65,17 @@ public class SettlementGenerationService {
         int created = 0;
         int skipped = 0;
         int failed  = 0;
+        List<Settlement> createdSettlements = new ArrayList<>();
 
         for (Payment payment : targets) {
             try {
-                boolean saved = createSettlement(payment);
-                if (saved) created++;
-                else       skipped++;
+                Settlement settlement = createSettlement(payment);
+                if (settlement != null) {
+                    created++;
+                    createdSettlements.add(settlement);
+                } else {
+                    skipped++;
+                }
             } catch (Exception e) {
                 failed++;
                 log.error("[월별 정산] 정산 생성 실패 — payment_id={}, 원인: {}",
@@ -74,7 +86,77 @@ public class SettlementGenerationService {
         log.info("[월별 정산] 정산 생성 완료: {}건 / 스킵(기사 없음): {}건 / 오류: {}건",
                 created, skipped, failed);
 
-        return new Result(created, skipped, failed);
+        // 이어서 생성된 Settlement를 대행사·연·월 단위로 집계해 platform_settlements 생성
+        int platformSettlementsCreated = generatePlatformSettlements(targetMonth, createdSettlements);
+
+        return new Result(created, skipped, failed, platformSettlementsCreated);
+    }
+
+    /**
+     * 이번 배치에서 생성된 Settlement 목록을 대행사 단위로 GROUP BY 집계하여
+     * platform_settlements(대행사→플랫폼 월별 정산) 레코드를 생성한다.
+     *
+     * 집계 기준(settlement_year/settlement_month)은 settlements.paid_at이 아니라
+     * 이 배치 호출에 전달된 targetMonth(정산 대상 월)를 그대로 사용한다.
+     * (settlements.paid_at은 기사 지급 완료 시점에만 채워지는 컬럼이라 배치 시점과 무관하게 늦어질 수 있음 —
+     *  자세한 설계 배경은 docs/api/agency/settlement/platform-settlement-aggregation.md 참고)
+     *
+     * @return 신규 생성된 PlatformSettlement 건수 (기존 레코드에 누적만 한 경우는 미포함)
+     */
+    private int generatePlatformSettlements(YearMonth targetMonth, List<Settlement> createdSettlements) {
+        if (createdSettlements.isEmpty()) {
+            return 0;
+        }
+
+        int year  = targetMonth.getYear();
+        int month = targetMonth.getMonthValue();
+
+        Map<Long, List<Settlement>> byAgencyId = createdSettlements.stream()
+                .collect(Collectors.groupingBy(s -> s.getAgency().getId()));
+
+        log.info("[플랫폼 정산 집계] 대행사 {}곳 대상 집계 시작 — 대상 Settlement {}건",
+                byAgencyId.size(), createdSettlements.size());
+
+        int newlyCreated = 0;
+
+        for (List<Settlement> settlements : byAgencyId.values()) {
+            Agencies agency = settlements.get(0).getAgency();
+
+            int totalGross = settlements.stream().mapToInt(Settlement::getGrossAmount).sum();
+            int totalFee   = settlements.stream().mapToInt(Settlement::getPlatformFee).sum();
+            int count      = settlements.size();
+
+            PlatformSettlement platformSettlement = platformSettlementRepository
+                    .findByAgency_IdAndSettlementYearAndSettlementMonth(agency.getId(), year, month)
+                    .orElse(null);
+
+            if (platformSettlement == null) {
+                platformSettlement = PlatformSettlement.create(
+                        agency, year, month, totalGross, totalFee, count);
+                platformSettlementRepository.save(platformSettlement);
+                newlyCreated++;
+            } else if ("PENDING".equals(platformSettlement.getStatus())) {
+                // 스케줄러 재실행(Misfire 복구) 등으로 동일 기간에 대해 추가 집계된 경우 — 기존 합계에 누적
+                platformSettlement.accumulate(totalGross, totalFee, count);
+            } else {
+                // 이미 PAID/DISPUTED로 상태가 바뀐 뒤라면 재무 데이터 무결성을 위해 합계를 임의로 변경하지 않음
+                log.warn("[플랫폼 정산 집계] 이미 {} 상태인 platform_settlement에 대해 신규 집계 스킵 — agency={}, {}년 {}월. "
+                                + "해당 {}건의 settlement는 platform_settlement 미할당 상태로 남습니다.",
+                        platformSettlement.getStatus(), agency.getId(), year, month, count);
+                continue;
+            }
+
+            for (Settlement settlement : settlements) {
+                settlement.assignPlatformSettlement(platformSettlement);
+            }
+
+            log.debug("[플랫폼 정산 집계] agency={}, {}년 {}월, 건수={}, gross={}원, fee={}원",
+                    agency.getAgencyName(), year, month, count, totalGross, totalFee);
+        }
+
+        log.info("[플랫폼 정산 집계] 생성 완료: {}건", newlyCreated);
+
+        return newlyCreated;
     }
 
     /**
@@ -85,9 +167,9 @@ public class SettlementGenerationService {
      *   assignedAt 최신 1건을 기사로 확정한다.
      *   배정 내역이 없으면 스킵한다.
      *
-     * @return true: 생성 완료, false: 스킵
+     * @return 생성된 Settlement, 스킵된 경우 null
      */
-    private boolean createSettlement(Payment payment) {
+    private Settlement createSettlement(Payment payment) {
         Long requestId = payment.getAsRequest().getId();
 
         // COMPLETED 상태 배정 중 가장 최신 1건으로 담당 기사 확정
@@ -102,7 +184,7 @@ public class SettlementGenerationService {
             // 완료 처리된 배정이 없으면 정산 생성 불가 — 경고 로그 후 스킵
             log.warn("[월별 정산] 담당 기사 없음으로 스킵 — payment_id={}, request_id={}",
                     payment.getId(), requestId);
-            return false;
+            return null;
         }
 
         AsAssignment assignment = assignments.get(0);
@@ -137,14 +219,14 @@ public class SettlementGenerationService {
                 engineerNetAmount
         );
 
-        settlementRepository.save(settlement);
+        Settlement saved = settlementRepository.save(settlement);
 
         log.debug("[월별 정산] Settlement 생성 — payment_id={}, engineer={}, gross={}원, net={}원",
                 payment.getId(), assignment.getEngineer().getName(), gross, engineerNetAmount);
 
-        return true;
+        return saved;
     }
 
     /** 처리 결과 요약 레코드 */
-    public record Result(int created, int skipped, int failed) {}
+    public record Result(int created, int skipped, int failed, int platformSettlementsCreated) {}
 }
