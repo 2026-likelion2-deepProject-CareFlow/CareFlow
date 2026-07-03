@@ -2,6 +2,7 @@ package com.careflow.lms.repository;
 
 import com.careflow.lms.entity.LmsConfirmation;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -10,43 +11,68 @@ import java.util.List;
 public interface LmsConfirmationRepository extends JpaRepository<LmsConfirmation, Long> {
 
     /**
-     * [이수 완료 판정] 기사의 당해 연도 이수 콘텐츠 ID 목록 조회
-     *
-     * Service에서 아래 흐름으로 완료 판정에 사용:
-     *   1. findRequiredContents() → 이수 대상 content_id 목록
-     *   2. findContentIdsByUserIdAndYear() → 이미 이수한 content_id 목록
-     *   3. 두 집합이 일치하면 is_lms_completed = 1 업데이트
-     *
-     * 사용 인덱스: idx_lms_confirm_user_year (user_id, completion_year)
+     * [v10 변경] is_active 조건 추가 버전
+     * OX퀴즈 응시 자격 판단 및 이수 현황 집계 시 사용
+     * is_active=false인 재이수 강제 이력은 제외
      */
     @Query("""
         SELECT c.content.contentId FROM LmsConfirmation c
         WHERE c.user.id = :userId
           AND c.completionYear = :year
+          AND c.isActive = :isActive
         """)
-    List<Long> findContentIdsByUserIdAndYear(
+    List<Long> findContentIdsByUserIdAndYearAndIsActive(
             @Param("userId") Long userId,
-            @Param("year") int year
+            @Param("year") int year,
+            @Param("isActive") boolean isActive
     );
 
     /**
-     * 단건 이수 여부 체크 (중복 이수 방지 사전 검증)
-     *
-     * DB에 uk_lms_confirm_year가 있어서 중복 시 DataIntegrityViolationException이 발생하지만,
-     * 예외 발생 전 사전 체크로 더 명확한 에러 메시지를 반환할 수 있도록 제공
-     *
-     * 사용 인덱스: uk_lms_confirm_year (user_id, content_id, completion_year) — UK가 인덱스 역할도 수행
+     * [v10 변경] is_active 조건 추가 버전 — 이수 이력 엔티티 반환
+     * getRequiredContentsWithStatus()에서 confirmedAt 함께 조회 시 사용
      */
+    @Query("""
+        SELECT c FROM LmsConfirmation c
+        JOIN FETCH c.content
+        WHERE c.user.id = :userId
+          AND c.completionYear = :year
+          AND c.isActive = :isActive
+        ORDER BY c.confirmedAt ASC
+        """)
+    List<LmsConfirmation> findByUserIdAndYearAndIsActive(
+            @Param("userId") Long userId,
+            @Param("year") int year,
+            @Param("isActive") boolean isActive
+    );
+
+    /**
+     * [v10 신규] 재이수 강제 처리 — 해당 계층 이수 이력 일괄 논리 삭제
+     * QuizService.forceReLearn()에서 호출
+     * category_id는 lms_contents.category_id를 통해 조인하여 필터링
+     */
+    @Modifying
+    @Query("""
+        UPDATE LmsConfirmation lc
+        SET lc.isActive = false, lc.updatedAt = CURRENT_TIMESTAMP
+        WHERE lc.user.id = :userId
+          AND lc.content.category.categoryId = :categoryId
+          AND lc.completionYear = :year
+          AND lc.isActive = true
+        """)
+    int deactivateByUserIdAndCategoryIdAndYear(
+            @Param("userId") Long userId,
+            @Param("categoryId") Integer categoryId,
+            @Param("year") int year
+    );
+
+    // ─────────────────────────────────────────────
+    // 기존 메서드 (변경 없음)
+    // ─────────────────────────────────────────────
+
     boolean existsByUserIdAndContentContentIdAndCompletionYear(
             Long userId, Long contentId, int completionYear
     );
 
-    /**
-     * [관리자용] 특정 기사의 연도별 이수 이력 전체 조회
-     * M-14: 기사별 연도별 LMS 이수 현황 조회
-     *
-     * 사용 인덱스: idx_lms_confirm_user_year (user_id, completion_year)
-     */
     @Query("""
         SELECT c FROM LmsConfirmation c
         JOIN FETCH c.content
@@ -55,12 +81,6 @@ public interface LmsConfirmationRepository extends JpaRepository<LmsConfirmation
         """)
     List<LmsConfirmation> findAllByUserIdWithContent(@Param("userId") Long userId);
 
-    /**
-     * [관리자용] 특정 연도 기준 기사별 이수 현황 조회
-     * M-14: 연도 필터 적용 버전
-     *
-     * 사용 인덱스: idx_lms_confirm_user_year (user_id, completion_year)
-     */
     @Query("""
         SELECT c FROM LmsConfirmation c
         JOIN FETCH c.content
@@ -73,12 +93,6 @@ public interface LmsConfirmationRepository extends JpaRepository<LmsConfirmation
             @Param("year") int year
     );
 
-    /**
-     * [관리자용] 특정 콘텐츠의 이수자 목록 조회 (이수 시각 순)
-     * M-14: 콘텐츠별 이수 현황 확인
-     *
-     * 사용 인덱스: idx_lms_confirm_content (content_id, confirmed_at)
-     */
     @Query("""
         SELECT c FROM LmsConfirmation c
         JOIN FETCH c.user
