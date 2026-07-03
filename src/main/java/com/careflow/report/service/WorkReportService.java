@@ -23,9 +23,12 @@ import com.careflow.report.dto.WorkReportDetailResponse;
 import com.careflow.report.repository.WorkReportRepository;
 import com.careflow.user.entity.User;
 import com.careflow.user.repository.UserRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.context.ApplicationEventPublisher;
@@ -37,6 +40,7 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class WorkReportService {
@@ -50,6 +54,8 @@ public class WorkReportService {
     private final ApplianceRepository applianceRepository;
     private final AsStatusLogRepository asStatusLogRepository;
     private final ApplicationEventPublisher eventPublisher;
+    private final StringRedisTemplate redisTemplate;
+    private final ObjectMapper objectMapper;
 
     @Transactional
     public Long submitWorkReport(Long engineerId, CreateWorkReportRequest request) {
@@ -249,6 +255,7 @@ public class WorkReportService {
     private void syncHealthCertificate(Appliance appliance) {
         List<WorkReport> allReports = workReportRepository.findByApplianceIdOrderBySubmittedAtDesc(appliance.getId());
 
+
         int totalRepairCount = allReports.size();
         int totalCriticalParts = 0;
         PartImportance worstImportance = null;
@@ -271,6 +278,19 @@ public class WorkReportService {
                         HealthCertificate.builder().appliance(appliance).build()
                 ));
 
-        certificate.recalculate(totalRepairCount, totalCriticalParts, worstImportance, lastRepaired, appliance.getPurchaseDate());
-    }
+        String minGrade = "B";
+        int minScore = 75;
+        try {
+            String json = redisTemplate.opsForValue().get("admin:badge:criteria");
+            if (json != null) {
+                com.careflow.admin.controller.AdminBadgeCriteriaController.BadgeCriteriaDto dto =
+                        objectMapper.readValue(json, com.careflow.admin.controller.AdminBadgeCriteriaController.BadgeCriteriaDto.class);
+                minGrade = dto.minGrade();
+                minScore = dto.minScore();
+            }
+        } catch (Exception e) {
+            log.error("Redis에서 인증 뱃지 기준을 읽어오지 못했습니다. 기본값을 사용합니다.", e);
+        }
+
+        certificate.recalculate(totalRepairCount, totalCriticalParts, worstImportance, lastRepaired, appliance.getPurchaseDate(), minGrade, minScore);    }
 }

@@ -90,4 +90,51 @@ public interface AsRequestRepository extends JpaRepository<AsRequest, Long> {
 
     // 고객 결제 요약 KPI용 — 해당 고객의 특정 상태(COMPLETED=결제 대기) A/S 요청 건수
     long countByCustomer_IdAndStatus(Long customerId, AsStatus status);
+
+    // ─────────────────────────────────────────────────────────────
+    // [ADMIN 전용 API 쿼리] GET /api/admin/as-requests
+    // ─────────────────────────────────────────────────────────────
+
+    /**
+     * [관리자용] 전체 A/S 내역 페이징 및 동적 필터 조회 (N+1 방지 완벽 적용)
+     * - status, region, from(startOfDay), to(endOfDay) 조건 선택적 적용
+     */
+    @Query(value = "SELECT r FROM AsRequest r " +
+            "JOIN FETCH r.customer c " +
+            "JOIN FETCH r.appliance app " +
+            "JOIN FETCH app.category " +
+            "JOIN FETCH r.symptom s " +
+            "JOIN FETCH r.visitRegion reg " +
+            "WHERE (:status IS NULL OR r.status = :status) " +
+            "AND (:region IS NULL OR reg.name LIKE CONCAT('%', :region, '%')) " +
+            "AND (:startOfDay IS NULL OR r.createdAt >= :startOfDay) " +
+            "AND (:endOfDay IS NULL OR r.createdAt < :endOfDay) " +
+            "ORDER BY r.createdAt DESC",
+            countQuery = "SELECT COUNT(r) FROM AsRequest r " +
+                    "JOIN r.visitRegion reg " +
+                    "WHERE (:status IS NULL OR r.status = :status) " +
+                    "AND (:region IS NULL OR reg.name LIKE CONCAT('%', :region, '%')) " +
+                    "AND (:startOfDay IS NULL OR r.createdAt >= :startOfDay) " +
+                    "AND (:endOfDay IS NULL OR r.createdAt < :endOfDay)")
+    org.springframework.data.domain.Page<AsRequest> searchAllForAdmin(
+            @org.springframework.data.repository.query.Param("status") com.careflow.common.enums.AsStatus status,
+            @org.springframework.data.repository.query.Param("region") String region,
+            @org.springframework.data.repository.query.Param("startOfDay") java.time.LocalDateTime startOfDay,
+            @org.springframework.data.repository.query.Param("endOfDay") java.time.LocalDateTime endOfDay,
+            org.springframework.data.domain.Pageable pageable);
+
+    /**
+     * [관리자용] 필터 조건이 적용된 A/S 상태별 그룹 집계 쿼리 (stats 용)
+     * - 필터링된 결과 내에서 상태별 건수를 제공하여 UI 상단의 통계와 하단 리스트의 정합성을 맞춥니다.
+     */
+    @Query("SELECT r.status, COUNT(r) FROM AsRequest r " +
+            "JOIN r.visitRegion reg " +
+            "WHERE (:region IS NULL OR reg.name LIKE CONCAT('%', :region, '%')) " +
+            "AND (:startOfDay IS NULL OR r.createdAt >= :startOfDay) " +
+            "AND (:endOfDay IS NULL OR r.createdAt < :endOfDay) " +
+            "GROUP BY r.status")
+    List<Object[]> countGroupByStatusForAdmin(
+            @org.springframework.data.repository.query.Param("region") String region,
+            @org.springframework.data.repository.query.Param("startOfDay") java.time.LocalDateTime startOfDay,
+            @org.springframework.data.repository.query.Param("endOfDay") java.time.LocalDateTime endOfDay);
 }

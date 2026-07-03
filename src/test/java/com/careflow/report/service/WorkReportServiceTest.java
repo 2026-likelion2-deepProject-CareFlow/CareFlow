@@ -84,8 +84,6 @@ class WorkReportServiceTest {
         given(asRequest.getCustomer()).willReturn(customer);
         given(appliance.getBrand()).willReturn("삼성");
         given(appliance.getModelName()).willReturn("세탁기");
-
-        // 🌟 핵심: 원천 재계산을 위한 가전 Mocking 추가
         given(appliance.getId()).willReturn(200L);
         given(appliance.getPurchaseDate()).willReturn(LocalDate.now().minusYears(1));
 
@@ -97,9 +95,10 @@ class WorkReportServiceTest {
         given(workReportRepository.existsByAsRequest_Id(100L)).willReturn(false);
         given(asAssignmentRepository.findByAsRequest_Id(100L)).willReturn(List.of(assignment));
         given(savedReport.getReportId()).willReturn(999L);
+        given(savedReport.getSubmittedAt()).willReturn(LocalDateTime.of(2024, 6, 18, 15, 30));
+        given(savedReport.getParts()).willReturn(List.of());
         given(workReportRepository.save(any(WorkReport.class))).willReturn(savedReport);
 
-        // 🌟 핵심: syncHealthCertificate 내부 동작을 위한 Mocking
         given(workReportRepository.findByApplianceIdOrderBySubmittedAtDesc(200L)).willReturn(List.of(savedReport));
         given(healthCertificateRepository.findByAppliance_Id(200L)).willReturn(Optional.of(certificate));
 
@@ -107,15 +106,24 @@ class WorkReportServiceTest {
         Long reportId = workReportService.submitWorkReport(1L, request);
 
         assertThat(reportId).isEqualTo(999L);
+
         verify(asRequest).completeWork();
-        verify(workReportRepository).flush(); // 🌟 flush 확인
+        verify(workReportRepository).flush();
 
-        // 🌟 에러 원인 해결: 옛날 메서드 대신 recalculate 검증!
-        verify(certificate).recalculate(eq(1), eq(0), eq(null), any(), any());
+        verify(certificate).recalculate(
+                eq(1),
+                eq(0),
+                isNull(),
+                any(LocalDateTime.class),
+                any(LocalDate.class),
+                eq("B"),
+                eq(75)
+        );
 
-        verify(asStatusLogRepository, times(1)).save(any());
+        verify(asStatusLogRepository, times(1)).save(any(AsStatusLog.class));
         verify(eventPublisher, atLeastOnce()).publishEvent(any(com.careflow.notification.event.AsStatusNotificationEvent.class));
     }
+
 
     @Test
     @DisplayName("실패: 본인에게 배정된 건이 아님 (권한 없음)")
@@ -412,9 +420,9 @@ class WorkReportServiceTest {
             User engineer = mock(User.class);
             given(engineer.getId()).willReturn(engineerId);
 
-            // 🌟 멱등성 롤백을 위한 연관 엔티티 추가 모킹
             Appliance appliance = mock(Appliance.class);
             given(appliance.getId()).willReturn(200L);
+            given(appliance.getPurchaseDate()).willReturn(LocalDate.now().minusYears(1));
 
             AsRequest asRequest = mock(AsRequest.class);
             given(asRequest.getStatus()).willReturn(AsStatus.COMPLETED);
@@ -427,8 +435,8 @@ class WorkReportServiceTest {
 
             given(workReportRepository.findById(reportId)).willReturn(Optional.of(report));
 
-            // 🌟 취소되어 보고서가 0개가 된다고 가정
             given(workReportRepository.findByApplianceIdOrderBySubmittedAtDesc(200L)).willReturn(List.of());
+
             HealthCertificate certificate = mock(HealthCertificate.class);
             given(healthCertificateRepository.findByAppliance_Id(200L)).willReturn(Optional.of(certificate));
 
@@ -437,10 +445,19 @@ class WorkReportServiceTest {
             verify(asRequest).revertToInProgress();
             verify(asStatusLogRepository).save(any(AsStatusLog.class));
             verify(workReportRepository).delete(report);
-            verify(workReportRepository).flush(); // 🌟 flush 검증
-            // 🌟 보고서 0개 기준 재계산 검증
-            verify(certificate).recalculate(eq(0), eq(0), eq(null), eq(null), any());
+            verify(workReportRepository).flush();
+
+            verify(certificate).recalculate(
+                    eq(0),
+                    eq(0),
+                    isNull(),
+                    isNull(),
+                    any(LocalDate.class),
+                    eq("B"),
+                    eq(75)
+            );
         }
+
 
         @Test
         @DisplayName("실패: 타인의 보고서를 취소하려고 하면 예외 발생")

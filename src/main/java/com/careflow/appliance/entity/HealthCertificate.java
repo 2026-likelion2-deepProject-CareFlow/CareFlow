@@ -76,7 +76,9 @@ public class HealthCertificate {
     }
 
     // 🌟 수정: += 누적 방식을 버리고 외부에서 주입받은 절대값으로 재계산
-    public void recalculate(int totalRepairCount, int totalCriticalParts, PartImportance worstImportance, LocalDateTime lastRepaired, LocalDate purchaseDate) {
+    public void recalculate(int totalRepairCount, int totalCriticalParts,
+                            PartImportance worstImportance, LocalDateTime lastRepaired,
+                            LocalDate purchaseDate, String minGrade, int minScore) {
         this.repairCount = totalRepairCount;
         this.criticalPartsReplaced = totalCriticalParts;
         this.lastRepairedAt = lastRepaired;
@@ -96,7 +98,7 @@ public class HealthCertificate {
         else if (this.score >= 40) this.grade = "D";
         else this.grade = "E";
 
-        this.isCertified = (this.score >= 75 && (this.grade.equals("A") || this.grade.equals("B")));
-        this.updatedAt = now;
+        this.isCertified = (this.score >= minScore && this.grade.compareTo(minGrade) <= 0);
+        this.updatedAt = LocalDateTime.now();
     }
 }
