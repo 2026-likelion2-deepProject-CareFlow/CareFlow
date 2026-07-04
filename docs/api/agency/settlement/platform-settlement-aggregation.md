@@ -2,22 +2,22 @@
 
 ## 개요
 
-| 항목 | 내용 |
-|---|---|
-| 목적 | `settlements`(건별 기사·대행사 정산)를 대행사·연·월 단위로 GROUP BY 집계하여 `platform_settlements`(대행사가 플랫폼에 납부할 월별 수수료 청구서) 레코드를 생성 |
-| 트리거 방식 | 별도 스케줄러가 아니라, 기존 `SettlementGenerationService.generateForMonth()`(월별 정산 자동 생성 배치)에 **이어서** 같은 트랜잭션 흐름 안에서 실행 |
-| 실행 시점 | 매월 1일 01:00 (`SettlementSchedulerConfig`의 기존 Quartz 트리거 그대로 재사용, 신규 Trigger 없음) |
-| 대상 데이터 | 이번 배치 실행에서 새로 생성된 `Settlement`(PENDING) 전체 |
+| 항목 | 내용                                                                                                                            |
+|---|-------------------------------------------------------------------------------------------------------------------------------|
+| 목적 | `settlements`(건별 기사·대행사 정산)를 대행사·연·월 단위로 GROUP BY 집계하여 `platform_settlements`(대행사가 플랫폼에 납부할 월별 수수료 청구서) 레코드를 생성               |
+| 트리거 방식 | 별도 스케줄러가 아니라, 기존 `SettlementGenerationService.generateForMonth()`(월별 정산 자동 생성 배치)에 **이어서** 같은 트랜잭션 흐름 안에서 실행                  |
+| 실행 시점 | 매월 1일 01:00 (`SettlementSchedulerConfig`의 기존 Quartz 트리거 그대로 재사용, 신규 Trigger 없음)                                               |
+| 대상 데이터 | 이번 배치 실행에서 새로 생성된 `Settlement`(PENDING) 전체                                                                                    |
 | 생성 단위 | 대행사(`agency_id`) × 정산 대상 연(`settlement_year`) × 정산 대상 월(`settlement_month`) 당 1행 — `uk_platform_settlement_period` 유니크 제약과 동일 |
-| 생성 상태 | `PlatformSettlement.status = PENDING` |
-| 패키지 위치 | `com.careflow.agency.scheduler` (기존 `SettlementGenerationService`, `SettlementGenerationJob`과 동일 패키지) |
-| 근거 스키마 | `sql/CareFlow_DDL_v11.sql` — `platform_settlements` 테이블(618행), `settlements.platform_settlement_id` FK(659행) |
+| 생성 상태 | `PlatformSettlement.status = PENDING`                                                                                         |
+| 패키지 위치 | `com.careflow.agency.scheduler` (기존 `SettlementGenerationService`, `SettlementGenerationJob`과 동일 패키지)                         |
+| 근거 스키마 | `sql/CareFlow_DDL_v14.sql` — `platform_settlements` 테이블(618행), `settlements.platform_settlement_id` FK(659행)                  |
 
 ---
 
 ## 설계 결정 — 집계 기준을 "정산 생성 시점의 대상 월(targetMonth)"으로 삼은 이유
 
-`CareFlow_DDL_v11.sql`의 `platform_settlements.settlement_year` 컬럼 주석은 "집계 대상 settlements.paid_at 기준"이라고 되어 있으나, `settlements.paid_at`은 `Settlement.markPaid()`가 호출되는 시점(기사 지급 완료 시점, 관리자의 별도 승인 액션)에만 채워지는 컬럼으로, **정산 생성 시점과는 무관하게 임의로 늦게 채워질 수 있음.** 이 배치는 "이번 배치가 이번 달에 만든 Settlement를 이어서 즉시 집계"하는 요구사항이므로, `settlements.paid_at`이 아니라 **`SettlementGenerationService.generateForMonth(YearMonth targetMonth)`에 전달된 `targetMonth`(정산 대상 월 = 결제가 발생한 전월)** 를 `platform_settlements.settlement_year`/`settlement_month`로 그대로 사용한다.
+`CareFlow_DDL_v14.sql`의 `platform_settlements.settlement_year` 컬럼 주석은 "집계 대상 settlements.paid_at 기준"이라고 되어 있으나, `settlements.paid_at`은 `Settlement.markPaid()`가 호출되는 시점(기사 지급 완료 시점, 관리자의 별도 승인 액션)에만 채워지는 컬럼으로, **정산 생성 시점과는 무관하게 임의로 늦게 채워질 수 있음.** 이 배치는 "이번 배치가 이번 달에 만든 Settlement를 이어서 즉시 집계"하는 요구사항이므로, `settlements.paid_at`이 아니라 **`SettlementGenerationService.generateForMonth(YearMonth targetMonth)`에 전달된 `targetMonth`(정산 대상 월 = 결제가 발생한 전월)** 를 `platform_settlements.settlement_year`/`settlement_month`로 그대로 사용한다.
 
 - 이렇게 하면 `platform_settlements`는 "대행사가 지난달 발생시킨 정산 총액에 대해 플랫폼에 납부해야 할 수수료 청구서"라는 의미를 가지며, 개별 기사 지급 완료 여부(`markPaid()` 호출 여부)와 무관하게 매월 1일 즉시 생성된다.
 - `DISPUTED` 상태(생성 직후에는 발생하지 않지만 이후 상태 변경으로 발생 가능)는 집계 대상에서 제외한다 — DDL 주석의 "DISPUTED 상태인 건은 NULL" 문구와 동일한 취지.

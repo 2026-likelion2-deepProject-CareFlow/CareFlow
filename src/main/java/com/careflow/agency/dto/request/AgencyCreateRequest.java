@@ -17,6 +17,7 @@ public record AgencyCreateRequest(
         @NotBlank
         String addressDetail, // 가입자 거주지
         @NotBlank
+        @Pattern(regexp = "^\\d{3}-\\d{2}-\\d{5}$", message = "사업자번호는 000-00-00000 형식이어야 합니다.")
         String businessNumber,
         @NotBlank
         String agencyName,
