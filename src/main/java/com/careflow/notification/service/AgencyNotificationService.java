@@ -17,6 +17,7 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.NoSuchElementException;
 import java.util.Set;
 
 @Service
@@ -47,9 +48,7 @@ public class AgencyNotificationService {
         Long agencyId = userDetails.getAgencyId();
 
         // 알림 수신 대상 user_id 범위 산정 — 대행사 소속 수리기사 + 그 대행사로부터 A/S를 받은 고객
-        List<Long> recipientIds = new ArrayList<>();
-        recipientIds.addAll(userRepository.findIdsByAgency_IdAndRole(agencyId, Role.ENGINEER));
-        recipientIds.addAll(asRequestRepository.findDistinctCustomerIdsByAgencyId(agencyId));
+        List<Long> recipientIds = resolveRecipientIds(agencyId);
 
         if (recipientIds.isEmpty()) {
             return new AgencyNotificationResponse(
@@ -71,7 +70,7 @@ public class AgencyNotificationService {
 
         List<AgencyNotificationResponse.NotificationItem> content = page.getContent().stream()
                 .map(n -> new AgencyNotificationResponse.NotificationItem(
-                        n.getId(), n.getType(), n.getTitle(), n.getBody(), n.getChannel(), n.getCreatedAt()))
+                        n.getId(), n.getType(), n.getTitle(), n.getBody(), n.getChannel(), n.isRead(), n.getCreatedAt()))
                 .toList();
 
         return new AgencyNotificationResponse(
@@ -81,5 +80,61 @@ public class AgencyNotificationService {
                 page.getTotalPages(),
                 page.getNumber(),
                 page.getSize());
+    }
+
+    /**
+     * 알림 읽음 처리 (PATCH /api/agency/notifications/{notificationId}/read)
+     *
+     * unreadCount는 이 API가 직접 내려주지 않는다 — 프론트엔드가 처리 후
+     * GET /api/agency/notifications를 재호출해 최신 stats.unreadCount를 반영한다.
+     */
+    @Transactional
+    public void markAsRead(CustomUserDetails userDetails, Long notificationId) throws IllegalAccessException {
+
+        // 역할 검증 — AGENCY만 접근 가능
+        if (!"AGENCY".equals(userDetails.getRole())) {
+            throw new IllegalAccessException("대행사 관리자만 접근할 수 있습니다.");
+        }
+
+        Notification notification = notificationRepository.findById(notificationId)
+                .orElseThrow(() -> new NoSuchElementException("존재하지 않는 알림입니다."));
+
+        // 소속 검증 — 이 대행사의 알림 수신 대상 범위(소속 기사 + 그 기사에게 A/S를 받은 고객)에 속해야 함
+        List<Long> recipientIds = resolveRecipientIds(userDetails.getAgencyId());
+        if (!recipientIds.contains(notification.getUser().getId())) {
+            throw new IllegalAccessException("본인 대행사 소속 알림만 읽음 처리할 수 있습니다.");
+        }
+
+        notification.markAsRead();
+    }
+
+    /**
+     * 알림 전체 읽음 처리 (PATCH /api/agency/notifications/read-all)
+     *
+     * read-all은 결과가 결정적(전체 읽음 → unreadCount는 반드시 0)이므로,
+     * markAsRead()와 달리 GET 재호출 안내 없이 프론트엔드가 즉시 로컬 상태를 갱신한다.
+     */
+    @Transactional
+    public void markAllAsRead(CustomUserDetails userDetails) throws IllegalAccessException {
+
+        // 역할 검증 — AGENCY만 접근 가능
+        if (!"AGENCY".equals(userDetails.getRole())) {
+            throw new IllegalAccessException("대행사 관리자만 접근할 수 있습니다.");
+        }
+
+        List<Long> recipientIds = resolveRecipientIds(userDetails.getAgencyId());
+        if (recipientIds.isEmpty()) {
+            return;
+        }
+
+        notificationRepository.markAllAsReadByUserIds(recipientIds);
+    }
+
+    // 알림 수신 대상 user_id 범위 산정 — 대행사 소속 수리기사 + 그 대행사로부터 A/S를 받은 고객
+    private List<Long> resolveRecipientIds(Long agencyId) {
+        List<Long> recipientIds = new ArrayList<>();
+        recipientIds.addAll(userRepository.findIdsByAgency_IdAndRole(agencyId, Role.ENGINEER));
+        recipientIds.addAll(asRequestRepository.findDistinctCustomerIdsByAgencyId(agencyId));
+        return recipientIds;
     }
 }

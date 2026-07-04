@@ -25,6 +25,7 @@ public record AgencyNotificationResponse(
             String title,
             String body,
             String channel,
+            boolean isRead,
             LocalDateTime createdAt
     ) {
     }
