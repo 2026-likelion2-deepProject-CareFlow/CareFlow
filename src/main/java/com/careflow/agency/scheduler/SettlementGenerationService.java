@@ -43,6 +43,9 @@ public class SettlementGenerationService {
     private final AsAssignmentRepository asAssignmentRepository;
     private final PlatformSettlementRepository platformSettlementRepository;
 
+    // CareFlow 플랫폼 수수료율 — 전 대행사 공통 고정값(10%). 대행사별 agencyFeeRate와는 별개
+    private static final BigDecimal PLATFORM_FEE_RATE = BigDecimal.valueOf(0.10);
+
 
     /**
      * 정산 일괄 생성 진입점 — SettlementGenerationJob 에서 호출
@@ -189,19 +192,19 @@ public class SettlementGenerationService {
 
         AsAssignment assignment = assignments.get(0);
 
-        int gross        = payment.getAmount();
-        // agencies.agency_fee_rate 를 플랫폼 수수료율 및 대행사 수수료율 모두에 적용
+        int gross = payment.getAmount();
+        // agencies.agency_fee_rate 는 대행사별 기사 수수료율(비율, 예: 0.46 = 46%) — 플랫폼 수수료율(고정 10%)과는 별개
         BigDecimal agencyFeeRate = BigDecimal.valueOf(assignment.getAgency().getAgencyFeeRate());
 
-        // 수수료 계산 — 소수점 반올림(HALF_UP), 원 단위 정수로 변환
-        int platformFee = agencyFeeRate
+        // 수수료 계산 — 이미 비율(0~1)로 저장된 값이므로 100으로 나누지 않고 gross_amount에 바로 곱함
+        int platformFee = PLATFORM_FEE_RATE
                 .multiply(BigDecimal.valueOf(gross))
-                .divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP)
+                .setScale(0, RoundingMode.HALF_UP)
                 .intValue();
 
         int agencyFee = agencyFeeRate
                 .multiply(BigDecimal.valueOf(gross))
-                .divide(BigDecimal.valueOf(100), 0, RoundingMode.HALF_UP)
+                .setScale(0, RoundingMode.HALF_UP)
                 .intValue();
 
         int engineerNetAmount = gross - platformFee - agencyFee;
@@ -213,7 +216,7 @@ public class SettlementGenerationService {
                 assignment.getAgency(),
                 gross,
                 platformFee,
-                agencyFeeRate,   // feeRate(플랫폼 수수료율) 에도 agency_fee_rate 적용
+                PLATFORM_FEE_RATE,   // feeRate — 플랫폼 고정 수수료율(10%) 스냅샷
                 agencyFee,
                 agencyFeeRate,
                 engineerNetAmount

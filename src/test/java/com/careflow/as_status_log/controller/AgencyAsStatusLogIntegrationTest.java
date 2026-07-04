@@ -174,6 +174,60 @@ class AgencyAsStatusLogIntegrationTest {
             mockMvc.perform(get("/api/as-status-logs/agency"))
                     .andExpect(status().isUnauthorized());
         }
+
+        @Test
+        @DisplayName("성공: toStatus 필터 적용 시 해당 상태 이력만 반환")
+        void success_toStatusFilter() throws Exception {
+            AsRequest req = saveRequest(agency);
+            saveLog(req, agencyManager, null, "WAITING", null);
+            saveLog(req, agencyManager, "WAITING", "ENGINEER_DEPARTED", "출발");
+            saveLog(req, agencyManager, "ENGINEER_DEPARTED", "COMPLETED", null);
+
+            mockMvc.perform(get("/api/as-status-logs/agency")
+                            .param("toStatus", "COMPLETED")
+                            .header("Authorization", "Bearer " + agencyToken))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.totalCount").value(1))
+                    .andExpect(jsonPath("$.logs[0].toStatus").value("COMPLETED"));
+        }
+
+        @Test
+        @DisplayName("성공: engineerId 필터 적용 시 해당 기사가 변경한 이력만 반환")
+        void success_engineerIdFilter() throws Exception {
+            User otherManager = userRepository.save(User.builder()
+                    .email("other3@logtest.com").passwordHash("hashed")
+                    .name("다른관리자").phone("010-3333-4444").role(Role.AGENCY).agency(agency).build());
+
+            AsRequest req = saveRequest(agency);
+            saveLog(req, agencyManager, null, "WAITING", null);
+            saveLog(req, otherManager, "WAITING", "ENGINEER_DEPARTED", null);
+
+            mockMvc.perform(get("/api/as-status-logs/agency")
+                            .param("engineerId", String.valueOf(otherManager.getId()))
+                            .header("Authorization", "Bearer " + agencyToken))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.totalCount").value(1))
+                    .andExpect(jsonPath("$.logs[0].toStatus").value("ENGINEER_DEPARTED"));
+        }
+
+        @Test
+        @DisplayName("성공: keyword 필터 적용 시 고객명 부분일치 이력만 반환")
+        void success_keywordFilter_matchesCustomerName() throws Exception {
+            AsRequest req = saveRequest(agency);
+            saveLog(req, agencyManager, null, "WAITING", null);
+
+            mockMvc.perform(get("/api/as-status-logs/agency")
+                            .param("keyword", "테스트고객")
+                            .header("Authorization", "Bearer " + agencyToken))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.totalCount").value(1));
+
+            mockMvc.perform(get("/api/as-status-logs/agency")
+                            .param("keyword", "존재하지않는고객")
+                            .header("Authorization", "Bearer " + agencyToken))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.totalCount").value(0));
+        }
     }
 
     // ─────────────────────────────────────────────

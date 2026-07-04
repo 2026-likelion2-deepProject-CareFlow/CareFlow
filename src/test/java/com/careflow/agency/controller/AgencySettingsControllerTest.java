@@ -226,16 +226,16 @@ class AgencySettingsControllerTest {
     class GetFeeRate {
 
         @Test
-        @DisplayName("성공: AGENCY 인증 — 200 OK + agencyFeeRate 반환")
+        @DisplayName("성공: AGENCY 인증 — 200 OK + agencyFeeRate 반환(비율)")
         void getFeeRate_success_200() throws Exception {
-            AgencyFeeRateResponse resp = new AgencyFeeRateResponse(1L, "테스트대행사", 5.00);
+            AgencyFeeRateResponse resp = new AgencyFeeRateResponse(1L, "테스트대행사", 0.05);
 
             given(agenciesService.getFeeRate(1L)).willReturn(resp);
 
             mockMvc.perform(get("/api/agencies/fee-rate")
                             .with(user(agencyUser())))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.agencyFeeRate").value(5.00));
+                    .andExpect(jsonPath("$.agencyFeeRate").value(0.05));
         }
 
         @Test
@@ -266,10 +266,10 @@ class AgencySettingsControllerTest {
     class UpdateFeeRate {
 
         @Test
-        @DisplayName("성공: 유효한 수수료율(7.50) + AGENCY 인증 — 200 OK")
+        @DisplayName("성공: 유효한 수수료율(비율 0.075) + AGENCY 인증 — 200 OK")
         void updateFeeRate_success_200() throws Exception {
-            AgencyFeeRateUpdateRequest req = new AgencyFeeRateUpdateRequest(7.50);
-            AgencyFeeRateResponse resp = new AgencyFeeRateResponse(1L, "테스트대행사", 7.50);
+            AgencyFeeRateUpdateRequest req = new AgencyFeeRateUpdateRequest(0.075);
+            AgencyFeeRateResponse resp = new AgencyFeeRateResponse(1L, "테스트대행사", 0.075);
 
             given(agenciesService.updateFeeRate(eq(1L), any())).willReturn(resp);
 
@@ -278,13 +278,13 @@ class AgencySettingsControllerTest {
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(req)))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.agencyFeeRate").value(7.50));
+                    .andExpect(jsonPath("$.agencyFeeRate").value(0.075));
         }
 
         @Test
         @DisplayName("실패: 인증 토큰 없음 — 401 Unauthorized")
         void updateFeeRate_noAuth_401() throws Exception {
-            AgencyFeeRateUpdateRequest req = new AgencyFeeRateUpdateRequest(7.50);
+            AgencyFeeRateUpdateRequest req = new AgencyFeeRateUpdateRequest(0.075);
 
             mockMvc.perform(patch("/api/agencies/fee-rate")
                             .contentType(MediaType.APPLICATION_JSON)
@@ -305,9 +305,9 @@ class AgencySettingsControllerTest {
         }
 
         @Test
-        @DisplayName("유효성 실패: 소수점 3자리(5.123) — 400 Bad Request")
+        @DisplayName("유효성 실패: 소수점 5자리(0.12345) — 400 Bad Request")
         void updateFeeRate_fractionExceeded_400() throws Exception {
-            AgencyFeeRateUpdateRequest req = new AgencyFeeRateUpdateRequest(5.123);
+            AgencyFeeRateUpdateRequest req = new AgencyFeeRateUpdateRequest(0.12345);
 
             mockMvc.perform(patch("/api/agencies/fee-rate")
                             .with(user(agencyUser()))
@@ -319,7 +319,7 @@ class AgencySettingsControllerTest {
         @Test
         @DisplayName("실패: 대행사 정보 없음 — 404 Not Found")
         void updateFeeRate_notFound_404() throws Exception {
-            AgencyFeeRateUpdateRequest req = new AgencyFeeRateUpdateRequest(7.50);
+            AgencyFeeRateUpdateRequest req = new AgencyFeeRateUpdateRequest(0.075);
 
             given(agenciesService.updateFeeRate(eq(1L), any()))
                     .willThrow(new NoSuchElementException("해당 사용자의 대행사 정보를 찾을 수 없습니다."));
@@ -334,10 +334,10 @@ class AgencySettingsControllerTest {
         @Test
         @DisplayName("실패: 수수료율 범위 초과(서비스 IllegalArgumentException) — 400 Bad Request")
         void updateFeeRate_outOfRange_400() throws Exception {
-            AgencyFeeRateUpdateRequest req = new AgencyFeeRateUpdateRequest(101.00);
+            AgencyFeeRateUpdateRequest req = new AgencyFeeRateUpdateRequest(1.5);
 
             given(agenciesService.updateFeeRate(eq(1L), any()))
-                    .willThrow(new IllegalArgumentException("수수료율은 0 이상 100 이하여야 합니다."));
+                    .willThrow(new IllegalArgumentException("수수료율은 0 이상 1 이하의 비율이어야 합니다."));
 
             mockMvc.perform(patch("/api/agencies/fee-rate")
                             .with(user(agencyUser()))

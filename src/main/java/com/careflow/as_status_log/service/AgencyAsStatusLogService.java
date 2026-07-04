@@ -14,6 +14,8 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -31,16 +33,49 @@ public class AgencyAsStatusLogService {
      * 소속 대행사 A/S 상태 변경 이력 목록 조회 (최신순).
      * 1. AGENCY 권한 확인
      * 2. 로그인 유저의 소속 agency_id 추출
-     * 3. as_status_logs JOIN as_requests WHERE agency_id = :agencyId
+     * 3. as_status_logs JOIN as_requests WHERE agency_id = :agencyId (date·toStatus·engineerId 선택 필터)
+     * 4. keyword(접수번호·고객명·제품명)는 DB 필터 이후 인메모리 부분일치 필터링
      */
     @Transactional(readOnly = true)
     public AsStatusLogListResponse getStatusLogs(
-            CustomUserDetails userDetails) throws IllegalAccessException {
+            CustomUserDetails userDetails,
+            LocalDate date,
+            String toStatus,
+            Long engineerId,
+            String keyword) throws IllegalAccessException {
 
         Long agencyId = extractAgencyId(userDetails);
+
+        // date는 하루 단위 필터 — [date 00:00, date+1일 00:00) 범위로 변환
+        LocalDateTime dateStart = (date != null) ? date.atStartOfDay() : null;
+        LocalDateTime dateEnd = (date != null) ? date.plusDays(1).atStartOfDay() : null;
+
         List<AsStatusLog> logs = asStatusLogRepository
-                .findAllByAgencyIdOrderByCreatedAtDesc(agencyId);
+                .findAllByAgencyIdWithFilter(agencyId, dateStart, dateEnd, toStatus, engineerId);
+
+        if (keyword != null && !keyword.isBlank()) {
+            String kw = keyword.trim().toLowerCase();
+            logs = logs.stream()
+                    .filter(l -> matchesKeyword(l, kw))
+                    .collect(Collectors.toList());
+        }
+
         return AsStatusLogListResponse.of(logs);
+    }
+
+    /**
+     * keyword 부분 일치 검사 — 접수번호(requestId)·고객명·제품명(브랜드+모델명) 대상
+     */
+    private boolean matchesKeyword(AsStatusLog log, String keyword) {
+        AsRequest asRequest = log.getAsRequest();
+        String customerName = asRequest.getCustomer().getName();
+        String applianceName = asRequest.getAppliance() != null
+                ? asRequest.getAppliance().getBrand() + " " + asRequest.getAppliance().getModelName()
+                : null;
+
+        return String.valueOf(asRequest.getId()).contains(keyword)
+                || (customerName != null && customerName.toLowerCase().contains(keyword))
+                || (applianceName != null && applianceName.toLowerCase().contains(keyword));
     }
 
     /**

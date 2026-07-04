@@ -49,7 +49,8 @@ public record AgencySettlementListResponse(
             int agencyFee,
             int engineerNetAmount,
             String status,
-            LocalDateTime settledAt,
+            LocalDateTime calculatedAt,   // 정산 레코드가 계산/생성된 시각 — 상태와 무관하게 항상 존재
+            LocalDateTime paidAt,         // 기사/대행사에게 실제 지급 완료된 일시 — null이면 미지급(PENDING/DISPUTED)
             // payMethod / bankAccount: bank_accounts 테이블 미존재로 현재 null 반환
             // 추후 해당 테이블 추가 시 매핑 예정
             String payMethod,

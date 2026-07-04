@@ -5,12 +5,16 @@ import com.careflow.as_status_log.dto.AsStatusLogSummaryResponse;
 import com.careflow.as_status_log.service.AgencyAsStatusLogService;
 import com.careflow.auth.security.CustomUserDetails;
 import lombok.RequiredArgsConstructor;
+import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+
+import java.time.LocalDate;
 
 @RestController
 @RequestMapping("/api/as-status-logs")
@@ -22,12 +26,18 @@ public class AgencyAsStatusLogController {
     /**
      * 소속 대행사 A/S 상태 변경 이력 목록 조회 (최신순)
      * - as_status_logs JOIN as_requests WHERE agency_id = 소속 대행사 id
+     * - date·toStatus·engineerId·keyword 모두 선택 파라미터(null/미입력 시 조건 미적용)
      */
     @GetMapping("/agency")
     public ResponseEntity<AsStatusLogListResponse> getStatusLogs(
-            @AuthenticationPrincipal CustomUserDetails userDetails) throws IllegalAccessException {
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate date,
+            @RequestParam(required = false) String toStatus,
+            @RequestParam(required = false) Long engineerId,
+            @RequestParam(required = false) String keyword) throws IllegalAccessException {
 
-        AsStatusLogListResponse response = agencyAsStatusLogService.getStatusLogs(userDetails);
+        AsStatusLogListResponse response =
+                agencyAsStatusLogService.getStatusLogs(userDetails, date, toStatus, engineerId, keyword);
         return ResponseEntity.ok(response);
     }
 
