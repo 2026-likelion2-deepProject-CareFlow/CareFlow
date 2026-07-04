@@ -42,6 +42,15 @@ spring:
             client-secret: ${GOOGLE_CLIENT_SECRET:local-dummy-client-secret}
             scope: email, profile
 
+  mail:
+    host: smtp.gmail.com
+    port: 587
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail.smtp.auth: true
+      mail.smtp.starttls.enable: true
+
 app:
   oauth2:
     # 로컬 개발 환경용 OAuth2 로그인 성공 후 리다이렉트 URI
