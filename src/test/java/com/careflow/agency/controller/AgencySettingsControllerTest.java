@@ -76,19 +76,37 @@ class AgencySettingsControllerTest {
         @Test
         @DisplayName("성공: 대표 계정 — 200 OK")
         void getProfile_representative_200() throws Exception {
-            AgencyProfileResponse resp = new AgencyProfileResponse(5L, "테스트대행사", "서울특별시 강남구 테헤란로 1");
+            AgencyProfileResponse resp = new AgencyProfileResponse(
+                    5L, "테스트대행사", "서울특별시 강남구 테헤란로 1", "신한은행", "110-123-456789");
             given(agenciesService.getProfile(eq(5L))).willReturn(resp);
 
             mockMvc.perform(get("/api/agency/me")
                             .with(user(agencyUser(1L, 5L))))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.agencyName").value("테스트대행사"));
+                    .andExpect(jsonPath("$.agencyName").value("테스트대행사"))
+                    .andExpect(jsonPath("$.bankName").value("신한은행"))
+                    .andExpect(jsonPath("$.accountNumber").value("110-123-456789"));
+        }
+
+        @Test
+        @DisplayName("성공: 계좌 미등록 시 bankName/accountNumber는 null — 200 OK")
+        void getProfile_noBankAccount_nullFields_200() throws Exception {
+            AgencyProfileResponse resp = new AgencyProfileResponse(
+                    5L, "테스트대행사", "서울특별시 강남구 테헤란로 1", null, null);
+            given(agenciesService.getProfile(eq(5L))).willReturn(resp);
+
+            mockMvc.perform(get("/api/agency/me")
+                            .with(user(agencyUser(1L, 5L))))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.bankName").value(org.hamcrest.Matchers.nullValue()))
+                    .andExpect(jsonPath("$.accountNumber").value(org.hamcrest.Matchers.nullValue()));
         }
 
         @Test
         @DisplayName("성공: staff(비대표) 계정도 agencyId 기준으로 동일하게 조회 — 200 OK")
         void getProfile_staff_200() throws Exception {
-            AgencyProfileResponse resp = new AgencyProfileResponse(5L, "테스트대행사", "서울특별시 강남구 테헤란로 1");
+            AgencyProfileResponse resp = new AgencyProfileResponse(
+                    5L, "테스트대행사", "서울특별시 강남구 테헤란로 1", "신한은행", "110-123-456789");
             given(agenciesService.getProfile(eq(5L))).willReturn(resp);
 
             // userId=2L(대표 아님)이라도 토큰의 agencyId=5L만 일치하면 조회 성공해야 함
@@ -128,8 +146,10 @@ class AgencySettingsControllerTest {
         @Test
         @DisplayName("성공: 유효한 요청 + AGENCY 인증 — 200 OK")
         void updateProfile_success_200() throws Exception {
-            AgencyProfileUpdateRequest req = new AgencyProfileUpdateRequest("수정된대행사", "서울특별시 서초구 서초대로 1");
-            AgencyProfileResponse resp = new AgencyProfileResponse(1L, "수정된대행사", "서울특별시 서초구 서초대로 1");
+            AgencyProfileUpdateRequest req = new AgencyProfileUpdateRequest(
+                    "수정된대행사", "서울특별시 서초구 서초대로 1", "신한은행", "110-123-456789");
+            AgencyProfileResponse resp = new AgencyProfileResponse(
+                    1L, "수정된대행사", "서울특별시 서초구 서초대로 1", "신한은행", "110-123-456789");
 
             given(agenciesService.updateProfile(eq(1L), any())).willReturn(resp);
 
@@ -139,13 +159,33 @@ class AgencySettingsControllerTest {
                             .content(objectMapper.writeValueAsString(req)))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.agencyName").value("수정된대행사"))
-                    .andExpect(jsonPath("$.agencyAddress").value("서울특별시 서초구 서초대로 1"));
+                    .andExpect(jsonPath("$.agencyAddress").value("서울특별시 서초구 서초대로 1"))
+                    .andExpect(jsonPath("$.bankName").value("신한은행"))
+                    .andExpect(jsonPath("$.accountNumber").value("110-123-456789"));
+        }
+
+        @Test
+        @DisplayName("성공: 은행 정보 없이 상호명/주소만 수정 — 200 OK")
+        void updateProfile_withoutBankInfo_success_200() throws Exception {
+            AgencyProfileUpdateRequest req = new AgencyProfileUpdateRequest(
+                    "수정된대행사", "서울특별시 서초구 서초대로 1", null, null);
+            AgencyProfileResponse resp = new AgencyProfileResponse(
+                    1L, "수정된대행사", "서울특별시 서초구 서초대로 1", null, null);
+
+            given(agenciesService.updateProfile(eq(1L), any())).willReturn(resp);
+
+            mockMvc.perform(put("/api/agency/me")
+                            .with(user(agencyUser()))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(req)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.agencyName").value("수정된대행사"));
         }
 
         @Test
         @DisplayName("실패: 인증 토큰 없음 — 401 Unauthorized")
         void updateProfile_noAuth_401() throws Exception {
-            AgencyProfileUpdateRequest req = new AgencyProfileUpdateRequest("수정된대행사", "서울 서초구");
+            AgencyProfileUpdateRequest req = new AgencyProfileUpdateRequest("수정된대행사", "서울 서초구", null, null);
 
             mockMvc.perform(put("/api/agency/me")
                             .contentType(MediaType.APPLICATION_JSON)
@@ -157,7 +197,7 @@ class AgencySettingsControllerTest {
         @DisplayName("실패: AGENCY 역할 아님 — 403 Forbidden")
         @WithMockUser(authorities = "CUSTOMER")
         void updateProfile_wrongRole_403() throws Exception {
-            AgencyProfileUpdateRequest req = new AgencyProfileUpdateRequest("수정된대행사", "서울 서초구");
+            AgencyProfileUpdateRequest req = new AgencyProfileUpdateRequest("수정된대행사", "서울 서초구", null, null);
 
             mockMvc.perform(put("/api/agency/me")
                             .contentType(MediaType.APPLICATION_JSON)
@@ -168,7 +208,7 @@ class AgencySettingsControllerTest {
         @Test
         @DisplayName("유효성 실패: agencyName 공백 — 400 Bad Request")
         void updateProfile_blankName_400() throws Exception {
-            AgencyProfileUpdateRequest req = new AgencyProfileUpdateRequest("", "서울 서초구");
+            AgencyProfileUpdateRequest req = new AgencyProfileUpdateRequest("", "서울 서초구", null, null);
 
             mockMvc.perform(put("/api/agency/me")
                             .with(user(agencyUser()))
@@ -180,7 +220,7 @@ class AgencySettingsControllerTest {
         @Test
         @DisplayName("유효성 실패: agencyAddress 공백 — 400 Bad Request")
         void updateProfile_blankAddress_400() throws Exception {
-            AgencyProfileUpdateRequest req = new AgencyProfileUpdateRequest("정상대행사", "");
+            AgencyProfileUpdateRequest req = new AgencyProfileUpdateRequest("정상대행사", "", null, null);
 
             mockMvc.perform(put("/api/agency/me")
                             .with(user(agencyUser()))
@@ -192,7 +232,20 @@ class AgencySettingsControllerTest {
         @Test
         @DisplayName("유효성 실패: agencyAddress 255자 초과 — 400 Bad Request")
         void updateProfile_addressTooLong_400() throws Exception {
-            AgencyProfileUpdateRequest req = new AgencyProfileUpdateRequest("정상대행사", "주".repeat(256));
+            AgencyProfileUpdateRequest req = new AgencyProfileUpdateRequest("정상대행사", "주".repeat(256), null, null);
+
+            mockMvc.perform(put("/api/agency/me")
+                            .with(user(agencyUser()))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(req)))
+                    .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        @DisplayName("유효성 실패: bankName 50자 초과 — 400 Bad Request")
+        void updateProfile_bankNameTooLong_400() throws Exception {
+            AgencyProfileUpdateRequest req = new AgencyProfileUpdateRequest(
+                    "정상대행사", "서울 서초구", "은".repeat(51), "110-123-456789");
 
             mockMvc.perform(put("/api/agency/me")
                             .with(user(agencyUser()))
@@ -204,7 +257,7 @@ class AgencySettingsControllerTest {
         @Test
         @DisplayName("실패: 대행사 정보 없음(서비스 NoSuchElementException) — 404 Not Found")
         void updateProfile_notFound_404() throws Exception {
-            AgencyProfileUpdateRequest req = new AgencyProfileUpdateRequest("수정된대행사", "서울 서초구");
+            AgencyProfileUpdateRequest req = new AgencyProfileUpdateRequest("수정된대행사", "서울 서초구", null, null);
 
             given(agenciesService.updateProfile(eq(1L), any()))
                     .willThrow(new NoSuchElementException("해당 사용자의 대행사 정보를 찾을 수 없습니다."));
