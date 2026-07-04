@@ -1,8 +1,111 @@
 -- ============================================================
--- CareFlow DDL v11
--- DB명세서 v25 기준 / 모든 FK를 CREATE TABLE 내부 CONSTRAINT로 정의
+-- CareFlow DDL v14
+-- DB명세서 v28 기준 / 모든 FK를 CREATE TABLE 내부 CONSTRAINT로 정의
 --
--- ※ v11 변경 사항 (DB명세서 v25 반영 — 정산 워크플로우 재정비)
+-- ※ v14 변경 사항 (DB명세서 v28 반영 — 수수료율 표현 방식 재정정)
+--
+--   [수수료율 저장 형식 재정정 — v13 결정을 번복]
+--   - v13(v27)에서 agencies.agency_fee_rate(기존 15.00 형태)와 settlements.fee_rate/
+--     agency_fee_rate(기존 0.15 형태)의 표현이 서로 달라 "퍼센트 값(15.00)"으로 통일했었으나,
+--     실무적으로 재검토한 결과 이 결정을 번복함.
+--   - 이유: 백엔드 계산 코드에서 수수료 금액을 구할 때 gross_amount * rate 형태로 바로 곱해
+--     쓰는 것이 gross_amount * rate / 100 보다 더 간결하고 실수(divide by 100 누락 등)의
+--     여지가 적음. 컬럼 코멘트에 "(%)"라고 적혀 있다고 해서 저장값 자체가 퍼센트 정수여야
+--     하는 것은 아니며, "값이 몇 %를 의미하는지"는 코멘트로 설명하고 실제 저장은 계산에
+--     더 유리한 소수 형태(예: 0.15)로 하는 것이 합리적이라는 결론.
+--   - 적용 범위: agencies.agency_fee_rate, settlements.fee_rate, settlements.agency_fee_rate
+--     3개 컬럼 전부 소수 형태로 재통일 (0.10 = 10%, 0.46 = 46% 등). 컬럼 코멘트에서 "(%)"
+--     표기 제거, "소수 형태로 저장" 문구로 대체.
+--   - DECIMAL(5,2) 타입은 변경 없음 (0.00~1.00 범위 표현에 문제 없음).
+--
+--   [대행사 수수료율 재배분 — 소수점 없는 정수 %로 한정]
+--   - v13(v27)에서 45.00~55.00% 사이 임의 소수(예: 46.19%)로 배분했던 것을,
+--     45~55 사이의 정수 % 중 하나(45,46,47,...,55)로 한정하여 재배분.
+--     저장값은 위 소수 형태 원칙에 따라 0.45~0.55 중 하나가 됨.
+--   - settlements.agency_fee, engineer_net_amount, platform_settlements/engineer_payouts의
+--     집계값 전부 새 수수료율 기준으로 재계산 (더미데이터 파일 참조).
+--
+-- ※ v13 변경 사항 (DB명세서 v27 반영 — ADMIN 전체 노출 전환, engineer_payouts 신규, 과거 이력)
+--
+--   [ADMIN 정산 데이터 전체 노출 원칙으로 전환 — 2026-07-03 논의 최종 결론]
+--   - v12(v26)에서 "AGENCY 거래정보는 ADMIN에 과다 노출하지 않는다"는 원칙을 폐기하고,
+--     "정산 관련 금액·건수·상태 데이터는 ADMIN에게 전부 노출한다"는 원칙으로 전환.
+--   - 적용 범위는 정산 데이터(settlements, platform_settlements, engineer_payouts)에 한함.
+--     계좌번호 등 원본 PII(bank_accounts, agency_bank_accounts의 account_number 등)는
+--     "거래 정보"가 아닌 별도의 개인정보 카테고리로 취급 — 기존과 동일하게 ADMIN 화면에서는
+--     마스킹 처리하고 실제 송금 배치 프로세스만 평문 접근 (애플리케이션 레벨 정책, 본 DDL 구조 변경 없음).
+--
+--   [engineer_payouts 테이블 신규 추가 — 대행사→기사 지급 트랙 정식 모델링]
+--   - 기존에는 "대행사→기사 급여 지급은 CareFlow 관여 밖"이라는 이유로 이 흐름 자체가
+--     스키마에 전혀 존재하지 않았음. 그러나 PM 관점에서 전체 워크플로우(AGENCY가 ENGINEER에게
+--     지급하는 흐름 포함)를 총괄 설계해야 하므로, CareFlow가 이 자금을 직접 소유·집행하지
+--     않더라도 "실행 기록"은 시스템에 존재해야 한다는 결론에 따라 신규 추가.
+--   - platform_settlements(CareFlow→대행사)와 대칭 구조의 배치 테이블. 단, 그레인이
+--     (agency_id, settlement_year, settlement_month)가 아니라
+--     (agency_id, engineer_id, payout_year, payout_month) — 대행사가 여러 기사에게 각각
+--     나눠 지급하므로 기사 단위로 한 단계 더 세분화됨.
+--   - status에 DISPUTED를 포함한 이유: CareFlow가 자금을 보유하지 않아도, 기사가 "대행사로부터
+--     급여를 받지 못했다"고 민원을 제기하는 상황에서 CareFlow가 분쟁 조정자(trust broker) 역할을
+--     하려면 대행사가 스스로 PAID로 표시했는지 확인할 최소한의 기록이 필요함.
+--   - settlements.engineer_payout_id(신규 FK)로 개별 정산 건이 어느 대행사→기사 지급 배치에
+--     묶였는지 역추적 가능 (platform_settlement_id와 완전히 대칭이며 서로 독립적으로 채워짐 —
+--     선후 관계를 강제하지 않음. 대행사가 CareFlow에게 받기 전에 기사에게 먼저 지급할 수도 있음).
+--
+--   [settlements 테이블 유지 결정 — 삭제하지 않는 이유를 명시]
+--   - "이용자 결제 → 대행사 수취 → 대행사가 각 수수료를 배분"이라는 구(舊) 워크플로우를 전제로
+--     설계된 3분할 계산 테이블이 아니냐는 문제 제기가 있었으나, settlements는 애초에
+--     "누가 돈을 실행하는가(실행 주체)"와 무관하게 "이 결제 1건을 어떻게 나눠야 하는가"라는
+--     계산 결과(fact)만을 기록하는 원장이다. 실행은 platform_settlements(CareFlow 실행)와
+--     engineer_payouts(대행사 실행) 두 개의 독립된 배치 테이블이 각각 담당한다.
+--   - settlements를 삭제하고 platform_fee/agency_fee/engineer_net_amount를 두 배치 테이블에
+--     나눠 담으면: ① 두 배치 테이블이 건별 그레인으로 되돌아가야 하며 월별 집계 구조 자체가
+--     붕괴되고, ② gross_amount·fee_rate 등 원본 데이터가 두 테이블에 중복 저장되어 단일 진실
+--     공급원(Single Source of Truth) 원칙이 깨짐. 따라서 settlements는 유지한다.
+--
+--   [bank_accounts / agency_bank_accounts 병합 검토 및 기각]
+--   - 두 테이블을 owner_type+owner_id 방식으로 병합하는 방안을 검토했으나, MySQL은 한 컬럼이
+--     서로 다른 두 부모 테이블(users/agencies)을 가리키는 FK를 지원하지 않아 FK 제약을 포기해야
+--     하고 무결성을 애플리케이션 코드가 전담해야 함. 두 테이블 분리 상태를 유지함으로써
+--     "platform_settlements.paid_bank_account_id가 실수로 기사 계좌를 참조하는" 등의 사고를
+--     DB 레벨 FK로 원천 차단하는 이득이 저장공간 절약보다 크다고 판단 — 병합하지 않음.
+--
+--   [notifications.type — QUIZ_REMINDER 완전 폐기]
+--   - v24에서 도입되고 v12(v26)에서 문서화 오류를 정정하며 되살렸던 QUIZ_REMINDER 알림 기능을
+--     완전히 폐기함 (매년 1월 신년도 문항 미등록 시 ADMIN에게 발송하던 알림).
+--   - ENUM 값에서 'QUIZ_REMINDER' 제거, 관련 코멘트 전부 삭제.
+--   - ⚠ 향후 어떤 버전에서도 QUIZ_REMINDER를 재도입하지 말 것. 이 기능은 완전히 포기된
+--     상태이며, 과거 버전(v24, v12/v26)에 남아있는 관련 기록은 폐기된 히스토리로만 참고할 것.
+--   - (참고) OX퀴즈 응시 기능 자체(quiz_questions, quiz_attempts, QuizYearRolloverJob의
+--     연도 활성화 로직)는 이번 폐기 대상이 아니며 그대로 유지됨. 폐기 대상은 "문항 미등록 시
+--     ADMIN 알림 발송" 기능 하나로 한정됨.
+--
+-- ※ v12 변경 사항 (DB명세서 v26 반영 — 정산 아키텍처 방향 정정, 과거 이력)
+--
+--   [정산 아키텍처 방향 정정 — 2026-07-03 재설계 논의 반영]
+--   - v11(DB명세서 v25)에서는 platform_settlements를 "대행사→플랫폼 정산(수수료 납부)"로 설계했으나,
+--     이는 실제 결제 자금 흐름(고객 결제를 CareFlow가 PG로 선수취)과 반대 방향이었음이 확인되어 정정함.
+--     CareFlow는 payments 시점에 이미 platform_fee를 보유하고 있으므로 대행사가 별도로 플랫폼에
+--     납부할 금액은 없다. 대행사가 CareFlow로부터 수취해야 할 금액(agency_fee + engineer_net_amount)을
+--     월 단위로 일괄 지급하는 배치로 platform_settlements의 방향을 "CareFlow→대행사"로 정정한다.
+--   - platform_settlements 컬럼 변경:
+--     · total_gross_amount → gross_amount_sum (rename)
+--     · total_platform_fee → platform_fee_sum (rename, "대행사 납부액"이 아닌 "CareFlow 검증·감사용 참고값"으로 의미 변경)
+--     · payout_amount_sum (신규) — CareFlow가 대행사에 실제 지급할 금액 = SUM(agency_fee) + SUM(engineer_net_amount)
+--     · paid_bank_account_id (신규, FK NULL 허용) — 지급 시점 agency_bank_accounts 스냅샷
+--     · idx_platform_settlement_bank 인덱스 신규 추가
+--   - agency_bank_accounts 테이블 신규 추가
+--     · 대행사 정산금 수취 계좌 (agency_id 1:1). CareFlow가 platform_settlements 지급 시 송금하는 대상 계좌.
+--   - bank_accounts(기사 계좌) 코멘트 정정
+--     · 기존 "정산금 지급(플랫폼/대행사→기사)" 표기에서 "플랫폼→" 부분 삭제 — CareFlow는 기사에게 직접 송금하지 않음.
+--     · 대행사가 CareFlow로부터 수취한 정산금 중 기사 몫을 자체 지급할 때 참고하는 계좌 정보로 성격 확정.
+--     · (권한) ADMIN 조회 대상에서 제외, AGENCY는 소속 기사에 한해 조회 가능 — 애플리케이션 레벨 정책, DDL 구조 변경 없음.
+--   - settlements 워크플로우 코멘트 정정 (컬럼 구조 변경 없음)
+--     · platform_settlement_id, status, paid_at 컬럼 코멘트를 방향 정정에 맞게 갱신.
+--     · 월초 배치 집계 대상 status를 'PAID'가 아닌 'PENDING'으로 정정 (집계 전 상태가 PENDING이어야 논리적으로 맞음 — v11 코멘트 오류 수정).
+--   - notifications.type ENUM에 'QUIZ_REMINDER' 누락분 반영
+--     · DB명세서 v24 당시 NOTICE에는 추가되었다고 기술되었으나 실제 ENUM 컬럼 값에는 반영되지 않았던 문서화 오류를 정정.
+--
+-- ※ v11 변경 사항 (DB명세서 v25 반영 — 정산 워크플로우 재정비, 과거 이력)
 --
 --   [v25 변경]
 --   - platform_settlements 테이블 신규 추가
@@ -103,7 +206,7 @@ CREATE TABLE `agencies` (
     `name`                   VARCHAR(100)    NOT NULL                            COMMENT '대행사 상호명',
     `business_number`        VARCHAR(20)     NOT NULL                            COMMENT '사업자등록번호',
     `address`                VARCHAR(255)    NULL     DEFAULT NULL               COMMENT '소재지 주소',
-    `agency_fee_rate`        DECIMAL(5,2)    NOT NULL DEFAULT 0.00               COMMENT '대행사 기사 수수료율(%) — settlements 산정 기준',
+    `agency_fee_rate`        DECIMAL(5,2)    NOT NULL DEFAULT 0.00               COMMENT '대행사 기사 수수료율 — settlements 산정 기준. 소수 형태로 저장 (예: 0.15 = 15%). 저장 시 gross_amount * agency_fee_rate로 바로 곱해 쓸 수 있도록 함',
     `approval_status`        ENUM('PENDING','APPROVED','REJECTED') NOT NULL DEFAULT 'PENDING' COMMENT '승인 상태',
     `approved_at`            DATETIME        NULL     DEFAULT NULL               COMMENT '승인 처리 일시',
     `approved_by`            BIGINT UNSIGNED NULL     DEFAULT NULL               COMMENT '승인한 관리자 user_id',
@@ -604,44 +707,140 @@ CREATE TABLE `payments` (
 );
 
 -- ============================================================
--- 25. platform_settlements
--- [v25 신규] 대행사→플랫폼 정산 (수수료 납부) — 월 단위 집계 배치 테이블
+-- ============================================================
+-- 25. agency_bank_accounts
+-- [v12 신규] 대행사 정산금 수취 계좌 정보 (agency_id 1:1)
+--   - CareFlow가 platform_settlements 지급 승인 시 이 계좌로 payout_amount_sum을 송금한다.
+--   - bank_accounts(기사 계좌)와 방향이 다름: 본 테이블은 CareFlow→대행사, bank_accounts는 대행사→기사(참고용).
+--   - 계좌 미등록 대행사는 platform_settlements 지급 승인 처리가 불가능하도록 서버 단 Validation 필요.
+--   - platform_settlements보다 먼저 생성 (platform_settlements.paid_bank_account_id FK가 이 테이블을 참조하므로 선행 필요)
+--   - [v13] bank_accounts와의 병합을 검토했으나 기각 — 근거는 파일 상단 v13 변경 이력 참조.
+-- ============================================================
+CREATE TABLE `agency_bank_accounts` (
+    `agency_bank_account_id` BIGINT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT '계좌 정보 ID',
+    `agency_id`               BIGINT UNSIGNED NOT NULL                            COMMENT '대행사 ID (agencies.agency_id 참조, 1:1)',
+    `bank_name`               VARCHAR(50)     NOT NULL                            COMMENT '은행명 (예: 국민은행, 신한은행)',
+    `account_number`          VARCHAR(50)     NOT NULL                            COMMENT '계좌번호',
+    `account_holder`          VARCHAR(50)     NOT NULL                            COMMENT '예금주명 (통상 대행사 사업자명과 일치 검증 권장)',
+    `pay_method`              ENUM('BANK_TRANSFER') NOT NULL DEFAULT 'BANK_TRANSFER' COMMENT '지급 방식 (현재 계좌이체 단일 지원, 추후 확장 대비 ENUM화)',
+    `created_at`              DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT '등록일',
+    `updated_at`              DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '수정일',
+
+    CONSTRAINT FK_agencies_TO_agency_bank_accounts
+        FOREIGN KEY (`agency_id`) REFERENCES `agencies` (`agency_id`),
+
+    UNIQUE uk_agency_bank_accounts_agency (agency_id)
+);
+
+-- ============================================================
+-- 26. platform_settlements
+-- [v25 신규, v12(v26) 방향 정정] CareFlow→대행사 정산 (일괄 지급) — 월 단위 집계 배치 테이블
 --   - settlements(기사·대행사 정산)는 A/S 신청 1건당 1행이지만,
---     대행사→플랫폼 정산은 "해당 대행사의 지난 달 platform_fee 합계"라는
---     월 단위 집계 그 자체이므로 agency_id + settlement_year + settlement_month 당 1행으로 관리
---   - 워크플로우: ① 매월 초 배치 Job이 전월 settlements(해당 agency_id, status='PAID')를 집계하여
+--     CareFlow→대행사 정산은 "해당 대행사에 지급할 월별 합계"라는
+--     집계 그 자체이므로 agency_id + settlement_year + settlement_month 당 1행으로 관리
+--   - [v12 정정] 워크플로우: ① 매월 초 배치 Job이 전월 settlements(해당 agency_id, status='PENDING')를 집계하여
 --     1행 생성(PENDING) + 대상 settlements.platform_settlement_id를 이 행의 ID로 채움
---     ② 대행사가 플랫폼에 수수료 납부 ③ status를 PAID로 변경
+--     ② ADMIN이 [지급 승인] ③ CareFlow가 agency_bank_accounts 계좌로 payout_amount_sum 송금
+--     ④ status를 PAID로 변경 + 하위 settlements.status도 일괄 PAID로 전이
+--     (v11에서는 "대행사가 플랫폼에 수수료 납부"로 반대 방향 기술되어 있었음 — 정정)
 --   - 집계 과정 오류 시 status를 DISPUTED로 전이 (settlements와 동일 패턴)
 --   - settlements보다 먼저 생성 (settlements.platform_settlement_id FK가 이 테이블을 참조하므로 선행 필요)
+--   - agency_bank_accounts보다 뒤에 생성 (paid_bank_account_id FK가 agency_bank_accounts를 참조)
+--   - [v13, 정산 데이터 전체 노출 원칙] ADMIN은 이 테이블 전체(금액·건수·상태) 및 하위 settlements
+--     건별 상세를 제한 없이 조회 가능 (v12/v26의 "ADMIN 최소 노출" 원칙 폐기)
 -- ============================================================
 CREATE TABLE `platform_settlements` (
-    `platform_settlement_id` BIGINT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT '대행사→플랫폼 정산 ID',
+    `platform_settlement_id` BIGINT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT 'CareFlow→대행사 정산 배치 ID',
     `agency_id`               BIGINT UNSIGNED NOT NULL                            COMMENT '대행사 ID',
-    `settlement_year`         YEAR            NOT NULL                            COMMENT '정산 대상 연도 (집계 대상 settlements.paid_at 기준)',
+    `settlement_year`         YEAR            NOT NULL                            COMMENT '정산 대상 연도 (집계 대상 settlements.created_at 기준)',
     `settlement_month`        TINYINT UNSIGNED NOT NULL                          COMMENT '정산 대상 월 (1~12)',
-    `total_gross_amount`      INT UNSIGNED    NOT NULL                            COMMENT '집계 대상 settlements.gross_amount 합계 (원) — 검증·감사용',
-    `total_platform_fee`      INT UNSIGNED    NOT NULL                            COMMENT '집계 대상 settlements.platform_fee 합계 (원) — 대행사가 플랫폼에 납부할 금액',
+    `gross_amount_sum`        INT UNSIGNED    NOT NULL                            COMMENT '[v12: total_gross_amount rename] 집계 대상 settlements.gross_amount 합계 (원) — 검증·감사용',
+    `platform_fee_sum`        INT UNSIGNED    NOT NULL                            COMMENT '[v12: total_platform_fee rename] 집계 대상 settlements.platform_fee 합계 (원) — CareFlow가 결제 선수취 시점에 이미 보유한 수수료. 검증·감사용이며 별도 청구 절차 없음',
+    `payout_amount_sum`       INT UNSIGNED    NOT NULL                            COMMENT '[v12 신규] CareFlow가 대행사에 실제 지급할 금액 = SUM(agency_fee) + SUM(engineer_net_amount)',
     `settlement_count`        INT UNSIGNED    NOT NULL DEFAULT 0                  COMMENT '집계된 settlements 건수',
-    `status`                  ENUM('PENDING','PAID','DISPUTED') NOT NULL DEFAULT 'PENDING' COMMENT '정산 상태 (APPROVED 없음 — settlements와 동일 사유)',
-    `paid_at`                 DATETIME        NULL     DEFAULT NULL               COMMENT '플랫폼 수수료 납부 완료 일시',
+    `status`                  ENUM('PENDING','PAID','DISPUTED') NOT NULL DEFAULT 'PENDING' COMMENT '정산 배치 상태 — PENDING(월초 집계 완료, 지급 대기) → PAID(ADMIN 지급 승인 후 CareFlow→대행사 송금 완료) / DISPUTED(집계 오류). APPROVED 없음 (settlements와 동일 사유)',
+    `paid_bank_account_id`    BIGINT UNSIGNED NULL     DEFAULT NULL               COMMENT '[v12 신규] 지급 시점 대행사 수취 계좌 스냅샷 (agency_bank_accounts 참조, 계좌 변경 이력과 무관하게 실제 송금 계좌 추적)',
+    `paid_at`                 DATETIME        NULL     DEFAULT NULL               COMMENT 'CareFlow→대행사 송금 완료 일시',
     `created_at`              DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT '집계(배치 생성) 일시',
 
     CONSTRAINT FK_agencies_TO_platform_settlements
         FOREIGN KEY (`agency_id`) REFERENCES `agencies` (`agency_id`),
+    CONSTRAINT FK_agency_bank_accounts_TO_platform_settlements
+        FOREIGN KEY (`paid_bank_account_id`) REFERENCES `agency_bank_accounts` (`agency_bank_account_id`),
 
     UNIQUE uk_platform_settlement_period (agency_id, settlement_year, settlement_month),
-    INDEX  idx_platform_settlement_status (status, settlement_year, settlement_month)
+    INDEX  idx_platform_settlement_status (status, settlement_year, settlement_month),
+    INDEX  idx_platform_settlement_bank (paid_bank_account_id)
 );
 
 -- ============================================================
--- 26. settlements
+-- 27. engineer_payouts
+-- [v13 신규] 대행사→기사 지급 (일괄 지급) — 월 단위 집계 배치 테이블
+--   - platform_settlements(CareFlow→대행사)와 대칭 구조이나, 그레인이 한 단계 더 세분화됨:
+--     (agency_id, engineer_id, payout_year, payout_month) 당 1행 — 대행사가 여러 기사에게
+--     각각 나눠 지급하기 때문
+--   - CareFlow는 이 자금을 소유·집행하지 않는다 (기사 급여 지급은 대행사 자체 책임).
+--     그럼에도 이 테이블이 존재하는 이유는, 전체 워크플로우(AGENCY→ENGINEER 지급 포함)를
+--     시스템이 모델링해야 하고, 기사가 "급여를 못 받았다"는 분쟁을 제기할 때 CareFlow가
+--     최소한의 조정자 역할을 하려면 "대행사가 스스로 PAID라고 표시했는지"에 대한 기록이 필요하기 때문
+--   - status에 DISPUTED 포함 — 기사·대행사 간 분쟁 시 ADMIN이 드릴다운으로 확인
+--   - settlements.engineer_payout_id(NULL 허용 FK)로 개별 정산 건이 어느 대행사→기사 지급
+--     배치에 묶였는지 역추적 가능. platform_settlement_id와 완전히 독립적으로 채워짐
+--     (선후 관계 강제하지 않음 — 대행사가 CareFlow 지급 전에 기사에게 먼저 줄 수도 있음)
+--   - platform_settlement_id(NULL 허용 FK, 참고용)로 이 지급의 재원이 된 CareFlow→대행사
+--     배치를 감사 추적 가능. 선행 조건은 아니며 단순 역참조 용도
+--   - [정산 데이터 전체 노출 원칙] ADMIN은 이 테이블 전체를 제한 없이 조회 가능 (금액·건수·상태).
+--     계좌번호 등 PII는 bank_accounts에 별도 저장되어 있으며 그쪽은 마스킹 정책 유지
+--   - settlements보다 먼저 생성 (settlements.engineer_payout_id FK가 이 테이블을 참조)
+--   - platform_settlements보다 뒤에 생성 (platform_settlement_id FK가 platform_settlements를 참조)
+-- ============================================================
+CREATE TABLE `engineer_payouts` (
+    `engineer_payout_id`     BIGINT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT '대행사→기사 지급 배치 ID',
+    `agency_id`               BIGINT UNSIGNED NOT NULL                            COMMENT '지급 주체 대행사 ID',
+    `engineer_id`             BIGINT UNSIGNED NOT NULL                            COMMENT '수취 기사 user_id',
+    `payout_year`             YEAR            NOT NULL                            COMMENT '지급 대상 연도 (집계 대상 settlements.created_at 기준)',
+    `payout_month`            TINYINT UNSIGNED NOT NULL                          COMMENT '지급 대상 월 (1~12)',
+    `net_amount_sum`          INT UNSIGNED    NOT NULL                            COMMENT '집계 대상 settlements.engineer_net_amount 합계 (원)',
+    `case_count`              INT UNSIGNED    NOT NULL DEFAULT 0                  COMMENT '집계된 settlements 건수',
+    `status`                  ENUM('PENDING','PAID','DISPUTED') NOT NULL DEFAULT 'PENDING' COMMENT '지급 배치 상태 — PENDING(집계 완료, 지급 대기) → PAID(대행사가 기사에게 실제 지급 완료로 표시) / DISPUTED(기사·대행사 간 분쟁)',
+    `platform_settlement_id`  BIGINT UNSIGNED NULL     DEFAULT NULL               COMMENT '이 지급의 재원이 된 CareFlow→대행사 정산 배치 (참고·감사용, 선행 조건 아님)',
+    `paid_at`                 DATETIME        NULL     DEFAULT NULL               COMMENT '대행사→기사 지급 완료 일시',
+    `created_at`              DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT '집계(배치 생성) 일시',
+
+    CONSTRAINT FK_agencies_TO_engineer_payouts
+        FOREIGN KEY (`agency_id`) REFERENCES `agencies` (`agency_id`),
+    CONSTRAINT FK_users_TO_engineer_payouts
+        FOREIGN KEY (`engineer_id`) REFERENCES `users` (`user_id`),
+    CONSTRAINT FK_platform_settlements_TO_engineer_payouts
+        FOREIGN KEY (`platform_settlement_id`) REFERENCES `platform_settlements` (`platform_settlement_id`),
+
+    UNIQUE uk_engineer_payout_period (agency_id, engineer_id, payout_year, payout_month),
+    INDEX  idx_engineer_payout_status (status, payout_year, payout_month),
+    INDEX  idx_engineer_payout_platform_settlement (platform_settlement_id)
+);
+
+-- ============================================================
+-- 28. settlements
 -- [v25] status ENUM에서 'APPROVED' 제거 → ENUM('PENDING','PAID','DISPUTED')
 -- [v25] approved_at 컬럼 삭제 (대응 상태 제거로 죽은 컬럼이 되어 삭제)
 -- [v25] platform_settlement_id 컬럼 신규 추가 (NULL 허용 FK)
---   - 이 정산 건의 platform_fee가 어느 월별 대행사→플랫폼 정산(platform_settlements)에
+--   - 이 정산 건의 platform_fee가 어느 월별 CareFlow→대행사 정산(platform_settlements)에
 --     집계되었는지 역추적하는 컬럼. 월초 배치 Job이 platform_settlements 1건을 생성하며 채움.
 --   - 아직 집계 전(월 마감 전)이거나 DISPUTED 상태인 건은 NULL
+-- [v12(v26) 정정] 컬럼 구조 변경 없음. 아래 사항은 코멘트 텍스트만 정정:
+--   - status: PENDING(보고서 기반 계산 완료, 월 배치 집계 대기) → PAID(월별 platform_settlements
+--     배치가 지급 완료되며 일괄 전이)로 의미 명확화
+--   - platform_settlement_id: "대행사→플랫폼" 아닌 "CareFlow→대행사" 방향으로 정정
+--   - paid_at: "소속된 platform_settlements 배치가 PAID로 전이될 때 일괄 갱신"으로 명확화
+-- [v13 신규] engineer_payout_id 컬럼 추가 (NULL 허용 FK)
+--   - platform_settlement_id와 완전히 대칭인 두 번째 역참조 컬럼. 이 건의 engineer_net_amount가
+--     어느 대행사→기사 지급 배치(engineer_payouts)에 묶였는지 역추적. 두 FK는 서로 독립적으로
+--     채워지며 선후 관계를 강제하지 않음
+-- [v13] settlements 삭제 검토 후 유지 결정 — 이 테이블은 "실행 주체"가 아니라 "계산 결과(fact)"를
+-- 기록하는 원장이며, 실행은 platform_settlements·engineer_payouts 두 배치 테이블이 각각 담당한다.
+-- 삭제 시 두 배치 테이블이 건별 그레인으로 되돌아가야 하고 원본 데이터가 중복 저장되어
+-- 단일 진실 공급원 원칙이 깨지므로 유지함 (상세 근거는 파일 상단 v13 변경 이력 참조)
+-- [정산 데이터 전체 노출 원칙] ADMIN은 이 테이블 전체를 제한 없이 조회 가능
 -- ============================================================
 CREATE TABLE `settlements` (
     `settlement_id`          BIGINT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT '정산 ID',
@@ -651,14 +850,16 @@ CREATE TABLE `settlements` (
     `agency_id`              BIGINT UNSIGNED NOT NULL                            COMMENT '소속 대행사 ID',
     `gross_amount`           INT UNSIGNED    NOT NULL                            COMMENT '작업 총 금액 (원)',
     `platform_fee`           INT UNSIGNED    NOT NULL                            COMMENT 'CareFlow 수수료 (원)',
-    `fee_rate`               DECIMAL(5,2)    NOT NULL                            COMMENT 'CareFlow 수수료율(%) 스냅샷',
+    `fee_rate`               DECIMAL(5,2)    NOT NULL                            COMMENT 'CareFlow 수수료율 스냅샷. 소수 형태로 저장 (예: 0.10 = 10%, 고정값)',
     `agency_fee`             INT UNSIGNED    NOT NULL                            COMMENT '대행사 수수료 (원)',
-    `agency_fee_rate`        DECIMAL(5,2)    NOT NULL                            COMMENT '대행사 수수료율(%) 스냅샷',
+    `agency_fee_rate`        DECIMAL(5,2)    NOT NULL                            COMMENT '대행사 수수료율 스냅샷. 소수 형태로 저장 (예: 0.46 = 46%)',
     `engineer_net_amount`    INT UNSIGNED    NOT NULL                            COMMENT '기사 실수령액 (원)',
-    `status`                 ENUM('PENDING','PAID','DISPUTED') NOT NULL DEFAULT 'PENDING' COMMENT '[v25] 정산 상태 — APPROVED 제거 (월초 일괄 승인 단계가 상태 전이 없이 바로 지급으로 이어져 실익 없음)',
-    `platform_settlement_id` BIGINT UNSIGNED NULL     DEFAULT NULL               COMMENT '[v25 신규] 이 건의 platform_fee가 집계된 월별 대행사→플랫폼 정산 ID (platform_settlements FK, 집계 전 NULL)',
-    `paid_at`                DATETIME        NULL     DEFAULT NULL               COMMENT '지급 일시',
+    `status`                 ENUM('PENDING','PAID','DISPUTED') NOT NULL DEFAULT 'PENDING' COMMENT '[v25] 정산 상태 — APPROVED 제거. PENDING(계산 완료, 월 배치 집계 대기) → PAID(월별 platform_settlements 배치 지급 완료 시 일괄 전이)',
+    `platform_settlement_id` BIGINT UNSIGNED NULL     DEFAULT NULL               COMMENT '[v25 신규, v12 방향 정정] 이 건이 집계된 월별 CareFlow→대행사 정산 배치 ID (platform_settlements FK, 집계 전 NULL)',
+    `engineer_payout_id`     BIGINT UNSIGNED NULL     DEFAULT NULL               COMMENT '[v13 신규] 이 건이 집계된 월별 대행사→기사 지급 배치 ID (engineer_payouts FK, 집계 전 NULL). platform_settlement_id와 독립적으로 채워짐',
+    `paid_at`                DATETIME        NULL     DEFAULT NULL               COMMENT '지급 일시 — 소속 platform_settlements 배치가 PAID로 전이될 때 일괄 갱신',
     `created_at`             DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT '생성일',
+
 
     CONSTRAINT FK_payments_TO_settlements
         FOREIGN KEY (`payment_id`) REFERENCES `payments` (`payment_id`),
@@ -670,17 +871,27 @@ CREATE TABLE `settlements` (
         FOREIGN KEY (`agency_id`) REFERENCES `agencies` (`agency_id`),
     CONSTRAINT FK_platform_settlements_TO_settlements
         FOREIGN KEY (`platform_settlement_id`) REFERENCES `platform_settlements` (`platform_settlement_id`),
+    CONSTRAINT FK_engineer_payouts_TO_settlements
+        FOREIGN KEY (`engineer_payout_id`) REFERENCES `engineer_payouts` (`engineer_payout_id`),
 
     UNIQUE uk_settlement_payment       (payment_id),
     INDEX  idx_settlement_engineer     (engineer_id, status, created_at),
     INDEX  idx_settlement_agency       (agency_id, status, created_at),
     INDEX  idx_settlement_status       (status, created_at),
-    INDEX  idx_settlement_platform_stl (platform_settlement_id)
+    INDEX  idx_settlement_platform_stl (platform_settlement_id),
+    INDEX  idx_settlement_engineer_payout (engineer_payout_id)
 );
 
 -- ============================================================
--- 27. bank_accounts
--- 기사(엔지니어) 정산금 지급 계좌 정보. DB명세서 v21 반영.
+-- 29. bank_accounts
+-- 기사(엔지니어) 정산 참고 계좌 정보. DB명세서 v21 반영.
+-- [v12(v26) 정정] CareFlow는 이 계좌로 직접 송금하지 않는다. 대행사가 CareFlow로부터 수취한
+-- 정산금(agency_bank_accounts 경유) 중 기사 몫을 자체적으로 지급할 때 참고하는 정보다.
+-- 2026-07-01 회의 결론에 따라 기사 본인이 아닌 대행사 담당자가 "기사 프로필 수정" 화면에서
+-- 대신 입력·수정한다. ADMIN 화면에는 노출하지 않으며, AGENCY는 소속 기사에 한해 조회 가능
+-- (애플리케이션 레벨 권한 정책 — 본 DDL 구조 변경 없음). 이 권한 정책은 "정산 데이터 전체
+-- 노출" 원칙(v13)의 적용 대상이 아님 — 계좌번호는 거래 정보가 아닌 PII로 별도 취급.
+-- [v13] agency_bank_accounts와의 병합을 검토했으나 기각 — 근거는 파일 상단 v13 변경 이력 참조.
 -- ============================================================
 CREATE TABLE `bank_accounts` (
     `bank_account_id` BIGINT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT '계좌 정보 ID',
@@ -699,7 +910,10 @@ CREATE TABLE `bank_accounts` (
 );
 
 -- ============================================================
--- 28. notifications
+-- 30. notifications
+-- [v13] QUIZ_REMINDER 완전 폐기 — ENUM 값 제거. 과거 v24/v12(v26) 이력은 파일 상단
+-- 헤더 변경이력에서만 참고하고, 이 테이블 정의에는 어떠한 흔적도 남기지 않는다.
+-- ⚠ 향후 버전에서 QUIZ_REMINDER를 다시 추가하지 말 것 (기능 자체가 폐기됨).
 -- ============================================================
 CREATE TABLE `notifications` (
     `notification_id` BIGINT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT '알림 ID',
@@ -720,7 +934,7 @@ CREATE TABLE `notifications` (
 );
 
 -- ============================================================
--- 29. lms_contents
+-- 31. lms_contents
 -- [v22] video_url 컬럼 신규 추가
 --   - content_type = 'VIDEO' 일 때 YouTube 영상 URL 저장
 --   - content_type = 'TEXT'  일 때 NULL
@@ -750,7 +964,7 @@ CREATE TABLE `lms_contents` (
 );
 
 -- ============================================================
--- 30. lms_confirmations
+-- 32. lms_confirmations
 -- [v23 변경] is_active 컬럼 추가
 --   - OX퀴즈 3회 불합격 시 재이수 강제를 위한 논리 삭제 컬럼
 --   - is_active=0: 재이수 강제로 비활성화된 이수 이력 (물리 삭제 없이 이력 보존)
@@ -778,7 +992,7 @@ CREATE TABLE `lms_confirmations` (
 
 
 -- ============================================================
--- 31. quiz_questions (OX퀴즈 문항 마스터)
+-- 33. quiz_questions (OX퀴즈 문항 마스터)
 -- [v23 신규] LMS OX퀴즈 확장 — 카테고리 × 기술 등급 계층별 문항 마스터
 -- [v24 변경] quiz_year 컬럼 추가 — 연도별 문항 독립 관리
 --   - 12월 중 ADMIN이 내년도 문항 사전 등록 (is_active=0, quiz_year=내년)
@@ -811,7 +1025,7 @@ CREATE TABLE `quiz_questions` (
 );
 
 -- ============================================================
--- 32. quiz_attempts (OX퀴즈 응시 이력)
+-- 34. quiz_attempts (OX퀴즈 응시 이력)
 -- [v23 신규] 기사별 계층별 응시 이력 및 합격 여부 관리
 -- [v24 변경] quiz_year 컬럼 추가 — 응시 연도 스냅샷
 --   - is_passed: score >= 4 (5문항 중 4개 이상 정답)
