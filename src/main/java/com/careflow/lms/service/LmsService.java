@@ -157,15 +157,20 @@ public class LmsService {
         EngineerProfile profile = getEngineerProfile(engineerUserId);
         RequiredLevel requiredLevel = RequiredLevel.valueOf(profile.getSkillLevel().name());
 
-        int totalCount = lmsContentRepository.findRequiredContents(
+        Set<Long> requiredIds = lmsContentRepository.findRequiredContents(
                 profile.getCategory().getCategoryId(),
                 requiredLevel
-        ).size();
+        ).stream().map(LmsContent::getContentId).collect(Collectors.toSet());
 
-        // [v10 변경] is_active=true 조건 추가
-        int completedCount = lmsConfirmationRepository
-                .findContentIdsByUserIdAndYearAndIsActive(engineerUserId, currentYear, true)
-                .size();
+        int totalCount = requiredIds.size();
+
+        Set<Long> completedIds = new HashSet<>(
+                lmsConfirmationRepository.findContentIdsByUserIdAndYearAndIsActive(
+                        engineerUserId, currentYear, true)
+        );
+        completedIds.retainAll(requiredIds); // 현재 필수 목록에 속하는 것만 카운트
+
+        int completedCount = completedIds.size();
 
         return new LmsAnnualStatusDto(totalCount, completedCount, profile.isLmsCompleted());
     }
