@@ -4,6 +4,8 @@ import com.careflow.agency.dto.request.AgencyFeeRateUpdateRequest;
 import com.careflow.agency.dto.request.AgencyProfileUpdateRequest;
 import com.careflow.agency.entity.Agencies;
 import com.careflow.agency.repository.AgenciesRepository;
+import com.careflow.agency_bank_account.entity.AgencyBankAccount;
+import com.careflow.agency_bank_account.repository.AgencyBankAccountRepository;
 import com.careflow.auth.security.JwtProvider;
 import com.careflow.common.enums.AgencyStatus;
 import com.careflow.common.enums.Role;
@@ -39,6 +41,7 @@ class AgencySettingsControllerIntegrationTest {
     @Autowired private AgenciesRepository agenciesRepository;
     @Autowired private UserRepository userRepository;
     @Autowired private JwtProvider jwtProvider;
+    @Autowired private AgencyBankAccountRepository agencyBankAccountRepository;
 
     // 공통 픽스처
     private Agencies agency;
@@ -137,7 +140,8 @@ class AgencySettingsControllerIntegrationTest {
         @Test
         @DisplayName("성공: 상호명과 주소 모두 변경 — 200 OK + DB 반영 확인")
         void updateProfile_success_200() throws Exception {
-            AgencyProfileUpdateRequest req = new AgencyProfileUpdateRequest("수정된대행사", "서울특별시 서초구 서초대로 99");
+            AgencyProfileUpdateRequest req = new AgencyProfileUpdateRequest(
+                    "수정된대행사", "서울특별시 서초구 서초대로 99", null, null);
 
             mockMvc.perform(put("/api/agency/me")
                             .header("Authorization", "Bearer " + accessToken)
@@ -157,7 +161,8 @@ class AgencySettingsControllerIntegrationTest {
         @DisplayName("성공: 상호명만 변경해도 주소는 입력값 그대로 저장됨")
         void updateProfile_onlyNameChanged_addressFromRequest() throws Exception {
             // 요청에 기존 주소를 그대로 전달하면 기존 값이 유지됨
-            AgencyProfileUpdateRequest req = new AgencyProfileUpdateRequest("이름만바꾼대행사", "서울특별시 강남구 테헤란로 1");
+            AgencyProfileUpdateRequest req = new AgencyProfileUpdateRequest(
+                    "이름만바꾼대행사", "서울특별시 강남구 테헤란로 1", null, null);
 
             mockMvc.perform(put("/api/agency/me")
                             .header("Authorization", "Bearer " + accessToken)
@@ -171,11 +176,76 @@ class AgencySettingsControllerIntegrationTest {
         }
 
         @Test
+        @DisplayName("성공: 계좌 정보 최초 등록 — 200 OK + agency_bank_accounts 신규 생성 확인")
+        void updateProfile_registerBankAccount_success_200() throws Exception {
+            AgencyProfileUpdateRequest req = new AgencyProfileUpdateRequest(
+                    "테스트대행사", "서울특별시 강남구 테헤란로 1", "신한은행", "110-123-456789");
+
+            mockMvc.perform(put("/api/agency/me")
+                            .header("Authorization", "Bearer " + accessToken)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(req)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.bankName").value("신한은행"))
+                    .andExpect(jsonPath("$.accountNumber").value("110-123-456789"));
+
+            AgencyBankAccount saved = agencyBankAccountRepository.findByAgencyId(agency.getId()).orElseThrow();
+            assertThat(saved.getBankName()).isEqualTo("신한은행");
+            assertThat(saved.getAccountNumber()).isEqualTo("110-123-456789");
+            // 프론트에서 아직 예금주명을 입력받지 않아 대행사 상호명으로 기본 설정됨
+            assertThat(saved.getAccountHolder()).isEqualTo("테스트대행사");
+        }
+
+        @Test
+        @DisplayName("성공: 이미 등록된 계좌 정보 수정 — 기존 레코드가 갱신됨(신규 생성 아님)")
+        void updateProfile_updateExistingBankAccount_success_200() throws Exception {
+            AgencyBankAccount existing = agencyBankAccountRepository.save(
+                    AgencyBankAccount.create(agency.getId(), "국민은행", "123-456-789", "테스트대행사"));
+
+            AgencyProfileUpdateRequest req = new AgencyProfileUpdateRequest(
+                    "테스트대행사", "서울특별시 강남구 테헤란로 1", "신한은행", "110-123-456789");
+
+            mockMvc.perform(put("/api/agency/me")
+                            .header("Authorization", "Bearer " + accessToken)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(req)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.bankName").value("신한은행"));
+
+            assertThat(agencyBankAccountRepository.count()).isEqualTo(1);
+            AgencyBankAccount updated = agencyBankAccountRepository.findByAgencyId(agency.getId()).orElseThrow();
+            assertThat(updated.getId()).isEqualTo(existing.getId());
+            assertThat(updated.getBankName()).isEqualTo("신한은행");
+            assertThat(updated.getAccountNumber()).isEqualTo("110-123-456789");
+        }
+
+        @Test
+        @DisplayName("성공: 계좌 정보 없이 요청하면 기존 계좌 정보는 그대로 유지됨")
+        void updateProfile_omitBankInfo_existingAccountUntouched_200() throws Exception {
+            agencyBankAccountRepository.save(
+                    AgencyBankAccount.create(agency.getId(), "국민은행", "123-456-789", "테스트대행사"));
+
+            AgencyProfileUpdateRequest req = new AgencyProfileUpdateRequest(
+                    "수정된대행사", "서울특별시 강남구 테헤란로 1", null, null);
+
+            mockMvc.perform(put("/api/agency/me")
+                            .header("Authorization", "Bearer " + accessToken)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(req)))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.bankName").value("국민은행"));
+
+            AgencyBankAccount unchanged = agencyBankAccountRepository.findByAgencyId(agency.getId()).orElseThrow();
+            assertThat(unchanged.getBankName()).isEqualTo("국민은행");
+            assertThat(unchanged.getAccountNumber()).isEqualTo("123-456-789");
+        }
+
+        @Test
         @DisplayName("실패: 존재하지 않는 사용자 토큰 — 404 Not Found")
         void updateProfile_unknownUser_404() throws Exception {
             // representative_user_id 가 존재하지 않는 userId 로 토큰 생성
             String unknownToken = jwtProvider.generateAccessToken(9999L, "ghost@test.com", "AGENCY", null);
-            AgencyProfileUpdateRequest req = new AgencyProfileUpdateRequest("수정된대행사", "서울 서초구");
+            AgencyProfileUpdateRequest req = new AgencyProfileUpdateRequest("수정된대행사", "서울 서초구", null, null);
 
             mockMvc.perform(put("/api/agency/me")
                             .header("Authorization", "Bearer " + unknownToken)

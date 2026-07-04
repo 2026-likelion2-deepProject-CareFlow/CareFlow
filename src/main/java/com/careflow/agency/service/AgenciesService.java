@@ -9,6 +9,8 @@ import com.careflow.agency.dto.response.AgencyFeeRateResponse;
 import com.careflow.agency.dto.response.AgencyProfileResponse;
 import com.careflow.agency.entity.Agencies;
 import com.careflow.agency.repository.AgenciesRepository;
+import com.careflow.agency_bank_account.entity.AgencyBankAccount;
+import com.careflow.agency_bank_account.repository.AgencyBankAccountRepository;
 import com.careflow.common.enums.AccountRequestsRole;
 import com.careflow.common.enums.AgencyStatus;
 import com.careflow.region.entity.Regions;
@@ -29,6 +31,7 @@ public class AgenciesService {
     private final AccountRequestsRepository accountRequestsRepository;
     private final UserRepository userRepository;
     private final RegionRepository regionRepository;
+    private final AgencyBankAccountRepository agencyBankAccountRepository;
 
     private final PasswordEncoder passwordEncoder;
 
@@ -124,10 +127,11 @@ public class AgenciesService {
     public AgencyProfileResponse getProfile(Long agencyId) {
         Agencies agencies = agenciesRepository.findById(agencyId)
                 .orElseThrow(() -> new NoSuchElementException("해당 사용자의 대행사 정보를 찾을 수 없습니다."));
-        return AgencyProfileResponse.from(agencies);
+        AgencyBankAccount bankAccount = agencyBankAccountRepository.findByAgencyId(agencyId).orElse(null);
+        return AgencyProfileResponse.from(agencies, bankAccount);
     }
 
-    // 대행사 프로필(상호명, 주소) 수정
+    // 대행사 프로필(상호명, 주소, 정산금 수취 계좌) 수정
     @Transactional
     public AgencyProfileResponse updateProfile(Long userId, AgencyProfileUpdateRequest request) {
         // JWT userId 로 대행사 조회 — 존재하지 않으면 404
@@ -135,7 +139,28 @@ public class AgenciesService {
                 .orElseThrow(() -> new NoSuchElementException("해당 사용자의 대행사 정보를 찾을 수 없습니다."));
 
         agencies.updateProfile(request.agencyName(), request.agencyAddress());
-        return AgencyProfileResponse.from(agencies);
+        AgencyBankAccount bankAccount = upsertBankAccount(agencies, request);
+        return AgencyProfileResponse.from(agencies, bankAccount);
+    }
+
+    // 정산금 수취 계좌 등록/수정 — bankName·accountNumber 둘 다 제공된 경우에만 반영(선택 입력)
+    // 신규 등록 시 account_holder는 프론트에서 아직 입력받지 않아 대행사 상호명으로 기본 설정
+    private AgencyBankAccount upsertBankAccount(Agencies agencies, AgencyProfileUpdateRequest request) {
+        boolean hasBankInfo = request.bankName() != null && !request.bankName().isBlank()
+                && request.accountNumber() != null && !request.accountNumber().isBlank();
+
+        AgencyBankAccount bankAccount = agencyBankAccountRepository.findByAgencyId(agencies.getId()).orElse(null);
+        if (!hasBankInfo) {
+            return bankAccount;
+        }
+
+        if (bankAccount == null) {
+            bankAccount = AgencyBankAccount.create(
+                    agencies.getId(), request.bankName(), request.accountNumber(), agencies.getAgencyName());
+        } else {
+            bankAccount.update(request.bankName(), request.accountNumber(), bankAccount.getAccountHolder());
+        }
+        return agencyBankAccountRepository.save(bankAccount);
     }
 
     // 대행사 수수료율 조회

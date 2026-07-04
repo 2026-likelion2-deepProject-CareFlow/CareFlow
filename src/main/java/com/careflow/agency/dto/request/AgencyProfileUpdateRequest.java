@@ -11,5 +11,12 @@ public record AgencyProfileUpdateRequest(
 
         @NotBlank(message = "주소는 공백일 수 없습니다.")
         @Size(max = 255, message = "주소는 최대 255자까지 입력 가능합니다.")
-        String agencyAddress
+        String agencyAddress,
+
+        // 정산금 수취 계좌 — 선택 입력. bankName·accountNumber 둘 다 있을 때만 등록/수정됨
+        @Size(max = 50, message = "은행명은 최대 50자까지 입력 가능합니다.")
+        String bankName,
+
+        @Size(max = 50, message = "계좌번호는 최대 50자까지 입력 가능합니다.")
+        String accountNumber
 ) {}
