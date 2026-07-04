@@ -23,6 +23,7 @@ import org.springframework.test.context.jdbc.Sql;
 import org.springframework.test.web.servlet.MockMvc;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.within;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
@@ -51,7 +52,7 @@ class AgencySettingsControllerIntegrationTest {
                 .agencyName("테스트대행사")
                 .businessNumber("TEST-BIZ-001")
                 .agencyAddress("서울특별시 강남구 테헤란로 1")
-                .agencyFeeRate(5.00)
+                .agencyFeeRate(0.05) // 비율(5%) — v14 스키마 기준 agencies.agency_fee_rate는 0~1 비율로 저장
                 .approvalStatus(AgencyStatus.APPROVED)
                 .build());
 
@@ -193,12 +194,12 @@ class AgencySettingsControllerIntegrationTest {
     class GetFeeRate {
 
         @Test
-        @DisplayName("성공: 수수료율 조회 — 200 OK + DB 저장값과 일치")
+        @DisplayName("성공: 수수료율 조회 — 200 OK + DB 저장값(0.05 비율)이 변환 없이 그대로 응답")
         void getFeeRate_success_200() throws Exception {
             mockMvc.perform(get("/api/agencies/fee-rate")
                             .header("Authorization", "Bearer " + accessToken))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.agencyFeeRate").value(5.00))
+                    .andExpect(jsonPath("$.agencyFeeRate").value(0.05))
                     .andExpect(jsonPath("$.agencyName").value("테스트대행사"));
         }
 
@@ -222,25 +223,25 @@ class AgencySettingsControllerIntegrationTest {
     class UpdateFeeRate {
 
         @Test
-        @DisplayName("성공: 5.00 → 7.50 수정 — 200 OK + DB 값 7.50 확인")
+        @DisplayName("성공: 비율 0.1(10%) 요청 — 200 OK + DB 값 0.1(비율) 그대로 저장 확인")
         void updateFeeRate_success_200() throws Exception {
-            AgencyFeeRateUpdateRequest req = new AgencyFeeRateUpdateRequest(7.50);
+            AgencyFeeRateUpdateRequest req = new AgencyFeeRateUpdateRequest(0.1);
 
             mockMvc.perform(patch("/api/agencies/fee-rate")
                             .header("Authorization", "Bearer " + accessToken)
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(req)))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$.agencyFeeRate").value(7.50));
+                    .andExpect(jsonPath("$.agencyFeeRate").value(0.1));
 
             Agencies updated = agenciesRepository.findById(agency.getId()).orElseThrow();
-            assertThat(updated.getAgencyFeeRate()).isEqualTo(7.50);
+            assertThat(updated.getAgencyFeeRate()).isCloseTo(0.1, within(0.0001));
         }
 
         @Test
-        @DisplayName("성공: 경계값 0.00 — 200 OK + DB 값 0.00 확인")
+        @DisplayName("성공: 경계값 0(비율) — 200 OK + DB 값 0.0 확인")
         void updateFeeRate_minBoundary_200() throws Exception {
-            AgencyFeeRateUpdateRequest req = new AgencyFeeRateUpdateRequest(0.00);
+            AgencyFeeRateUpdateRequest req = new AgencyFeeRateUpdateRequest(0.0);
 
             mockMvc.perform(patch("/api/agencies/fee-rate")
                             .header("Authorization", "Bearer " + accessToken)
@@ -249,13 +250,13 @@ class AgencySettingsControllerIntegrationTest {
                     .andExpect(status().isOk());
 
             Agencies updated = agenciesRepository.findById(agency.getId()).orElseThrow();
-            assertThat(updated.getAgencyFeeRate()).isEqualTo(0.00);
+            assertThat(updated.getAgencyFeeRate()).isCloseTo(0.0, within(0.0001));
         }
 
         @Test
-        @DisplayName("성공: 경계값 100.00 — 200 OK + DB 값 100.00 확인")
+        @DisplayName("성공: 경계값 1(100%) — 200 OK + DB 값 1.0(비율) 확인")
         void updateFeeRate_maxBoundary_200() throws Exception {
-            AgencyFeeRateUpdateRequest req = new AgencyFeeRateUpdateRequest(100.00);
+            AgencyFeeRateUpdateRequest req = new AgencyFeeRateUpdateRequest(1.0);
 
             mockMvc.perform(patch("/api/agencies/fee-rate")
                             .header("Authorization", "Bearer " + accessToken)
@@ -264,13 +265,13 @@ class AgencySettingsControllerIntegrationTest {
                     .andExpect(status().isOk());
 
             Agencies updated = agenciesRepository.findById(agency.getId()).orElseThrow();
-            assertThat(updated.getAgencyFeeRate()).isEqualTo(100.00);
+            assertThat(updated.getAgencyFeeRate()).isCloseTo(1.0, within(0.0001));
         }
 
         @Test
-        @DisplayName("실패: 수수료율 -1.00(범위 초과) — 400 Bad Request")
+        @DisplayName("실패: 수수료율 -0.1(범위 초과) — 400 Bad Request")
         void updateFeeRate_negative_400() throws Exception {
-            AgencyFeeRateUpdateRequest req = new AgencyFeeRateUpdateRequest(-1.00);
+            AgencyFeeRateUpdateRequest req = new AgencyFeeRateUpdateRequest(-0.1);
 
             mockMvc.perform(patch("/api/agencies/fee-rate")
                             .header("Authorization", "Bearer " + accessToken)
@@ -280,9 +281,9 @@ class AgencySettingsControllerIntegrationTest {
         }
 
         @Test
-        @DisplayName("실패: 수수료율 100.01(범위 초과) — 400 Bad Request")
-        void updateFeeRate_over100_400() throws Exception {
-            AgencyFeeRateUpdateRequest req = new AgencyFeeRateUpdateRequest(100.01);
+        @DisplayName("실패: 수수료율 1.01(범위 초과, 101%) — 400 Bad Request")
+        void updateFeeRate_over1_400() throws Exception {
+            AgencyFeeRateUpdateRequest req = new AgencyFeeRateUpdateRequest(1.01);
 
             mockMvc.perform(patch("/api/agencies/fee-rate")
                             .header("Authorization", "Bearer " + accessToken)
@@ -295,7 +296,7 @@ class AgencySettingsControllerIntegrationTest {
         @DisplayName("실패: 존재하지 않는 사용자 토큰 — 404 Not Found")
         void updateFeeRate_unknownUser_404() throws Exception {
             String unknownToken = jwtProvider.generateAccessToken(9999L, "ghost@test.com", "AGENCY", null);
-            AgencyFeeRateUpdateRequest req = new AgencyFeeRateUpdateRequest(7.50);
+            AgencyFeeRateUpdateRequest req = new AgencyFeeRateUpdateRequest(0.1);
 
             mockMvc.perform(patch("/api/agencies/fee-rate")
                             .header("Authorization", "Bearer " + unknownToken)

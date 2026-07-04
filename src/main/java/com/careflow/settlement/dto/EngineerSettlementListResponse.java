@@ -64,6 +64,7 @@ public record EngineerSettlementListResponse(
                 s.getAgencyFee(),
                 s.getEngineerNetAmount(),
                 s.getStatus(),
+                s.getCreatedAt(),
                 s.getPaidAt()
         );
     }
@@ -87,6 +88,7 @@ public record EngineerSettlementListResponse(
             int agencyFee,
             int engineerNetAmount,
             String status,
-            LocalDateTime settledAt   // paidAt — null 이면 미지급
+            LocalDateTime calculatedAt,   // 정산 레코드가 계산/생성된 시각 — 상태와 무관하게 항상 존재
+            LocalDateTime paidAt          // 기사에게 실제 지급 완료된 일시 — null이면 미지급(PENDING/DISPUTED)
     ) {}
 }

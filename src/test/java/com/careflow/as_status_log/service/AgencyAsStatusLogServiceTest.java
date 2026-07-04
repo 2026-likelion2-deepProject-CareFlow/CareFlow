@@ -76,10 +76,10 @@ class AgencyAsStatusLogServiceTest {
             mockLogFields(log2, 2L, 102L, "WAITING", "ENGINEER_DEPARTED", "출발", "기사B");
 
             when(userRepository.findById(USER_ID)).thenReturn(Optional.of(agencyUser));
-            when(asStatusLogRepository.findAllByAgencyIdOrderByCreatedAtDesc(AGENCY_ID))
+            when(asStatusLogRepository.findAllByAgencyIdWithFilter(AGENCY_ID, null, null, null, null))
                     .thenReturn(List.of(log1, log2));
 
-            AsStatusLogListResponse result = service.getStatusLogs(agencyUserDetails);
+            AsStatusLogListResponse result = service.getStatusLogs(agencyUserDetails, null, null, null, null);
 
             assertThat(result.totalCount()).isEqualTo(2);
             assertThat(result.logs()).hasSize(2);
@@ -91,10 +91,10 @@ class AgencyAsStatusLogServiceTest {
         @DisplayName("성공: 이력 없을 때 totalCount=0, 빈 배열 반환")
         void success_noLogs_returnsEmpty() throws Exception {
             when(userRepository.findById(USER_ID)).thenReturn(Optional.of(agencyUser));
-            when(asStatusLogRepository.findAllByAgencyIdOrderByCreatedAtDesc(AGENCY_ID))
+            when(asStatusLogRepository.findAllByAgencyIdWithFilter(AGENCY_ID, null, null, null, null))
                     .thenReturn(List.of());
 
-            AsStatusLogListResponse result = service.getStatusLogs(agencyUserDetails);
+            AsStatusLogListResponse result = service.getStatusLogs(agencyUserDetails, null, null, null, null);
 
             assertThat(result.totalCount()).isEqualTo(0);
             assertThat(result.logs()).isEmpty();
@@ -103,7 +103,7 @@ class AgencyAsStatusLogServiceTest {
         @Test
         @DisplayName("실패: AGENCY 권한 없으면 IllegalAccessException")
         void fail_notAgency_throwsIllegalAccess() {
-            assertThatThrownBy(() -> service.getStatusLogs(adminUserDetails))
+            assertThatThrownBy(() -> service.getStatusLogs(adminUserDetails, null, null, null, null))
                     .isInstanceOf(IllegalAccessException.class)
                     .hasMessageContaining("대행사 관리자 권한이 없습니다.");
         }
@@ -115,9 +115,45 @@ class AgencyAsStatusLogServiceTest {
             when(userWithoutAgency.getAgency()).thenReturn(null);
             when(userRepository.findById(USER_ID)).thenReturn(Optional.of(userWithoutAgency));
 
-            assertThatThrownBy(() -> service.getStatusLogs(agencyUserDetails))
+            assertThatThrownBy(() -> service.getStatusLogs(agencyUserDetails, null, null, null, null))
                     .isInstanceOf(IllegalStateException.class)
                     .hasMessageContaining("소속 대행사 정보가 없습니다.");
+        }
+
+        @Test
+        @DisplayName("성공: toStatus 필터는 리포지토리에 그대로 전달")
+        void success_toStatusFilter_passedToRepository() throws Exception {
+            AsStatusLog log = mock(AsStatusLog.class);
+            mockLogFields(log, 1L, 101L, "WAITING", "COMPLETED", null, "기사A");
+
+            when(userRepository.findById(USER_ID)).thenReturn(Optional.of(agencyUser));
+            when(asStatusLogRepository.findAllByAgencyIdWithFilter(AGENCY_ID, null, null, "COMPLETED", null))
+                    .thenReturn(List.of(log));
+
+            AsStatusLogListResponse result = service.getStatusLogs(agencyUserDetails, null, "COMPLETED", null, null);
+
+            assertThat(result.totalCount()).isEqualTo(1);
+            assertThat(result.logs().get(0).toStatus()).isEqualTo("COMPLETED");
+            verify(asStatusLogRepository).findAllByAgencyIdWithFilter(AGENCY_ID, null, null, "COMPLETED", null);
+        }
+
+        @Test
+        @DisplayName("성공: keyword는 고객명 기준으로 인메모리 부분일치 필터링")
+        void success_keywordFilter_matchesCustomerName() throws Exception {
+            AsStatusLog matched = mock(AsStatusLog.class);
+            AsStatusLog notMatched = mock(AsStatusLog.class);
+
+            mockLogFieldsWithCustomerAndAppliance(matched, 1L, 101L, "홍길동", "삼성 에어컨", "WAITING");
+            mockLogFieldsWithCustomerAndAppliance(notMatched, 2L, 102L, "김철수", "LG 냉장고", "WAITING");
+
+            when(userRepository.findById(USER_ID)).thenReturn(Optional.of(agencyUser));
+            when(asStatusLogRepository.findAllByAgencyIdWithFilter(AGENCY_ID, null, null, null, null))
+                    .thenReturn(List.of(matched, notMatched));
+
+            AsStatusLogListResponse result = service.getStatusLogs(agencyUserDetails, null, null, null, "홍길동");
+
+            assertThat(result.totalCount()).isEqualTo(1);
+            assertThat(result.logs().get(0).requestId()).isEqualTo(101L);
         }
     }
 
@@ -213,6 +249,33 @@ class AgencyAsStatusLogServiceTest {
         when(log.getFromStatus()).thenReturn(fromStatus);
         when(log.getToStatus()).thenReturn(toStatus);
         when(log.getMemo()).thenReturn(memo);
+        when(log.getCreatedAt()).thenReturn(null);
+    }
+
+    /** keyword(고객명·제품명) 필터 검증용 — customer·appliance 필드까지 스텁 */
+    private void mockLogFieldsWithCustomerAndAppliance(AsStatusLog log, Long logId, Long requestId,
+                                                        String customerName, String applianceLabel,
+                                                        String toStatus) {
+        com.careflow.as_request.entity.AsRequest req = mock(com.careflow.as_request.entity.AsRequest.class);
+        when(req.getId()).thenReturn(requestId);
+
+        User customer = mock(User.class);
+        when(customer.getName()).thenReturn(customerName);
+        when(req.getCustomer()).thenReturn(customer);
+
+        String[] parts = applianceLabel.split(" ", 2);
+        com.careflow.appliance.entity.Appliance appliance = mock(com.careflow.appliance.entity.Appliance.class);
+        when(appliance.getBrand()).thenReturn(parts[0]);
+        when(appliance.getModelName()).thenReturn(parts.length > 1 ? parts[1] : "");
+        when(req.getAppliance()).thenReturn(appliance);
+
+        User changedBy = mock(User.class);
+        when(changedBy.getName()).thenReturn("기사");
+
+        when(log.getId()).thenReturn(logId);
+        when(log.getAsRequest()).thenReturn(req);
+        when(log.getChangedBy()).thenReturn(changedBy);
+        when(log.getToStatus()).thenReturn(toStatus);
         when(log.getCreatedAt()).thenReturn(null);
     }
 }

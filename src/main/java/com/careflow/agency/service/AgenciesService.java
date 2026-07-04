@@ -84,11 +84,13 @@ public class AgenciesService {
                 throw new IllegalArgumentException("이미 가입된 이메일입니다.");
             }
             // 1. 대행사 정보 우선 저장(approval_status : PENDING)
+            // 회원가입 폼은 수수료율을 퍼센트(예: 10.5)로 입력받지만, agencies.agency_fee_rate는
+            // 비율(0~1, 예: 0.105)로 저장하므로 100으로 나눠 변환 — 시드 데이터·정산 계산과 단위 통일
             Long agencyId = agenciesRepository.save(
                     Agencies.create(agencyCreateRequest.agencyName(),
                             agencyCreateRequest.businessNumber(),
                             agencyCreateRequest.agencyAddress(),
-                            agencyCreateRequest.agencyFeeRate())).getId();
+                            agencyCreateRequest.agencyFeeRate() / 100)).getId();
 
             agencies = agenciesRepository.findById(agencyId).orElseThrow(() -> new NoSuchElementException("대행사 정보가 저장되지 않았습니다."));
 
@@ -146,11 +148,12 @@ public class AgenciesService {
     }
 
     // 대행사 수수료율 수정
+    // agencies.agency_fee_rate는 비율(0~1)로 저장됨(v14 스키마) — 요청값을 변환 없이 그대로 저장
     @Transactional
     public AgencyFeeRateResponse updateFeeRate(Long userId, AgencyFeeRateUpdateRequest request) {
-        // 수수료율 범위 검증: 0 이상 100 이하
-        if (request.agencyFeeRate() < 0 || request.agencyFeeRate() > 100) {
-            throw new IllegalArgumentException("수수료율은 0 이상 100 이하여야 합니다.");
+        // 수수료율 범위 검증: 0 이상 1 이하 (비율)
+        if (request.agencyFeeRate() < 0 || request.agencyFeeRate() > 1) {
+            throw new IllegalArgumentException("수수료율은 0 이상 1 이하의 비율이어야 합니다.");
         }
 
         Agencies agencies = agenciesRepository.findByRepresentativeById(userId)

@@ -209,6 +209,7 @@ public class AgencySettlementService {
                 s.getAgencyFee(),
                 s.getEngineerNetAmount(),
                 s.getStatus(),
+                s.getCreatedAt(),
                 s.getPaidAt(),
                 payMethod,
                 bankAccount_
