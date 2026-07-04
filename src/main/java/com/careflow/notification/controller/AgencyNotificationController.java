@@ -9,6 +9,8 @@ import org.springframework.data.web.PageableDefault;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -36,5 +38,35 @@ public class AgencyNotificationController {
 
         AgencyNotificationResponse response = agencyNotificationService.getNotifications(userDetails, pageable, type);
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * [PATCH] /api/agency/notifications/{notificationId}/read
+     * 알림 클릭 시 해당 알림을 읽음 처리한다.
+     * - unreadCount는 이 API가 내려주지 않음 — 프론트엔드는 처리 후 GET /api/agency/notifications를 재호출해 반영한다.
+     * - role != AGENCY, 또는 본인 대행사 수신 범위 밖의 알림 → 401 Unauthorized
+     * - 존재하지 않는 notificationId → 404 Not Found
+     */
+    @PatchMapping("/{notificationId}/read")
+    public ResponseEntity<Void> markAsRead(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long notificationId) throws IllegalAccessException {
+
+        agencyNotificationService.markAsRead(userDetails, notificationId);
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * [PATCH] /api/agency/notifications/read-all
+     * "모두 읽음 처리" 버튼 클릭 시 이 대행사의 알림 수신 대상 범위 전체를 일괄 읽음 처리한다.
+     * - 결과가 결정적(전체 읽음 → unreadCount=0)이므로 프론트엔드는 GET 재호출 없이 로컬 상태를 즉시 갱신한다.
+     * - role != AGENCY → 401 Unauthorized
+     */
+    @PatchMapping("/read-all")
+    public ResponseEntity<Void> markAllAsRead(
+            @AuthenticationPrincipal CustomUserDetails userDetails) throws IllegalAccessException {
+
+        agencyNotificationService.markAllAsRead(userDetails);
+        return ResponseEntity.noContent().build();
     }
 }

@@ -34,7 +34,9 @@ import org.springframework.test.web.servlet.MockMvc;
 import java.time.LocalDate;
 
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.assertj.core.api.Assertions.assertThat;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -354,6 +356,179 @@ class AgencyNotificationControllerIntegrationTest {
                             .header("Authorization", "Bearer " + agencyTokenWithAgencyId))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.content.length()").value(0));
+        }
+    }
+
+    @Nested
+    @DisplayName("PATCH /api/agency/notifications/{notificationId}/read — 알림 읽음 처리")
+    class MarkNotificationRead {
+
+        @Test
+        @DisplayName("성공: 소속 기사 알림 읽음 처리 → 204, DB에 is_read=true 반영")
+        void 소속기사알림_읽음처리_204() throws Exception {
+            Notification n = saveNotification(engineer, false);
+
+            mockMvc.perform(patch("/api/agency/notifications/" + n.getId() + "/read")
+                            .header("Authorization", "Bearer " + agencyTokenWithAgencyId))
+                    .andExpect(status().isNoContent());
+
+            Notification updated = notificationRepository.findById(n.getId()).orElseThrow();
+            assertThat(updated.isRead()).isTrue();
+        }
+
+        @Test
+        @DisplayName("성공: 소속 고객 알림 읽음 처리 → 204, DB에 is_read=true 반영")
+        void 소속고객알림_읽음처리_204() throws Exception {
+            linkCustomerToAgency(customer, agency);
+            Notification n = saveNotification(customer, false);
+
+            mockMvc.perform(patch("/api/agency/notifications/" + n.getId() + "/read")
+                            .header("Authorization", "Bearer " + agencyTokenWithAgencyId))
+                    .andExpect(status().isNoContent());
+
+            Notification updated = notificationRepository.findById(n.getId()).orElseThrow();
+            assertThat(updated.isRead()).isTrue();
+        }
+
+        @Test
+        @DisplayName("성공: 읽음 처리 후 GET 재호출 시 unreadCount가 감소한다")
+        void 읽음처리후_GET재호출시_unreadCount감소확인() throws Exception {
+            Notification n1 = saveNotification(engineer, false);
+            saveNotification(engineer, false);
+
+            mockMvc.perform(get("/api/agency/notifications")
+                            .header("Authorization", "Bearer " + agencyTokenWithAgencyId))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.stats.unreadCount").value(2));
+
+            mockMvc.perform(patch("/api/agency/notifications/" + n1.getId() + "/read")
+                            .header("Authorization", "Bearer " + agencyTokenWithAgencyId))
+                    .andExpect(status().isNoContent());
+
+            mockMvc.perform(get("/api/agency/notifications")
+                            .header("Authorization", "Bearer " + agencyTokenWithAgencyId))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.stats.unreadCount").value(1));
+        }
+
+        @Test
+        @DisplayName("성공: 이미 읽음 상태인 알림에 재차 호출해도 204(멱등)")
+        void 이미읽음상태_재호출_204() throws Exception {
+            Notification n = saveNotification(engineer, true);
+
+            mockMvc.perform(patch("/api/agency/notifications/" + n.getId() + "/read")
+                            .header("Authorization", "Bearer " + agencyTokenWithAgencyId))
+                    .andExpect(status().isNoContent());
+        }
+
+        @Test
+        @DisplayName("실패: 존재하지 않는 알림 → 404 Not Found")
+        void 존재하지않는알림_404() throws Exception {
+            mockMvc.perform(patch("/api/agency/notifications/999999/read")
+                            .header("Authorization", "Bearer " + agencyTokenWithAgencyId))
+                    .andExpect(status().isNotFound());
+        }
+
+        @Test
+        @DisplayName("실패: 타 대행사 소속 알림 → 401 Unauthorized, DB 값 변경 없음")
+        void 타대행사알림_401() throws Exception {
+            Notification n = saveNotification(otherEngineer, false);
+
+            mockMvc.perform(patch("/api/agency/notifications/" + n.getId() + "/read")
+                            .header("Authorization", "Bearer " + agencyTokenWithAgencyId))
+                    .andExpect(status().isUnauthorized());
+
+            Notification unchanged = notificationRepository.findById(n.getId()).orElseThrow();
+            assertThat(unchanged.isRead()).isFalse();
+        }
+
+        @Test
+        @DisplayName("실패: CUSTOMER 권한 → 401 Unauthorized")
+        void CUSTOMER권한_401() throws Exception {
+            Notification n = saveNotification(engineer, false);
+
+            mockMvc.perform(patch("/api/agency/notifications/" + n.getId() + "/read")
+                            .header("Authorization", "Bearer " + customerToken))
+                    .andExpect(status().isUnauthorized());
+        }
+    }
+
+    @Nested
+    @DisplayName("PATCH /api/agency/notifications/read-all — 알림 전체 읽음 처리")
+    class MarkAllNotificationsRead {
+
+        @Test
+        @DisplayName("성공: 소속 기사·고객 알림 전체를 읽음 처리한다 → 204")
+        void 소속기사고객알림_전체읽음처리_204() throws Exception {
+            linkCustomerToAgency(customer, agency);
+            Notification n1 = saveNotification(engineer, false);
+            Notification n2 = saveNotification(engineer, false);
+            Notification n3 = saveNotification(customer, false);
+
+            mockMvc.perform(patch("/api/agency/notifications/read-all")
+                            .header("Authorization", "Bearer " + agencyTokenWithAgencyId))
+                    .andExpect(status().isNoContent());
+
+            assertThat(notificationRepository.findById(n1.getId()).orElseThrow().isRead()).isTrue();
+            assertThat(notificationRepository.findById(n2.getId()).orElseThrow().isRead()).isTrue();
+            assertThat(notificationRepository.findById(n3.getId()).orElseThrow().isRead()).isTrue();
+        }
+
+        @Test
+        @DisplayName("성공: 전체 읽음 처리 후 GET 재호출 시 unreadCount가 0이다")
+        void 읽음처리후_GET재호출시_unreadCount0() throws Exception {
+            saveNotification(engineer, false);
+            saveNotification(engineer, false);
+            saveNotification(engineer, false);
+
+            mockMvc.perform(patch("/api/agency/notifications/read-all")
+                            .header("Authorization", "Bearer " + agencyTokenWithAgencyId))
+                    .andExpect(status().isNoContent());
+
+            mockMvc.perform(get("/api/agency/notifications")
+                            .header("Authorization", "Bearer " + agencyTokenWithAgencyId))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.stats.unreadCount").value(0));
+        }
+
+        @Test
+        @DisplayName("성공: 타 대행사 소속 알림은 영향받지 않는다")
+        void 타대행사알림_영향없음() throws Exception {
+            Notification otherNotification = saveNotification(otherEngineer, false);
+            saveNotification(engineer, false);
+
+            mockMvc.perform(patch("/api/agency/notifications/read-all")
+                            .header("Authorization", "Bearer " + agencyTokenWithAgencyId))
+                    .andExpect(status().isNoContent());
+
+            Notification unchanged = notificationRepository.findById(otherNotification.getId()).orElseThrow();
+            assertThat(unchanged.isRead()).isFalse();
+        }
+
+        @Test
+        @DisplayName("성공: 수신 대상 알림이 없어도 204(에러 없음)")
+        void 대상없음_204() throws Exception {
+            mockMvc.perform(patch("/api/agency/notifications/read-all")
+                            .header("Authorization", "Bearer " + agencyTokenWithAgencyId))
+                    .andExpect(status().isNoContent());
+        }
+
+        @Test
+        @DisplayName("성공: 이미 전체 읽음 상태에서 재호출해도 204(멱등)")
+        void 이미전체읽음상태_재호출_204() throws Exception {
+            saveNotification(engineer, true);
+
+            mockMvc.perform(patch("/api/agency/notifications/read-all")
+                            .header("Authorization", "Bearer " + agencyTokenWithAgencyId))
+                    .andExpect(status().isNoContent());
+        }
+
+        @Test
+        @DisplayName("실패: CUSTOMER 권한 → 401 Unauthorized")
+        void CUSTOMER권한_401() throws Exception {
+            mockMvc.perform(patch("/api/agency/notifications/read-all")
+                            .header("Authorization", "Bearer " + customerToken))
+                    .andExpect(status().isUnauthorized());
         }
     }
 }

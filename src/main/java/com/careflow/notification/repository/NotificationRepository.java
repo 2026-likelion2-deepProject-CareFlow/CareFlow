@@ -4,9 +4,11 @@ import com.careflow.notification.entity.Notification;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.stereotype.Repository;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.util.List;
@@ -33,6 +35,12 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
 
     // user_id 목록 범위 내 미열람(is_read = false) 건수 집계
     long countByUser_IdInAndIsReadFalse(List<Long> userIds);
+
+    // user_id 목록 범위 내 미열람 알림 전체를 벌크 읽음 처리 (대행사 "모두 읽음 처리" 버튼)
+    @Modifying
+    @Transactional
+    @Query("UPDATE Notification n SET n.isRead = true WHERE n.user.id IN :userIds AND n.isRead = false")
+    int markAllAsReadByUserIds(@Param("userIds") List<Long> userIds);
 
     // user_id 목록 범위 내 특정 기간(created_at) 건수 집계 — 오늘 발생 건수 산정용
     @Query("SELECT COUNT(n) FROM Notification n " +

@@ -6,6 +6,7 @@ import com.careflow.common.enums.Role;
 import com.careflow.notification.dto.AgencyNotificationResponse;
 import com.careflow.notification.entity.Notification;
 import com.careflow.notification.repository.NotificationRepository;
+import com.careflow.user.entity.User;
 import com.careflow.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -23,6 +24,7 @@ import org.springframework.data.domain.Pageable;
 
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.NoSuchElementException;
 
 import static org.assertj.core.api.Assertions.*;
 import static org.mockito.ArgumentMatchers.*;
@@ -69,6 +71,15 @@ class AgencyNotificationServiceTest {
         given(n.getChannel()).willReturn("SSE");
         given(n.getCreatedAt()).willReturn(createdAt);
         given(n.isRead()).willReturn(isRead);
+        return n;
+    }
+
+    // markAsRead 테스트 전용 — 특정 수신자(userId)에게 발송된 것으로 stub된 알림 mock 생성
+    private Notification buildNotificationOf(Long recipientUserId) {
+        Notification n = mock(Notification.class);
+        User recipient = mock(User.class);
+        given(recipient.getId()).willReturn(recipientUserId);
+        given(n.getUser()).willReturn(recipient);
         return n;
     }
 
@@ -261,6 +272,147 @@ class AgencyNotificationServiceTest {
             assertThatThrownBy(() -> agencyNotificationService.getNotifications(agencyUser, pageable, "INVALID"))
                     .isInstanceOf(IllegalArgumentException.class);
             verifyNoInteractions(userRepository, asRequestRepository, notificationRepository);
+        }
+    }
+
+    @Nested
+    @DisplayName("markAsRead — 알림 읽음 처리")
+    class MarkAsRead {
+
+        @Test
+        @DisplayName("성공: 소속 기사 알림 읽음 처리")
+        void 정상_소속기사알림_읽음처리() throws Exception {
+            given(userRepository.findIdsByAgency_IdAndRole(AGENCY_ID, Role.ENGINEER))
+                    .willReturn(List.of(ENGINEER_ID));
+            given(asRequestRepository.findDistinctCustomerIdsByAgencyId(AGENCY_ID))
+                    .willReturn(List.of());
+
+            Notification notification = buildNotificationOf(ENGINEER_ID);
+            given(notificationRepository.findById(1L)).willReturn(java.util.Optional.of(notification));
+
+            agencyNotificationService.markAsRead(agencyUser, 1L);
+
+            verify(notification).markAsRead();
+        }
+
+        @Test
+        @DisplayName("성공: 소속 고객 알림 읽음 처리")
+        void 정상_소속고객알림_읽음처리() throws Exception {
+            given(userRepository.findIdsByAgency_IdAndRole(AGENCY_ID, Role.ENGINEER))
+                    .willReturn(List.of());
+            given(asRequestRepository.findDistinctCustomerIdsByAgencyId(AGENCY_ID))
+                    .willReturn(List.of(CUSTOMER_ID));
+
+            Notification notification = buildNotificationOf(CUSTOMER_ID);
+            given(notificationRepository.findById(1L)).willReturn(java.util.Optional.of(notification));
+
+            agencyNotificationService.markAsRead(agencyUser, 1L);
+
+            verify(notification).markAsRead();
+        }
+
+        @Test
+        @DisplayName("성공: 이미 읽음 상태여도 재호출 시 정상 처리(멱등)")
+        void 이미읽음상태_재호출해도_정상처리() throws Exception {
+            given(userRepository.findIdsByAgency_IdAndRole(AGENCY_ID, Role.ENGINEER))
+                    .willReturn(List.of(ENGINEER_ID));
+            given(asRequestRepository.findDistinctCustomerIdsByAgencyId(AGENCY_ID))
+                    .willReturn(List.of());
+
+            Notification notification = buildNotificationOf(ENGINEER_ID);
+            given(notificationRepository.findById(1L)).willReturn(java.util.Optional.of(notification));
+
+            assertThatCode(() -> agencyNotificationService.markAsRead(agencyUser, 1L))
+                    .doesNotThrowAnyException();
+            verify(notification).markAsRead();
+        }
+
+        @Test
+        @DisplayName("실패: 존재하지 않는 알림 → NoSuchElementException, markAsRead 미호출")
+        void 존재하지않는알림_NoSuchElementException() {
+            given(notificationRepository.findById(999L)).willReturn(java.util.Optional.empty());
+
+            assertThatThrownBy(() -> agencyNotificationService.markAsRead(agencyUser, 999L))
+                    .isInstanceOf(NoSuchElementException.class);
+            verifyNoInteractions(userRepository, asRequestRepository);
+        }
+
+        @Test
+        @DisplayName("실패: 타 대행사 소속 알림 → IllegalAccessException, markAsRead 미호출")
+        void 타대행사알림_IllegalAccessException() {
+            given(userRepository.findIdsByAgency_IdAndRole(AGENCY_ID, Role.ENGINEER))
+                    .willReturn(List.of(ENGINEER_ID));
+            given(asRequestRepository.findDistinctCustomerIdsByAgencyId(AGENCY_ID))
+                    .willReturn(List.of(CUSTOMER_ID));
+
+            Notification notification = buildNotificationOf(999L); // 수신 대상 범위 밖의 user_id
+            given(notificationRepository.findById(1L)).willReturn(java.util.Optional.of(notification));
+
+            assertThatThrownBy(() -> agencyNotificationService.markAsRead(agencyUser, 1L))
+                    .isInstanceOf(IllegalAccessException.class);
+            verify(notification, never()).markAsRead();
+        }
+
+        @Test
+        @DisplayName("실패: AGENCY가 아닌 role → IllegalAccessException, repository 호출 없음")
+        void AGENCY아닌_role_예외발생() {
+            assertThatThrownBy(() -> agencyNotificationService.markAsRead(customerUser, 1L))
+                    .isInstanceOf(IllegalAccessException.class);
+            verifyNoInteractions(notificationRepository, userRepository, asRequestRepository);
+        }
+    }
+
+    @Nested
+    @DisplayName("markAllAsRead — 알림 전체 읽음 처리")
+    class MarkAllAsRead {
+
+        @Test
+        @DisplayName("성공: 수신 대상 전체를 벌크 읽음 처리한다")
+        void 정상_수신대상전체_벌크읽음처리() throws Exception {
+            given(userRepository.findIdsByAgency_IdAndRole(AGENCY_ID, Role.ENGINEER))
+                    .willReturn(List.of(ENGINEER_ID));
+            given(asRequestRepository.findDistinctCustomerIdsByAgencyId(AGENCY_ID))
+                    .willReturn(List.of(CUSTOMER_ID));
+            given(notificationRepository.markAllAsReadByUserIds(List.of(ENGINEER_ID, CUSTOMER_ID)))
+                    .willReturn(3);
+
+            agencyNotificationService.markAllAsRead(agencyUser);
+
+            verify(notificationRepository).markAllAsReadByUserIds(List.of(ENGINEER_ID, CUSTOMER_ID));
+        }
+
+        @Test
+        @DisplayName("성공: 수신 대상이 없으면 쿼리 호출 없이 정상 종료한다")
+        void 수신대상없음_쿼리호출없이_정상종료() throws Exception {
+            given(userRepository.findIdsByAgency_IdAndRole(AGENCY_ID, Role.ENGINEER))
+                    .willReturn(List.of());
+            given(asRequestRepository.findDistinctCustomerIdsByAgencyId(AGENCY_ID))
+                    .willReturn(List.of());
+
+            assertThatCode(() -> agencyNotificationService.markAllAsRead(agencyUser))
+                    .doesNotThrowAnyException();
+            verify(notificationRepository, never()).markAllAsReadByUserIds(anyList());
+        }
+
+        @Test
+        @DisplayName("성공: 이미 전체 읽음 상태여도(0건 갱신) 재호출 시 정상 처리")
+        void 대상이미모두읽음_재호출해도_정상처리() throws Exception {
+            given(userRepository.findIdsByAgency_IdAndRole(AGENCY_ID, Role.ENGINEER))
+                    .willReturn(List.of(ENGINEER_ID));
+            given(asRequestRepository.findDistinctCustomerIdsByAgencyId(AGENCY_ID))
+                    .willReturn(List.of());
+            given(notificationRepository.markAllAsReadByUserIds(anyList())).willReturn(0);
+
+            assertThatCode(() -> agencyNotificationService.markAllAsRead(agencyUser))
+                    .doesNotThrowAnyException();
+        }
+
+        @Test
+        @DisplayName("실패: AGENCY가 아닌 role → IllegalAccessException, repository 호출 없음")
+        void AGENCY아닌_role_예외발생() {
+            assertThatThrownBy(() -> agencyNotificationService.markAllAsRead(customerUser))
+                    .isInstanceOf(IllegalAccessException.class);
+            verifyNoInteractions(notificationRepository, userRepository, asRequestRepository);
         }
     }
 }
