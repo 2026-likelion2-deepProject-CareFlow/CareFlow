@@ -129,29 +129,35 @@ public class ApplianceService {
         // (N+1 방지를 위해 Repository에서 FETCH JOIN 적용 권장)
         List<WorkReport> reports = workReportRepository.findByApplianceIdOrderBySubmittedAtDesc(applianceId);
 
-        int axis1 = HealthScoreCalculator.calculateRepairCountScore(cert.getRepairCount());
-        int axis2 = HealthScoreCalculator.calculateUsagePeriodScore(appliance.getPurchaseDate(), cert.getUpdatedAt());
+        // 🌟 수정: 사용기간/최근수리 경과는 "인증서 갱신 시점"이 아니라 "현재 시점" 기준으로 계산해야
+        // 시간이 지날수록 점수가 실제로 갱신됨 (cert.getUpdatedAt()은 마지막 수리 직후 시각이라 항상 경과=0이 되는 버그였음)
+        LocalDateTime now = LocalDateTime.now();
 
-        int axis3 = 25;
+        int axis1 = HealthScoreCalculator.calculateRepairCountScore(cert.getRepairCount());
+        int axis2 = HealthScoreCalculator.calculateUsagePeriodScore(appliance.getPurchaseDate(), now);
+
+        // 🌟 수정: 최신 보고서 1건이 아니라 전체 수리 이력을 훑어 가장 심각한(worst) 부품 중요도를 찾음
+        // (syncHealthCertificate()의 저장 로직과 동일하게 맞춤)
         PartImportance maxImportance = null;
-        if (!reports.isEmpty() && !reports.get(0).getParts().isEmpty()) {
-            for (WorkReportPart part : reports.get(0).getParts()) {
+        for (WorkReport report : reports) {
+            for (WorkReportPart part : report.getParts()) {
                 PartImportance currentImportance = part.getRepairPart().getImportance();
                 if (maxImportance == null || currentImportance.getSeverity() < maxImportance.getSeverity()) {
                     maxImportance = currentImportance;
                 }
             }
-            axis3 = HealthScoreCalculator.calculatePartImportanceScore(maxImportance);
         }
+        int axis3 = HealthScoreCalculator.calculatePartImportanceScore(maxImportance);
 
-        LocalDateTime prevRepairedAt = reports.size() > 1 ? reports.get(1).getSubmittedAt() : null;
-        int axis4 = HealthScoreCalculator.calculateLastRepairedScore(prevRepairedAt, cert.getUpdatedAt());
+        // 🌟 수정: 두 번째로 최근인 보고서가 아니라 가장 최근 보고서의 제출일을 기준으로 계산
+        LocalDateTime prevRepairedAt = reports.isEmpty() ? null : reports.get(0).getSubmittedAt();
+        int axis4 = HealthScoreCalculator.calculateLastRepairedScore(prevRepairedAt, now);
 
         // 🌟 Condition 텍스트 추출
         String cond1 = getRepairCountCondition(cert.getRepairCount());
-        String cond2 = getUsagePeriodCondition(appliance.getPurchaseDate(), cert.getUpdatedAt());
+        String cond2 = getUsagePeriodCondition(appliance.getPurchaseDate(), now);
         String cond3 = getPartImportanceCondition(maxImportance);
-        String cond4 = getLastRepairedCondition(prevRepairedAt, cert.getUpdatedAt());
+        String cond4 = getLastRepairedCondition(prevRepairedAt, now);
 
         return HealthCertificateResponse.builder()
                 .certId(cert.getCertId())

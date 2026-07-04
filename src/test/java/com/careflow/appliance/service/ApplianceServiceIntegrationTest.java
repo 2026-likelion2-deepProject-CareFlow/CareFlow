@@ -95,39 +95,6 @@ class ApplianceServiceIntegrationTest {
                 .category(childCategory).symptomCode("ERR-01").symptomName("고장").build();
         symptomRepository.save(symptom);
 
-        // 4. 과거 작업 보고서 세팅
-        AsRequest oldRequest = AsRequest.builder()
-                .customer(testCustomer).appliance(testAppliance).symptom(symptom)
-                .visitRegion(region).visitAddressDetail("101호")
-                .scheduledDate(LocalDate.now().minusMonths(13)).scheduledTime("14:00").build();
-        asRequestRepository.save(oldRequest);
-
-        WorkReport oldReport = WorkReport.builder()
-                .asRequest(oldRequest).engineer(testEngineer)
-                .diagnosisResult(DiagnosisResult.REPAIRED)
-                .workDurationMin(60).finalAmount(50000).build();
-
-        // 일단 저장 (이때 JPA Auditing이 강제로 현재 시간으로 덮어씀)
-        workReportRepository.save(oldReport);
-
-        // 💡 핵심: JPA를 우회하여 Native Query로 DB에 직접 13개월 전 날짜를 강제 세팅
-        em.createNativeQuery("UPDATE work_reports SET submitted_at = :pastDate WHERE report_id = :id")
-                .setParameter("pastDate", LocalDateTime.now().minusMonths(13))
-                .setParameter("id", oldReport.getReportId())
-                .executeUpdate();
-
-        // 5. 최신 작업 보고서 (오늘) - 부품 교체 포함
-        AsRequest newRequest = AsRequest.builder()
-                .customer(testCustomer).appliance(testAppliance).symptom(symptom)
-                .visitRegion(region).visitAddressDetail("101호")
-                .scheduledDate(LocalDate.now()).scheduledTime("14:00").build();
-        asRequestRepository.save(newRequest);
-
-        WorkReport newReport = WorkReport.builder()
-                .asRequest(newRequest).engineer(testEngineer)
-                .diagnosisResult(DiagnosisResult.PART_REPLACED)
-                .workDurationMin(120).finalAmount(150000).build();
-
         // 부품 마스터 세팅 (NORMAL 중요도)
         Constructor<RepairPart> partConstructor = RepairPart.class.getDeclaredConstructor();
         partConstructor.setAccessible(true);
@@ -138,13 +105,53 @@ class ApplianceServiceIntegrationTest {
         ReflectionTestUtils.setField(repairPart, "baseUnitPrice", 150000);
         repairPartRepository.save(repairPart);
 
+        // 4. 더 오래된 작업 보고서 (20개월 전) - 부품 교체 포함, 가장 최근 보고서는 아님
+        //    → 3축(부품 중요도)이 "가장 최근 보고서 1건"만 보는 게 아니라 전체 이력을 훑는지 검증
+        AsRequest olderRequest = AsRequest.builder()
+                .customer(testCustomer).appliance(testAppliance).symptom(symptom)
+                .visitRegion(region).visitAddressDetail("101호")
+                .scheduledDate(LocalDate.now().minusMonths(20)).scheduledTime("14:00").build();
+        asRequestRepository.save(olderRequest);
+
+        WorkReport olderReport = WorkReport.builder()
+                .asRequest(olderRequest).engineer(testEngineer)
+                .diagnosisResult(DiagnosisResult.PART_REPLACED)
+                .workDurationMin(120).finalAmount(150000).build();
+
         WorkReportPart reportPart = WorkReportPart.builder()
                 .repairPart(repairPart).quantity(1).appliedUnitPrice(150000).build();
-        newReport.addPart(reportPart);
+        olderReport.addPart(reportPart);
 
-        workReportRepository.save(newReport);
+        // 일단 저장 (이때 JPA Auditing이 강제로 현재 시간으로 덮어씀)
+        workReportRepository.save(olderReport);
 
-        // 💡 1차 캐시를 비워서, 조회 쿼리를 날릴 때 조작해둔 13개월 전 데이터를 완벽하게 DB에서 불러오게 만듦
+        // 💡 핵심: JPA를 우회하여 Native Query로 DB에 직접 20개월 전 날짜를 강제 세팅
+        em.createNativeQuery("UPDATE work_reports SET submitted_at = :pastDate WHERE report_id = :id")
+                .setParameter("pastDate", LocalDateTime.now().minusMonths(20))
+                .setParameter("id", olderReport.getReportId())
+                .executeUpdate();
+
+        // 5. 가장 최근 작업 보고서 (13개월 전) - 부품 교체 없음(단순 수리)
+        //    → 4축(최근 수리 경과)은 가장 최근 보고서인 이 건의 제출일을 기준으로 계산되어야 함
+        AsRequest latestRequest = AsRequest.builder()
+                .customer(testCustomer).appliance(testAppliance).symptom(symptom)
+                .visitRegion(region).visitAddressDetail("101호")
+                .scheduledDate(LocalDate.now().minusMonths(13)).scheduledTime("14:00").build();
+        asRequestRepository.save(latestRequest);
+
+        WorkReport latestReport = WorkReport.builder()
+                .asRequest(latestRequest).engineer(testEngineer)
+                .diagnosisResult(DiagnosisResult.REPAIRED)
+                .workDurationMin(60).finalAmount(50000).build();
+
+        workReportRepository.save(latestReport);
+
+        em.createNativeQuery("UPDATE work_reports SET submitted_at = :pastDate WHERE report_id = :id")
+                .setParameter("pastDate", LocalDateTime.now().minusMonths(13))
+                .setParameter("id", latestReport.getReportId())
+                .executeUpdate();
+
+        // 💡 1차 캐시를 비워서, 조회 쿼리를 날릴 때 조작해둔 과거 데이터를 완벽하게 DB에서 불러오게 만듦
         em.flush();
         em.clear();
     }
@@ -163,8 +170,8 @@ class ApplianceServiceIntegrationTest {
         // 역추산된 점수들 검증
         assertThat(response.getRepairCountScore()).isEqualTo(15);     // 누적 2회 수리 (HealthScoreCalculator: 0회=25,1회=20,2회=15,3회=8,4회+=0)
         assertThat(response.getUsagePeriodScore()).isEqualTo(20);     // 2년 사용
-        assertThat(response.getPartImportanceScore()).isEqualTo(15);  // 최신 보고서 부품 NORMAL
-        assertThat(response.getLastRepairedScore()).isEqualTo(15);    // 직전 보고서 13개월 전
+        assertThat(response.getPartImportanceScore()).isEqualTo(15);  // 20개월 전(최신 아님) 보고서의 NORMAL 부품도 정상적으로 잡힘
+        assertThat(response.getLastRepairedScore()).isEqualTo(15);    // 가장 최근 보고서(13개월 전) 기준으로 계산
     }
 
     @Test

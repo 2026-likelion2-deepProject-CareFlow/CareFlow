@@ -73,20 +73,21 @@ class ApplianceServiceTest {
 
         // 4축(최근 수리일) 및 3축(부품 중요도) 역추산을 위한 Report 모킹
         WorkReport latestReport = mock(WorkReport.class);
-        WorkReport prevReport = mock(WorkReport.class);
+        WorkReport olderReport = mock(WorkReport.class);
 
-        // 두 번째 최신 보고서(직전 수리일): 13개월 전 -> 15점
-        given(prevReport.getSubmittedAt()).willReturn(LocalDateTime.now().minusMonths(13));
+        // 가장 최근 보고서(get(0)): 13개월 전 제출 -> 4축 15점. 이 보고서엔 부품 교체가 없음
+        given(latestReport.getSubmittedAt()).willReturn(LocalDateTime.now().minusMonths(13));
+        given(latestReport.getParts()).willReturn(List.of());
 
-        // 3축 부품 중요도 테스트용: NORMAL 부품 교체 -> 15점
+        // 3축 부품 중요도 테스트용: 가장 최근이 아닌 이전 보고서에 NORMAL 부품 교체가 있어도 잡혀야 함 -> 15점
         WorkReportPart part = mock(WorkReportPart.class);
         RepairPart repairPart = mock(RepairPart.class);
         given(part.getRepairPart()).willReturn(repairPart);
         given(repairPart.getImportance()).willReturn(PartImportance.NORMAL);
-        given(latestReport.getParts()).willReturn(List.of(part));
+        given(olderReport.getParts()).willReturn(List.of(part));
 
         given(workReportRepository.findByApplianceIdOrderBySubmittedAtDesc(applianceId))
-                .willReturn(List.of(latestReport, prevReport));
+                .willReturn(List.of(latestReport, olderReport));
 
         // When
         HealthCertificateResponse response = applianceService.getHealthCertificate(customerId, "CUSTOMER", applianceId);
@@ -95,7 +96,7 @@ class ApplianceServiceTest {
         assertThat(response.getGrade()).isEqualTo("B");
         assertThat(response.getScore()).isEqualTo(75);
 
-        // 계산식 검증: 15(누적2회) + 20(사용2년) + 15(NORMAL) + 15(직전수리 13개월 전) = 65점
+        // 계산식 검증: 15(누적2회) + 20(사용2년) + 15(이전 보고서의 NORMAL 부품) + 15(가장 최근 보고서 13개월 전) = 65점
         assertThat(response.getRepairCountScore()).isEqualTo(15);
         assertThat(response.getUsagePeriodScore()).isEqualTo(20);
         assertThat(response.getPartImportanceScore()).isEqualTo(15);
