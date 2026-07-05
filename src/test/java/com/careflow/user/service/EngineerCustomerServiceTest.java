@@ -7,7 +7,7 @@ import com.careflow.report.domain.entity.WorkReport;
 import com.careflow.report.domain.enums.DiagnosisResult;
 import com.careflow.report.repository.WorkReportRepository;
 import com.careflow.symptom.entity.Symptom;
-import com.careflow.user.controller.EngineerCustomerController.EngineerCustomerDetailResponse;
+import com.careflow.user.dto.EngineerCustomerDetailResponse;
 import com.careflow.user.entity.User;
 import com.careflow.user.repository.UserRepository;
 import org.junit.jupiter.api.DisplayName;

@@ -1,5 +1,6 @@
 package com.careflow.admin.controller;
 
+import com.careflow.admin.dto.response.RepairCostDto;
 import com.careflow.assignment.entity.ExpectedRepairCost;
 import com.careflow.assignment.repository.ExpectedRepairCostRepository;
 import com.careflow.auth.security.CustomUserDetails;
@@ -20,7 +21,6 @@ public class AdminRepairCostController {
 
     private final ExpectedRepairCostRepository expectedRepairCostRepository;
 
-    // 1. 수리 비용 가이드 조회
     @GetMapping
     @Transactional(readOnly = true)
     public ResponseEntity<List<RepairCostDto>> getRepairCosts(
@@ -30,17 +30,14 @@ public class AdminRepairCostController {
         List<RepairCostDto> list = expectedRepairCostRepository.findAllWithCategoryAndSymptom()
                 .stream()
                 .map(cost -> new RepairCostDto(
-                        cost.getId(),
-                        cost.getCategory().getCategoryId(),
-                        cost.getCategory().getName(),
-                        cost.getSymptom().getSymptomName(),
+                        cost.getId(), cost.getCategory().getCategoryId(),
+                        cost.getCategory().getName(), cost.getSymptom().getSymptomName(),
                         cost.getAvgCost() != null ? cost.getAvgCost() : 0
                 )).toList();
 
         return ResponseEntity.ok(list);
     }
 
-    // 2. 수리 비용 가이드 수정
     @PatchMapping("/{id}")
     @Transactional
     public ResponseEntity<RepairCostDto> updateRepairCost(
@@ -50,8 +47,7 @@ public class AdminRepairCostController {
         checkAdminRole(userDetails);
 
         ExpectedRepairCost cost = expectedRepairCostRepository.findById(id)
-                .orElseThrow(() -> new NoSuchElementException("존재하지 않는 수리 비용 데이터입니다."));
-
+                .orElseThrow(() -> new NoSuchElementException("데이터가 없습니다."));
         cost.updateAvgCost(request.get("avgCost"));
 
         return ResponseEntity.ok(new RepairCostDto(
@@ -61,9 +57,6 @@ public class AdminRepairCostController {
     }
 
     private void checkAdminRole(CustomUserDetails userDetails) throws IllegalAccessException {
-        if (!"ADMIN".equals(userDetails.getRole())) throw new IllegalAccessException("관리자만 접근 가능합니다.");
+        if (!"ADMIN".equals(userDetails.getRole())) throw new IllegalAccessException("관리자 권한이 필요합니다.");
     }
-
-    // DTO 레코드 내부 정의
-    public record RepairCostDto(Long id, Integer categoryId, String categoryName, String symptom, Integer avgCost) {}
 }

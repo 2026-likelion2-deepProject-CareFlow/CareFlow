@@ -141,4 +141,12 @@ public interface AsRequestRepository extends JpaRepository<AsRequest, Long> {
             @org.springframework.data.repository.query.Param("region") String region,
             @org.springframework.data.repository.query.Param("startOfDay") java.time.LocalDateTime startOfDay,
             @org.springframework.data.repository.query.Param("endOfDay") java.time.LocalDateTime endOfDay);
+
+    // 1) 여러 고객의 전체 A/S 신청 건수를 한 번에 집계 (N+1 방지)
+    @Query("SELECT r.customer.id, COUNT(r) FROM AsRequest r WHERE r.customer.id IN :customerIds GROUP BY r.customer.id")
+    List<Object[]> countAsRequestsByCustomerIds(@Param("customerIds") List<Long> customerIds);
+
+    // 2) 여러 고객의 가장 최근 A/S 신청 일자를 한 번에 조회 (N+1 방지)
+    @Query("SELECT r.customer.id, MAX(r.createdAt) FROM AsRequest r WHERE r.customer.id IN :customerIds GROUP BY r.customer.id")
+    List<Object[]> findLatestAsDateByCustomerIds(@Param("customerIds") List<Long> customerIds);
 }
