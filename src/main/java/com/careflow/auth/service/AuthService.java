@@ -46,6 +46,10 @@ public class AuthService {
             throw new IllegalArgumentException("이미 가입된 이메일입니다.");
         }
 
+        // 비밀번호 생성 규칙 강화 — 형식(영문+숫자 8자 이상)은 SignUpRequest의 @Pattern/@Size로 검증되고,
+        // 여기서는 DTO 필드만으로는 검증 불가능한 교차 필드 규칙(아이디·휴대폰번호 포함 여부)을 검사
+        validatePasswordDoesNotContainSensitiveInfo(request);
+
         Regions regions = regionRepository.findById(request.getRegionId()).orElseThrow(() -> new NoSuchElementException("입력받은 지역 정보가 존재하지 않습니다."));
         User user = User.builder()
                 .email(request.getEmail())
@@ -58,6 +62,29 @@ public class AuthService {
                 .build();
 
         userRepository.save(user);
+    }
+
+    /**
+     * 비밀번호에 본인 식별정보가 포함되는 것을 방지
+     * - 아이디(이메일 로컬파트, @ 앞부분)가 비밀번호에 포함된 경우 차단 (3자 미만이면 오탐 방지를 위해 검사 생략)
+     * - 휴대폰번호의 연속된 숫자 4자리 이상이 비밀번호에 포함된 경우 차단 (전화번호 미입력 시 검사 생략)
+     */
+    private void validatePasswordDoesNotContainSensitiveInfo(SignUpRequest request) {
+        String password = request.getPassword().toLowerCase();
+
+        String emailLocalPart = request.getEmail().split("@")[0].toLowerCase();
+        if (emailLocalPart.length() >= 3 && password.contains(emailLocalPart)) {
+            throw new IllegalArgumentException("비밀번호에 아이디(이메일)를 포함할 수 없습니다.");
+        }
+
+        String phoneDigits = request.getPhone() == null ? "" : request.getPhone().replaceAll("[^0-9]", "");
+        int minMatchLen = 4;
+        for (int i = 0; i + minMatchLen <= phoneDigits.length(); i++) {
+            String chunk = phoneDigits.substring(i, i + minMatchLen);
+            if (password.contains(chunk)) {
+                throw new IllegalArgumentException("비밀번호에 휴대폰 번호를 포함할 수 없습니다.");
+            }
+        }
     }
 
     @Transactional
