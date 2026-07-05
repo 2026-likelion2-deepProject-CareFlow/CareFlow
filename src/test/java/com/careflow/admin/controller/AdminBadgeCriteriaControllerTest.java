@@ -1,5 +1,6 @@
 package com.careflow.admin.controller;
 
+import com.careflow.admin.dto.request.BadgeCriteriaDto;
 import com.careflow.auth.security.CustomOAuth2UserService;
 import com.careflow.auth.security.CustomUserDetails;
 import com.careflow.auth.security.JwtProvider;
@@ -77,7 +78,7 @@ class AdminBadgeCriteriaControllerTest {
     @Test
     @DisplayName("성공: ADMIN 권한으로 새로운 인증 기준을 Redis에 저장한다.")
     void updateCriteria_Success() throws Exception {
-        AdminBadgeCriteriaController.BadgeCriteriaDto dto = new AdminBadgeCriteriaController.BadgeCriteriaDto("A", 90);
+        BadgeCriteriaDto dto = new BadgeCriteriaDto("A", 90);
         String json = objectMapper.writeValueAsString(dto);
 
         mockMvc.perform(put("/api/admin/badge-criteria")

@@ -47,9 +47,6 @@ class EngineerScheduleServiceTest {
 
     private static final Long USER_ID = 1L;
 
-    // ... 기존 createSchedule_Success 등 메서드 그대로 유지 ...
-    // (이전 코드의 createSchedule_Success, Fail_TimeOverlap, Fail_ProfileNotCompleted 부분은 생략했습니다. 그대로 두시면 됩니다!)
-
     private User engineer(Long id) {
         User user = User.builder().role(Role.ENGINEER).build();
         ReflectionTestUtils.setField(user, "id", id);
