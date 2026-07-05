@@ -21,6 +21,7 @@ public class EngineerAssignmentResponse {
     private String purchaseDate;
     private String warrantyEnd;
 
+    private Long customerId;
     private String customerName;
     private String customerPhone;
     private String address;
@@ -73,6 +74,7 @@ public class EngineerAssignmentResponse {
                 .productImageUrl(app != null ? app.getImageUrl() : null)
                 .purchaseDate(app != null && app.getPurchaseDate() != null ? app.getPurchaseDate().toString() : "모름")
                 .warrantyEnd(app != null && app.getWarrantyEndDate() != null ? app.getWarrantyEndDate().toString() : "만료")
+                .customerId(cust != null ? cust.getId() : null)
                 .customerName(cust != null && cust.getName() != null ? cust.getName() : "고객 미상")
                 .customerPhone(cust != null && cust.getPhone() != null ? cust.getPhone() : "연락처 미상")
                 .address(fullAddress)
