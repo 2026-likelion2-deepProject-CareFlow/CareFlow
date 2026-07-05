@@ -100,6 +100,7 @@ public class AdminSettlementService {
      * [⑨] 단일 대행사 지급 승인
      * [D 수정] settlements를 직접 markPaid()하던 기존 방식에서 platform_settlements 배치 단위 승인으로 변경.
      * - 대상 월의 platform_settlement이 없으면 승인할 대상 자체가 없다는 뜻이므로 NoSuchElementException
+     * - 배치가 DISPUTED(보류 중)면 IllegalStateException — 재검토(PENDING 복귀) 후 다시 승인해야 함
      * - 정산금 수취 계좌(agency_bank_accounts) 미등록 대행사는 지급 불가 (DDL 설계 의도)
      * - platform_settlement.markPaid(계좌ID) 확정 후, 그 배치에 묶인 settlements 전체를 일괄 PAID로 캐스케이드
      * - 이미 PAID인 배치를 재요청해도 에러 없이 종료 (멱등)
@@ -121,8 +122,9 @@ public class AdminSettlementService {
 
     /**
      * [⑩] 미지급 전체 일괄 승인 — agencyId 필터 없이 대상 월 전체 대행사 대상
-     * [D 수정] platform_settlements 배치 단위로 전환. 계좌 미등록 대행사는 개별적으로 건너뛰고
-     * (경고 로그만 남김) 나머지 대행사는 계속 처리한다 — 한 대행사의 계좌 미등록이 전체 일괄 승인을 막지 않도록 함.
+     * [D 수정] platform_settlements 배치 단위로 전환. 계좌 미등록/배치 보류(DISPUTED) 대행사는
+     * 개별적으로 건너뛰고(경고 로그만 남김) 나머지 대행사는 계속 처리한다 — 한 대행사의 문제가
+     * 전체 일괄 승인을 막지 않도록 함.
      */
     @Transactional
     public void approveAll(CustomUserDetails userDetails, int year, int month) throws IllegalAccessException {
@@ -136,7 +138,7 @@ public class AdminSettlementService {
             try {
                 approvePlatformSettlement(platformSettlement);
             } catch (IllegalStateException e) {
-                log.warn("[정산 지급 일괄 승인] 계좌 미등록으로 스킵 — agencyId={}, {}년 {}월, 사유={}",
+                log.warn("[정산 지급 일괄 승인] 승인 불가로 스킵 — agencyId={}, {}년 {}월, 사유={}",
                         platformSettlement.getAgency().getId(), year, month, e.getMessage());
             }
         }
@@ -202,11 +204,17 @@ public class AdminSettlementService {
     /**
      * platform_settlement 1건 지급 승인 처리 (⑨/⑩ 공통 로직)
      * - 이미 PAID면 아무 것도 하지 않고 정상 종료 (멱등)
-     * - 계좌 미등록이면 IllegalStateException — approveAll에서는 이 예외를 잡아 해당 건만 스킵
+     * - DISPUTED(배치 보류 중)면 IllegalStateException — 관리자가 배치 재검토(PENDING 복귀)로
+     *   명시적으로 해제하기 전까지는 승인 자체가 불가능해야 보류의 의미가 있음
+     * - 계좌 미등록이면 IllegalStateException — approveAll에서는 두 경우 모두 이 예외를 잡아 해당 건만 스킵
      */
     private void approvePlatformSettlement(PlatformSettlement platformSettlement) {
         if ("PAID".equals(platformSettlement.getStatus())) {
             return;
+        }
+
+        if ("DISPUTED".equals(platformSettlement.getStatus())) {
+            throw new IllegalStateException("보류 중인 배치는 재검토(PENDING 복귀) 후 승인할 수 있습니다.");
         }
 
         Long agencyId = platformSettlement.getAgency().getId();
