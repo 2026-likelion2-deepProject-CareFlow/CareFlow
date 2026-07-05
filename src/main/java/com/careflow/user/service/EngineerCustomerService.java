@@ -174,4 +174,12 @@ public class EngineerCustomerService {
                 .asHistory(historyList)
                 .build();
     }
+
+    /**
+     * 3. 담당 고객들이 보유한 가전 브랜드 목록 조회 (중복 제거)
+     */
+    public List<String> getCustomerApplianceBrands(Long engineerId) {
+        return asAssignmentRepository.findCustomerApplianceBrandsByEngineerId(engineerId);
+    }
+
 }
