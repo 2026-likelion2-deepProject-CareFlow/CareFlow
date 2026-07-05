@@ -3,6 +3,7 @@ package com.careflow.auth.service;
 import com.careflow.agency.entity.Agencies;
 import com.careflow.agency.repository.AgenciesRepository;
 import com.careflow.auth.dto.LoginRequest;
+import com.careflow.auth.dto.PasswordChangeRequest;
 import com.careflow.auth.dto.SignUpRequest;
 import com.careflow.auth.dto.TokenResponse;
 import com.careflow.auth.security.JwtProvider;
@@ -48,7 +49,7 @@ public class AuthService {
 
         // 비밀번호 생성 규칙 강화 — 형식(영문+숫자 8자 이상)은 SignUpRequest의 @Pattern/@Size로 검증되고,
         // 여기서는 DTO 필드만으로는 검증 불가능한 교차 필드 규칙(아이디·휴대폰번호 포함 여부)을 검사
-        validatePasswordDoesNotContainSensitiveInfo(request);
+        validatePasswordDoesNotContainSensitiveInfo(request.getPassword(), request.getEmail(), request.getPhone());
 
         Regions regions = regionRepository.findById(request.getRegionId()).orElseThrow(() -> new NoSuchElementException("입력받은 지역 정보가 존재하지 않습니다."));
         User user = User.builder()
@@ -65,26 +66,55 @@ public class AuthService {
     }
 
     /**
-     * 비밀번호에 본인 식별정보가 포함되는 것을 방지
+     * 비밀번호에 본인 식별정보가 포함되는 것을 방지 (회원가입/비밀번호 변경 공통 사용)
      * - 아이디(이메일 로컬파트, @ 앞부분)가 비밀번호에 포함된 경우 차단 (3자 미만이면 오탐 방지를 위해 검사 생략)
      * - 휴대폰번호의 연속된 숫자 4자리 이상이 비밀번호에 포함된 경우 차단 (전화번호 미입력 시 검사 생략)
      */
-    private void validatePasswordDoesNotContainSensitiveInfo(SignUpRequest request) {
-        String password = request.getPassword().toLowerCase();
+    private void validatePasswordDoesNotContainSensitiveInfo(String password, String email, String phone) {
+        String lowerPassword = password.toLowerCase();
 
-        String emailLocalPart = request.getEmail().split("@")[0].toLowerCase();
-        if (emailLocalPart.length() >= 3 && password.contains(emailLocalPart)) {
+        String emailLocalPart = email.split("@")[0].toLowerCase();
+        if (emailLocalPart.length() >= 3 && lowerPassword.contains(emailLocalPart)) {
             throw new IllegalArgumentException("비밀번호에 아이디(이메일)를 포함할 수 없습니다.");
         }
 
-        String phoneDigits = request.getPhone() == null ? "" : request.getPhone().replaceAll("[^0-9]", "");
+        String phoneDigits = phone == null ? "" : phone.replaceAll("[^0-9]", "");
         int minMatchLen = 4;
         for (int i = 0; i + minMatchLen <= phoneDigits.length(); i++) {
             String chunk = phoneDigits.substring(i, i + minMatchLen);
-            if (password.contains(chunk)) {
+            if (lowerPassword.contains(chunk)) {
                 throw new IllegalArgumentException("비밀번호에 휴대폰 번호를 포함할 수 없습니다.");
             }
         }
+    }
+
+    /**
+     * 로그인된 사용자의 비밀번호 변경 (현재 비밀번호 확인 후 새 비밀번호로 교체)
+     * - 모든 역할(CUSTOMER/AGENCY/ENGINEER/ADMIN) 공통 사용 엔드포인트
+     * - 소셜 로그인 전용 계정(passwordHash 없음)은 변경 대상에서 제외
+     */
+    @Transactional
+    public void changePassword(Long userId, PasswordChangeRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new NoSuchElementException("존재하지 않는 사용자입니다."));
+
+        if (user.getPasswordHash() == null) {
+            throw new IllegalStateException("소셜 로그인 계정은 비밀번호를 변경할 수 없습니다.");
+        }
+
+        if (!passwordEncoder.matches(request.currentPassword(), user.getPasswordHash())) {
+            throw new IllegalArgumentException("현재 비밀번호가 일치하지 않습니다.");
+        }
+
+        if (request.currentPassword().equals(request.newPassword())) {
+            throw new IllegalArgumentException("새 비밀번호는 현재 비밀번호와 달라야 합니다.");
+        }
+
+        // 형식(영문+숫자 8자 이상 64자 이하)은 PasswordChangeRequest의 @Pattern/@Size로 검증되고,
+        // 여기서는 DTO만으로는 검증 불가능한 교차 필드 규칙(아이디·휴대폰번호 포함 여부)을 검사
+        validatePasswordDoesNotContainSensitiveInfo(request.newPassword(), user.getEmail(), user.getPhone());
+
+        user.updatePassword(passwordEncoder.encode(request.newPassword()));
     }
 
     @Transactional

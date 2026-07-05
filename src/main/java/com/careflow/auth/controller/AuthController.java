@@ -72,4 +72,13 @@ public class AuthController {
         passwordResetService.resetPassword(request);
         return ResponseEntity.ok("비밀번호가 변경되었습니다.");
     }
+
+    // 로그인된 사용자의 비밀번호 변경 (현재 비밀번호 확인 방식) — 모든 역할 공통 사용
+    @PutMapping("/password")
+    public ResponseEntity<String> changePassword(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @Valid @RequestBody PasswordChangeRequest request) {
+        authService.changePassword(userDetails.getUserId(), request);
+        return ResponseEntity.ok("비밀번호가 변경되었습니다.");
+    }
 }
