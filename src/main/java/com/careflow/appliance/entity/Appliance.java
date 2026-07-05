@@ -117,6 +117,20 @@ public class Appliance {
         this.updatedAt = LocalDateTime.now();
     }
 
+    /**
+     * 가전 정보 수정 — null 필드는 기존 값 유지 (PATCH 의미론)
+     * 고객이 "가전 정보 수정" 화면에서 브랜드/모델명/시리얼넘버/구매일/보증만료일을 고칠 때 사용
+     */
+    public void updateInfo(String brand, String modelName, String serialNumber,
+                           LocalDate purchaseDate, LocalDate warrantyEndDate) {
+        if (brand != null) this.brand = brand;
+        if (modelName != null) this.modelName = modelName;
+        if (serialNumber != null) this.serialNumber = serialNumber;
+        if (purchaseDate != null) this.purchaseDate = purchaseDate;
+        if (warrantyEndDate != null) this.warrantyEndDate = warrantyEndDate;
+        this.updatedAt = LocalDateTime.now();
+    }
+
     // 상태 변경 (수리 필요, 판매 완료 등)
     public void changeStatus(ApplianceStatus newStatus) {
         this.status = newStatus;

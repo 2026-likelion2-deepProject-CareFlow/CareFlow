@@ -2,6 +2,7 @@ package com.careflow.appliance.controller;
 
 import com.careflow.appliance.dto.ApplianceCreateRequest;
 import com.careflow.appliance.dto.ApplianceResponse;
+import com.careflow.appliance.dto.ApplianceUpdateRequest;
 import com.careflow.appliance.dto.HealthCertificateResponse;
 import com.careflow.appliance.service.ApplianceService;
 import com.careflow.auth.security.CustomUserDetails;
@@ -55,6 +56,20 @@ public class ApplianceController {
             @PathVariable Long applianceId) throws IllegalAccessException {
 
         return ResponseEntity.ok(applianceService.getApplianceDetail(userDetails.getUserId(), applianceId));
+    }
+
+    /**
+     * 가전 정보 수정 API — 브랜드/모델명/시리얼넘버/구매일/보증만료일 (null 필드는 기존 값 유지)
+     */
+    @PutMapping("/{applianceId}")
+    public ResponseEntity<ApplianceResponse> updateApplianceInfo(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long applianceId,
+            @Valid @RequestBody ApplianceUpdateRequest request) throws IllegalAccessException {
+
+        ApplianceResponse response = applianceService.updateApplianceInfo(
+                userDetails.getUserId(), applianceId, request);
+        return ResponseEntity.ok(response);
     }
 
     /**
