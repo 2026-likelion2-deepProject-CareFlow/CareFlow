@@ -294,7 +294,7 @@ public interface AsAssignmentRepository extends JpaRepository<AsAssignment, Long
             @Param("brand") String brand,
             Pageable pageable);
 
-    // 🌟 신규 추가: 담당 고객들이 보유한 활성 가전의 브랜드 목록 중복 제거 조회
+    // 담당 고객들이 보유한 활성 가전의 브랜드 목록 중복 제거 조회
     @Query("SELECT DISTINCT app.brand FROM Appliance app " +
             "WHERE app.user.id IN (" +
             "    SELECT DISTINCT r.customer.id " +
@@ -302,4 +302,15 @@ public interface AsAssignmentRepository extends JpaRepository<AsAssignment, Long
             "    WHERE a.engineer.id = :engineerId" +
             ") AND app.deletedAt IS NULL AND app.brand IS NOT NULL")
     List<String> findCustomerApplianceBrandsByEngineerId(@Param("engineerId") Long engineerId);
+
+    // 고객별 진행 중인 작업 건수 집계 (N+1 방지)
+    @Query("SELECT r.customer.id, COUNT(a) FROM AsAssignment a " +
+            "JOIN a.asRequest r " +
+            "WHERE a.engineer.id = :engineerId " +
+            "AND r.customer.id IN :customerIds " +
+            "AND a.status = 'ACCEPTED' " + // 배차가 수락되어 진행 중인 상태
+            "GROUP BY r.customer.id")
+    List<Object[]> countInProgressByCustomerIds(
+            @Param("engineerId") Long engineerId,
+            @Param("customerIds") List<Long> customerIds);
 }
