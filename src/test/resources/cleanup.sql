@@ -2,6 +2,8 @@
 -- SET REFERENTIAL_INTEGRITY FALSE 로 삭제 순서에 관계없이 일괄 초기화
 SET REFERENTIAL_INTEGRITY FALSE;
 DELETE FROM agency_bank_accounts;
+DELETE FROM engineer_payouts;
+DELETE FROM bank_accounts;
 DELETE FROM account_requests;
 DELETE FROM work_report_parts;
 DELETE FROM work_reports;

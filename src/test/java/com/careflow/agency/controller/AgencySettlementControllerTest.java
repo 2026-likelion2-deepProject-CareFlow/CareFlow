@@ -79,7 +79,8 @@ class AgencySettlementControllerTest {
                         BigDecimal.valueOf(10), 8800, 70400,
                         "PAID", LocalDateTime.of(2024, 6, 1, 9, 0),
                         LocalDateTime.of(2024, 6, 18, 15, 30),
-                        null, null);
+                        null, null,
+                        1L, "PENDING", null);
         return new AgencySettlementListResponse(stats, List.of(summary), 1248L, 125, 0, 10);
     }
 

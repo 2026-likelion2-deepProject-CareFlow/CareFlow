@@ -1,9 +1,12 @@
 package com.careflow.admin.controller;
 
+import com.careflow.admin.dto.request.AdminBatchStatusUpdateRequest;
+import com.careflow.admin.dto.request.AdminSettlementStatusUpdateRequest;
 import com.careflow.admin.dto.response.AdminSettlementDetailResponse;
 import com.careflow.admin.dto.response.AdminSettlementSummaryResponse;
 import com.careflow.admin.service.AdminSettlementService;
 import com.careflow.auth.security.CustomUserDetails;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
@@ -76,5 +79,37 @@ public class AdminSettlementController {
 
         adminSettlementService.approveAll(userDetails, year, month);
         return ResponseEntity.ok().build();
+    }
+
+    /**
+     * [PATCH] /api/admin/settlements/{settlementId}/status
+     * 건별 정산 상태 변경 (이의 제기/재검토용 — PENDING↔DISPUTED 간 전이만 허용)
+     * CareFlow→대행사 지급 상태는 대행사가 아닌 ADMIN만 변경할 수 있다.
+     */
+    @PatchMapping("/{settlementId}/status")
+    public ResponseEntity<Void> updateItemStatus(
+            @PathVariable Long settlementId,
+            @Valid @RequestBody AdminSettlementStatusUpdateRequest request,
+            @AuthenticationPrincipal CustomUserDetails userDetails) throws IllegalAccessException {
+
+        adminSettlementService.updateItemStatus(userDetails, settlementId, request.status());
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * [PATCH] /api/admin/settlements/{agencyId}/batch-status?year=&month=
+     * 배치(platform_settlements) 단위 상태 변경 — 집계 오류 등 CareFlow 자체 판단으로 보류/재검토 처리
+     * (건별 {@link #updateItemStatus}와 달리 그 달 그 대행사 배치 전체를 잠근다)
+     */
+    @PatchMapping("/{agencyId}/batch-status")
+    public ResponseEntity<Void> updateBatchStatus(
+            @PathVariable Long agencyId,
+            @RequestParam int year,
+            @RequestParam int month,
+            @Valid @RequestBody AdminBatchStatusUpdateRequest request,
+            @AuthenticationPrincipal CustomUserDetails userDetails) throws IllegalAccessException {
+
+        adminSettlementService.updateBatchStatus(userDetails, agencyId, year, month, request.status());
+        return ResponseEntity.noContent().build();
     }
 }

@@ -22,7 +22,9 @@ public record AdminSettlementSummaryResponse(
             long totalRevenue,
             long careflowFee,
             long agencyPay,
-            String status // PENDING / PAID / NONE
+            String status, // PENDING / PAID / NONE — settlements 집계 기반 파생 상태(화면 필터/버튼 노출용)
+            String platformSettlementStatus, // platform_settlements.status 원본값(PENDING/PAID/DISPUTED) — 배치가 없으면 null
+            String paidBankAccount // 지급 시점 스냅샷 계좌 "은행명 계좌번호" — 미지급/배치 없음이면 null
     ) {
     }
 }

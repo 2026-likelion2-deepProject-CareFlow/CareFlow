@@ -16,7 +16,9 @@ import com.careflow.payment.entity.Payment;
 import com.careflow.payment.repository.PaymentRepository;
 import com.careflow.region.entity.Regions;
 import com.careflow.region.repository.RegionRepository;
+import com.careflow.settlement.entity.EngineerPayout;
 import com.careflow.settlement.entity.Settlement;
+import com.careflow.settlement.repository.EngineerPayoutRepository;
 import com.careflow.settlement.repository.SettlementRepository;
 import com.careflow.symptom.entity.Symptom;
 import com.careflow.symptom.repository.SymptomRepository;
@@ -40,6 +42,7 @@ import java.time.LocalDateTime;
 import java.time.YearMonth;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 /**
  * AgencySettlementService 통합 테스트 (H2 DB 연동)
@@ -61,6 +64,7 @@ class AgencySettlementServiceIntegrationTest {
     @Autowired private AsRequestRepository asRequestRepository;
     @Autowired private PaymentRepository paymentRepository;
     @Autowired private SettlementRepository settlementRepository;
+    @Autowired private EngineerPayoutRepository engineerPayoutRepository;
 
     private Agencies agency;
     private Agencies otherAgency;
@@ -316,6 +320,49 @@ class AgencySettlementServiceIntegrationTest {
 
             assertThat(result.stats().pendingAmount()).isEqualTo(80000L);   // 50000 + 30000
             assertThat(result.stats().disputedAmount()).isEqualTo(20000L);
+        }
+    }
+
+    @Nested
+    @DisplayName("TC-I-10. getSettlements — engineerPayout 매핑 (대행사→기사 지급 상태)")
+    class EngineerPayoutMapping {
+
+        @Test
+        @DisplayName("engineer_payout 배치에 연결된 건은 engineerPayoutId/Status가 채워진다")
+        void 배치연결시_engineerPayout필드_채워짐() throws Exception {
+            Settlement settlement = createSettlement(engineerUser, agency, 95000, "PAID", LocalDateTime.now());
+
+            EngineerPayout payout = EngineerPayout.create(agency, engineerUser, 2026, 6, 76000, 1);
+            payout = engineerPayoutRepository.save(payout);
+            settlement.assignEngineerPayout(payout);
+            settlementRepository.save(settlement);
+
+            AgencySettlementListResponse result = agencySettlementService.getSettlements(
+                    agencyUserDetails(), new AgencySettlementSearchRequest(), PAGEABLE);
+
+            AgencySettlementListResponse.SettlementSummary summary = result.content().stream()
+                    .filter(s -> s.settlementId().equals(settlement.getId()))
+                    .findFirst().orElseThrow();
+
+            assertThat(summary.engineerPayoutId()).isEqualTo(payout.getId());
+            assertThat(summary.engineerPayoutStatus()).isEqualTo("PENDING");
+            assertThat(summary.engineerPayoutPaidAt()).isNull();
+        }
+
+        @Test
+        @DisplayName("engineer_payout 배치에 아직 연결되지 않은 건은 관련 필드가 전부 null이다")
+        void 배치미연결시_engineerPayout필드_null() throws Exception {
+            Settlement settlement = createSettlement(engineerUser, agency, 95000, "PENDING", LocalDateTime.now());
+
+            AgencySettlementListResponse result = agencySettlementService.getSettlements(
+                    agencyUserDetails(), new AgencySettlementSearchRequest(), PAGEABLE);
+
+            AgencySettlementListResponse.SettlementSummary summary = result.content().stream()
+                    .filter(s -> s.settlementId().equals(settlement.getId()))
+                    .findFirst().orElseThrow();
+
+            assertThat(summary.engineerPayoutId()).isNull();
+            assertThat(summary.engineerPayoutStatus()).isNull();
         }
     }
 }

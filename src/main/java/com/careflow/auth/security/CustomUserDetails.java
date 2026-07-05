@@ -16,13 +16,20 @@ public class CustomUserDetails implements UserDetails {
     private final String password;
     private final String role;
     private final Long agencyId; // AGENCY·ENGINEER 역할일 때만 값이 들어가고, 나머지는 null
+    private final Boolean isRepresentative; // AGENCY 역할일 때만 값이 들어감(대표 담당자 여부) — 나머지 역할은 null
 
-    public CustomUserDetails(Long userId, String username, String password, String role, Long agencyId) {
+    public CustomUserDetails(Long userId, String username, String password, String role, Long agencyId, Boolean isRepresentative) {
         this.userId = userId;
         this.username = username;
         this.password = password;
         this.role = role;
         this.agencyId = agencyId;
+        this.isRepresentative = isRepresentative;
+    }
+
+    // 기존 호출부(테스트 등) 호환용 — isRepresentative 미지정 시 null(AGENCY 외 역할과 동일하게 취급)
+    public CustomUserDetails(Long userId, String username, String password, String role, Long agencyId) {
+        this(userId, username, password, role, agencyId, null);
     }
 
     @Override

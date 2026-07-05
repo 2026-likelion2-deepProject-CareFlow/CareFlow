@@ -1,7 +1,6 @@
 package com.careflow.agency.service;
 
 import com.careflow.agency.dto.request.AgencySettlementSearchRequest;
-import com.careflow.agency.dto.request.SettlementStatusUpdateRequest;
 import com.careflow.agency.dto.response.AgencySettlementListResponse;
 import com.careflow.auth.security.CustomUserDetails;
 import com.careflow.bank_account.entity.BankAccount;
@@ -9,7 +8,6 @@ import com.careflow.bank_account.repository.BankAccountRepository;
 import com.careflow.settlement.entity.Settlement;
 import com.careflow.settlement.repository.SettlementRepository;
 import lombok.RequiredArgsConstructor;
-import java.util.NoSuchElementException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
@@ -182,6 +180,8 @@ public class AgencySettlementService {
      * - completedCount: 1건 고정 (settlement 1건 = A/S 1건)
      * - payMethod: bank_accounts.pay_method → 한글 레이블 변환 (미등록 시 null)
      * - bankAccount: "은행명 계좌번호" 포맷 (미등록 시 null)
+     * - engineerPayoutId/Status/PaidAt: 이 건이 집계된 engineer_payouts 배치 정보(대행사→기사 지급 상태).
+     *   settlement.status(CareFlow→대행사)와는 완전히 별개의 자금 흐름이므로 혼동하지 말 것.
      */
     private AgencySettlementListResponse.SettlementSummary toSummary(Settlement s, BankAccount bankAccount) {
         YearMonth month = YearMonth.from(s.getCreatedAt());
@@ -191,6 +191,11 @@ public class AgencySettlementService {
         // 계좌 미등록 기사는 null 반환 (bank_accounts 레코드 없음)
         String payMethod   = bankAccount != null ? bankAccount.getPayMethod().toLabel() : null;
         String bankAccount_ = bankAccount != null ? bankAccount.formatBankAccount() : null;
+
+        var engineerPayout = s.getEngineerPayout();
+        Long engineerPayoutId = engineerPayout != null ? engineerPayout.getId() : null;
+        String engineerPayoutStatus = engineerPayout != null ? engineerPayout.getStatus() : null;
+        LocalDateTime engineerPayoutPaidAt = engineerPayout != null ? engineerPayout.getPaidAt() : null;
 
         return new AgencySettlementListResponse.SettlementSummary(
                 s.getId(),
@@ -212,51 +217,11 @@ public class AgencySettlementService {
                 s.getCreatedAt(),
                 s.getPaidAt(),
                 payMethod,
-                bankAccount_
+                bankAccount_,
+                engineerPayoutId,
+                engineerPayoutStatus,
+                engineerPayoutPaidAt
         );
-    }
-
-    /**
-     * 정산 상태 변경 (PATCH /api/agency/settlements/{settlementId}/status)
-     *
-     * 전이 규칙 ([DDL v11] APPROVED 제거 — 월초 일괄 승인 단계가 상태 전이 없이 바로 지급으로 이어짐):
-     *   - PAID 상태이면 어떤 변경도 불가
-     *   - 그 외(PENDING↔DISPUTED 간 전이, PENDING/DISPUTED → PAID)는 자유롭게 허용
-     * 소속 대행사 검증: 요청자의 agencyId 와 정산의 agencyId 가 일치해야 함
-     */
-    @Transactional
-    public void updateStatus(CustomUserDetails userDetails,
-                             Long settlementId,
-                             SettlementStatusUpdateRequest request) throws IllegalAccessException {
-
-        // AGENCY 역할 검증
-        if (!"AGENCY".equals(userDetails.getRole())) {
-            throw new IllegalAccessException("대행사 계정만 접근할 수 있습니다.");
-        }
-
-        Settlement settlement = settlementRepository.findById(settlementId)
-                .orElseThrow(() -> new NoSuchElementException("존재하지 않는 정산 내역입니다."));
-
-        // 소속 대행사 검증 — 타 대행사의 정산 변경 차단
-        if (!settlement.getAgency().getId().equals(userDetails.getAgencyId())) {
-            throw new IllegalAccessException("본인 대행사의 정산만 변경할 수 있습니다.");
-        }
-
-        String current = settlement.getStatus();
-        String target  = request.status();
-
-        // PAID 상태는 어떤 변경도 불가
-        if ("PAID".equals(current)) {
-            throw new IllegalStateException("지급 완료된 정산은 상태를 변경할 수 없습니다.");
-        }
-
-        // 도메인 메서드로 상태 전이 (더티 체킹으로 UPDATE)
-        switch (target) {
-            case "PAID"      -> settlement.markPaid();
-            case "DISPUTED"  -> settlement.dispute();
-            case "PENDING"   -> settlement.revertToPending();
-            default -> throw new IllegalArgumentException("유효하지 않은 상태값입니다: " + target);
-        }
     }
 
     /**

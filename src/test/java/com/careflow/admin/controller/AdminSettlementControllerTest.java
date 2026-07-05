@@ -64,7 +64,7 @@ class AdminSettlementControllerTest {
                 new AdminSettlementSummaryResponse.Summary(11130000L, 1113000L, 10017000L, 3L);
         AdminSettlementSummaryResponse.AgencySettlementItem item =
                 new AdminSettlementSummaryResponse.AgencySettlementItem(
-                        1L, "한국서비스대행사", 5L, 5200000L, 520000L, 4680000L, "PENDING");
+                        1L, "한국서비스대행사", 5L, 5200000L, 520000L, 4680000L, "PENDING", "PENDING", null);
         return new AdminSettlementSummaryResponse(summary, List.of(item));
     }
 
@@ -86,7 +86,8 @@ class AdminSettlementControllerTest {
                     .andExpect(jsonPath("$.summary.totalRevenue").value(11130000))
                     .andExpect(jsonPath("$.summary.pendingCount").value(3))
                     .andExpect(jsonPath("$.agencies[0].agencyName").value("한국서비스대행사"))
-                    .andExpect(jsonPath("$.agencies[0].status").value("PENDING"));
+                    .andExpect(jsonPath("$.agencies[0].status").value("PENDING"))
+                    .andExpect(jsonPath("$.agencies[0].platformSettlementStatus").value("PENDING"));
         }
 
         @Test
@@ -126,13 +127,13 @@ class AdminSettlementControllerTest {
         void success_200() throws Exception {
             authenticateAs("ADMIN");
             AdminSettlementDetailResponse detail = new AdminSettlementDetailResponse(
-                    "SET-001", "2026-06-05", "냉장고", "김철수", 95000, 9500, 85500);
+                    1L, "SET-001", "2026-06-05", "냉장고", "김철수", 95000, 9500, 85500, "PAID");
             given(adminSettlementService.getAgencyDetails(any(), any(), anyInt(), anyInt()))
                     .willReturn(List.of(detail));
 
             mockMvc.perform(get("/api/admin/settlements/" + AGENCY_ID + "/details?year=2026&month=6"))
                     .andExpect(status().isOk())
-                    .andExpect(jsonPath("$[0].settlementId").value("SET-001"))
+                    .andExpect(jsonPath("$[0].settlementCode").value("SET-001"))
                     .andExpect(jsonPath("$[0].applianceName").value("냉장고"))
                     .andExpect(jsonPath("$[0].customerName").value("김철수"));
         }
@@ -221,6 +222,143 @@ class AdminSettlementControllerTest {
             authenticateAs("ADMIN");
 
             mockMvc.perform(patch("/api/admin/settlements/approve-all"))
+                    .andExpect(status().isBadRequest());
+        }
+    }
+
+    // ── ⑪ PATCH /api/admin/settlements/{settlementId}/status ───────
+
+    @Nested
+    @DisplayName("PATCH /api/admin/settlements/{settlementId}/status — 건별 보류/재검토")
+    class UpdateItemStatus {
+
+        @Test
+        @DisplayName("TC-C-1: 인증된 ADMIN, DISPUTED 요청 — 204")
+        void success_204() throws Exception {
+            authenticateAs("ADMIN");
+
+            mockMvc.perform(patch("/api/admin/settlements/1/status")
+                            .contentType("application/json")
+                            .content("{\"status\":\"DISPUTED\"}"))
+                    .andExpect(status().isNoContent());
+        }
+
+        @Test
+        @DisplayName("TC-C-2: 인증 없음 — 401")
+        void fail_anonymous_401() throws Exception {
+            mockMvc.perform(patch("/api/admin/settlements/1/status")
+                            .with(anonymous())
+                            .contentType("application/json")
+                            .content("{\"status\":\"DISPUTED\"}"))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        @Test
+        @DisplayName("TC-C-3: ADMIN이 아닌 role(AGENCY) — 403")
+        void fail_wrongRole_403() throws Exception {
+            authenticateAs("AGENCY");
+
+            mockMvc.perform(patch("/api/admin/settlements/1/status")
+                            .contentType("application/json")
+                            .content("{\"status\":\"DISPUTED\"}"))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @DisplayName("TC-C-4: status=PAID 요청 — 400 (검증 단계에서 거부)")
+        void fail_paidRequest_400() throws Exception {
+            authenticateAs("ADMIN");
+
+            mockMvc.perform(patch("/api/admin/settlements/1/status")
+                            .contentType("application/json")
+                            .content("{\"status\":\"PAID\"}"))
+                    .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        @DisplayName("TC-C-5: 존재하지 않는 정산 — 404")
+        void fail_notFound_404() throws Exception {
+            authenticateAs("ADMIN");
+            org.mockito.Mockito.doThrow(new java.util.NoSuchElementException("존재하지 않는 정산 내역입니다."))
+                    .when(adminSettlementService).updateItemStatus(any(), any(), any());
+
+            mockMvc.perform(patch("/api/admin/settlements/999/status")
+                            .contentType("application/json")
+                            .content("{\"status\":\"DISPUTED\"}"))
+                    .andExpect(status().isNotFound());
+        }
+    }
+
+    // ── ⑫ PATCH /api/admin/settlements/{agencyId}/batch-status ─────
+
+    @Nested
+    @DisplayName("PATCH /api/admin/settlements/{agencyId}/batch-status — 배치 단위 보류/재검토")
+    class UpdateBatchStatus {
+
+        @Test
+        @DisplayName("TC-C-1: 인증된 ADMIN, DISPUTED 요청 — 204")
+        void success_204() throws Exception {
+            authenticateAs("ADMIN");
+
+            mockMvc.perform(patch("/api/admin/settlements/" + AGENCY_ID + "/batch-status?year=2026&month=6")
+                            .contentType("application/json")
+                            .content("{\"status\":\"DISPUTED\"}"))
+                    .andExpect(status().isNoContent());
+        }
+
+        @Test
+        @DisplayName("TC-C-2: 인증 없음 — 401")
+        void fail_anonymous_401() throws Exception {
+            mockMvc.perform(patch("/api/admin/settlements/" + AGENCY_ID + "/batch-status?year=2026&month=6")
+                            .with(anonymous())
+                            .contentType("application/json")
+                            .content("{\"status\":\"DISPUTED\"}"))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        @Test
+        @DisplayName("TC-C-3: ADMIN이 아닌 role(AGENCY) — 403")
+        void fail_wrongRole_403() throws Exception {
+            authenticateAs("AGENCY");
+
+            mockMvc.perform(patch("/api/admin/settlements/" + AGENCY_ID + "/batch-status?year=2026&month=6")
+                            .contentType("application/json")
+                            .content("{\"status\":\"DISPUTED\"}"))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @DisplayName("TC-C-4: status=PAID 요청 — 400 (검증 단계에서 거부)")
+        void fail_paidRequest_400() throws Exception {
+            authenticateAs("ADMIN");
+
+            mockMvc.perform(patch("/api/admin/settlements/" + AGENCY_ID + "/batch-status?year=2026&month=6")
+                            .contentType("application/json")
+                            .content("{\"status\":\"PAID\"}"))
+                    .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        @DisplayName("TC-C-5: 해당 기간 배치 없음 — 404")
+        void fail_notFound_404() throws Exception {
+            authenticateAs("ADMIN");
+            org.mockito.Mockito.doThrow(new java.util.NoSuchElementException("해당 기간의 정산 배치가 존재하지 않습니다."))
+                    .when(adminSettlementService).updateBatchStatus(any(), any(), anyInt(), anyInt(), any());
+
+            mockMvc.perform(patch("/api/admin/settlements/" + AGENCY_ID + "/batch-status?year=2026&month=6")
+                            .contentType("application/json")
+                            .content("{\"status\":\"DISPUTED\"}"))
+                    .andExpect(status().isNotFound());
+        }
+
+        @Test
+        @DisplayName("TC-C-6: year/month 파라미터 누락 — 400")
+        void fail_missingParam_400() throws Exception {
+            authenticateAs("ADMIN");
+
+            mockMvc.perform(patch("/api/admin/settlements/" + AGENCY_ID + "/batch-status")
+                            .contentType("application/json")
+                            .content("{\"status\":\"DISPUTED\"}"))
                     .andExpect(status().isBadRequest());
         }
     }
