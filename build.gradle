@@ -50,6 +50,23 @@ dependencies {
 	implementation 'org.springframework.boot:spring-boot-starter-mail'
 }
 
+// .env 파일(DB_USERNAME, DB_PASSWORD, REDIS_PASSWORD 등)을 JavaExec 계열 태스크의
+// 실행 환경변수로 주입하는 공통 함수 — 파일이 없으면 조용히 무시(CI 등에서는 실제 환경변수 사용)
+def loadEnvFile(task) {
+	def envFile = rootProject.file('.env')
+	if (envFile.exists()) {
+		envFile.readLines().each { line ->
+			line = line.trim()
+			if (line && !line.startsWith('#') && line.contains('=')) {
+				def idx = line.indexOf('=')
+				def key = line.substring(0, idx).trim()
+				def value = line.substring(idx + 1).trim()
+				task.environment key, value
+			}
+		}
+	}
+}
+
 tasks.named('test') {
 	useJUnitPlatform()
 
@@ -67,17 +84,13 @@ tasks.named('test') {
 	}
 	systemProperty 'java.io.tmpdir', testTmpDir.absolutePath
 
-	// .env 파일(REDIS_PASSWORD 등)을 테스트 실행 환경변수로 주입 — 파일 없으면 무시(CI 등)
-	def envFile = rootProject.file('.env')
-	if (envFile.exists()) {
-		envFile.readLines().each { line ->
-			line = line.trim()
-			if (line && !line.startsWith('#') && line.contains('=')) {
-				def idx = line.indexOf('=')
-				def key = line.substring(0, idx).trim()
-				def value = line.substring(idx + 1).trim()
-				environment key, value
-			}
-		}
-	}
+	loadEnvFile(it)
+}
+
+// 로컬에서 './gradlew bootRun'으로 실행할 때도 .env가 로딩되어야 함 —
+// 기본 활성 프로필이 prod(application.yaml)라서 DB_USERNAME/DB_PASSWORD 등이
+// 없으면 앱은 뜨지만 실제 트랜잭션 시점에 DB 인증 실패로 이어짐
+// ("Could not open JPA EntityManager for transaction" 로 뭉뚱그려져 표출됨)
+tasks.named('bootRun') {
+	loadEnvFile(it)
 }
