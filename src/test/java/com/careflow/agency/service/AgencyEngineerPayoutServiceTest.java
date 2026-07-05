@@ -193,6 +193,17 @@ class AgencyEngineerPayoutServiceTest {
                     .isInstanceOf(IllegalAccessException.class);
             verifyNoInteractions(engineerPayoutRepository);
         }
+
+        @Test
+        @DisplayName("실패: DISPUTED(보류 중) 배치는 IllegalStateException, markPaid 미호출")
+        void 보류중인배치_지급시도시_예외() {
+            EngineerPayout ep = buildEngineerPayout(1L, AGENCY_ID, ENGINEER_ID, "DISPUTED");
+            given(engineerPayoutRepository.findById(1L)).willReturn(Optional.of(ep));
+
+            assertThatThrownBy(() -> agencyEngineerPayoutService.payEngineerPayout(agencyUser, 1L))
+                    .isInstanceOf(IllegalStateException.class);
+            verify(ep, never()).markPaid();
+        }
     }
 
     @Nested

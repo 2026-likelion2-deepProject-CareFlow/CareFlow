@@ -58,6 +58,11 @@ public class AgencyEngineerPayoutService {
         return AgencyEngineerPayoutListResponse.of(itemPage);
     }
 
+    /**
+     * 지급 완료 처리 — 이미 PAID면 멱등하게 종료.
+     * DISPUTED(보류 중)면 예외 — 기사 이의제기 등으로 보류가 걸린 배치를 그대로 지급 완료 처리해버리면
+     * 이의가 해소되지 않은 채 조용히 덮어써지므로, 재검토(PENDING 복귀) 후에만 지급할 수 있게 막는다.
+     */
     @Transactional
     public void payEngineerPayout(CustomUserDetails userDetails, Long engineerPayoutId) throws IllegalAccessException {
 
@@ -74,6 +79,10 @@ public class AgencyEngineerPayoutService {
 
         if ("PAID".equals(engineerPayout.getStatus())) {
             return; // 이미 처리됨 — 멱등
+        }
+
+        if ("DISPUTED".equals(engineerPayout.getStatus())) {
+            throw new IllegalStateException("보류 중인 배치는 재검토(PENDING 복귀) 후 지급할 수 있습니다.");
         }
 
         engineerPayout.markPaid();

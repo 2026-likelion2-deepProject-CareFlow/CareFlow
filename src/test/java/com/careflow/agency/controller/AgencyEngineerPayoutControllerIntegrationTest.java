@@ -172,6 +172,22 @@ class AgencyEngineerPayoutControllerIntegrationTest {
                             .header("Authorization", "Bearer " + agencyToken))
                     .andExpect(status().isNotFound());
         }
+
+        @Test
+        @DisplayName("실패: DISPUTED(보류 중) 배치 지급 시도 → 409(또는 매핑된 상태), DB 값 불변")
+        void 보류중인배치_지급시도시_상태불변() throws Exception {
+            EngineerPayout payout = savePayout(agency, engineer, 2026, 6);
+            payout.dispute();
+            engineerPayoutRepository.save(payout);
+
+            mockMvc.perform(patch("/api/agency/engineer-payouts/" + payout.getId() + "/pay")
+                            .header("Authorization", "Bearer " + agencyToken))
+                    .andExpect(status().is4xxClientError());
+
+            EngineerPayout unchanged = engineerPayoutRepository.findById(payout.getId()).orElseThrow();
+            assertThat(unchanged.getStatus()).isEqualTo("DISPUTED");
+            assertThat(unchanged.getPaidAt()).isNull();
+        }
     }
 
     @Nested
