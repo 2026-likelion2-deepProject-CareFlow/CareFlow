@@ -39,9 +39,12 @@ public class EngineerDashboardController {
     public ResponseEntity<EngineerSettlementSummaryResponse> getSettlementSummary(
             @AuthenticationPrincipal CustomUserDetails userDetails,
             @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateFrom,
-            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo) {
+            @RequestParam(required = false) @DateTimeFormat(iso = DateTimeFormat.ISO.DATE) LocalDate dateTo,
+            @RequestParam(required = false) String brand,  // 🌟 추가
+            @RequestParam(required = false) String status) { // 🌟 추가) {
 
-        EngineerSettlementSummaryResponse response = engineerDashboardService.getSettlementSummary(userDetails.getUserId(), dateFrom, dateTo);
+        EngineerSettlementSummaryResponse response = engineerDashboardService.getSettlementSummary(
+                userDetails.getUserId(), dateFrom, dateTo, brand, status);
         return ResponseEntity.ok(response);
     }
 }

@@ -89,6 +89,20 @@ public class WorkReport {
         this.customerApproved = false; // 기본값
     }
 
+    // 데이터 수정용
+    public void updateReport(DiagnosisResult diagnosisResult, Integer workDurationMin, Integer finalAmount, String memo, String imageUrls) {
+        this.diagnosisResult = diagnosisResult;
+        this.workDurationMin = workDurationMin;
+        this.finalAmount = finalAmount;
+        this.memo = memo;
+        this.imageUrls = imageUrls;
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    public void clearParts() {
+        this.parts.clear(); // 고아 객체 삭제 (orphanRemoval = true 로 인해 DB에서도 지워짐)
+    }
+
     public void addPart(WorkReportPart part) {
         this.parts.add(part);
         part.assignReport(this);

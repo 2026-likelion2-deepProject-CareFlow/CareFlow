@@ -1,5 +1,6 @@
 package com.careflow.report.service;
 
+import com.careflow.admin.dto.request.BadgeCriteriaDto;
 import com.careflow.appliance.entity.Appliance;
 import com.careflow.appliance.entity.HealthCertificate;
 import com.careflow.appliance.repository.ApplianceRepository;
@@ -251,6 +252,45 @@ public class WorkReportService {
         syncHealthCertificate(request.getAppliance());
     }
 
+    // 🌟 수정: 메서드 선언부에 throws IllegalAccessException 명시!
+    @Transactional
+    public void updateWorkReport(Long engineerId, Long reportId, CreateWorkReportRequest request) throws IllegalAccessException {
+        WorkReport report = workReportRepository.findById(reportId)
+                .orElseThrow(() -> new NoSuchElementException("존재하지 않는 보고서입니다.")); // 404
+
+        if (!report.getEngineer().getId().equals(engineerId)) {
+            throw new IllegalAccessException("본인이 작성한 보고서만 수정할 수 있습니다."); // 403 (권한 없음)
+        }
+
+        if (report.isCustomerApproved()) {
+            throw new IllegalStateException("고객이 이미 승인한 보고서는 수정할 수 없습니다."); // 403
+        }
+
+        // 1. 기본 정보 갱신 (이제 엔티티에 메서드가 있으므로 에러 안 남!)
+        report.updateReport(
+                DiagnosisResult.valueOf(request.getDiagnosisResult()),
+                request.getWorkDurationMin(),
+                request.getFinalAmount(),
+                request.getMemo(),
+                request.getImageUrls()
+        );
+
+        // 2. 부품 리스트 갈아끼우기
+        report.clearParts();
+        if (request.getParts() != null && !request.getParts().isEmpty()) {
+            for (CreateWorkReportRequest.PartDto partDto : request.getParts()) {
+                RepairPart repairPart = repairPartRepository.findById(partDto.getRepairPartId()).orElseThrow();
+                int appliedPrice = partDto.getAppliedUnitPrice() != null ? partDto.getAppliedUnitPrice() : repairPart.getBaseUnitPrice();
+                report.addPart(WorkReportPart.builder()
+                        .repairPart(repairPart).quantity(partDto.getQuantity()).appliedUnitPrice(appliedPrice).build());
+            }
+        }
+
+        workReportRepository.flush();
+        // 3. 진단서 재계산 연동
+        syncHealthCertificate(report.getAsRequest().getAppliance());
+    }
+
     // 🌟 신규 추가: 해당 가전의 모든 보고서를 모아 진단서를 완벽하게 재계산하는 핵심 헬퍼 메서드
     private void syncHealthCertificate(Appliance appliance) {
         List<WorkReport> allReports = workReportRepository.findByApplianceIdOrderBySubmittedAtDesc(appliance.getId());
@@ -283,8 +323,8 @@ public class WorkReportService {
         try {
             String json = redisTemplate.opsForValue().get("admin:badge:criteria");
             if (json != null) {
-                com.careflow.admin.controller.AdminBadgeCriteriaController.BadgeCriteriaDto dto =
-                        objectMapper.readValue(json, com.careflow.admin.controller.AdminBadgeCriteriaController.BadgeCriteriaDto.class);
+                BadgeCriteriaDto dto =
+                        objectMapper.readValue(json, BadgeCriteriaDto.class);
                 minGrade = dto.minGrade();
                 minScore = dto.minScore();
             }

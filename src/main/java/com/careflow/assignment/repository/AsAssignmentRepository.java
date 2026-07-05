@@ -202,7 +202,7 @@ public interface AsAssignmentRepository extends JpaRepository<AsAssignment, Long
             "ORDER BY r.scheduledTime ASC")
     List<AsAssignment> findTodayAssignments(@Param("engineerId") Long engineerId, @Param("today") java.time.LocalDate today);
 
-    // [실적/정산용] 특정 기간 내 완료(COMPLETED)된 배정 목록 상세 조회
+    // [실적/정산용] 특정 기간 내 완료(COMPLETED)된 배정 목록 상세 조회 (+ 동적 필터 추가)
     @Query("SELECT a FROM AsAssignment a " +
             "JOIN FETCH a.asRequest r " +
             "JOIN FETCH r.customer c " +
@@ -213,14 +213,15 @@ public interface AsAssignmentRepository extends JpaRepository<AsAssignment, Long
             "AND r.scheduledDate >= :startDate " +
             "AND r.scheduledDate <= :endDate " +
             "AND a.status = 'COMPLETED' " +
+            "AND (:brand IS NULL OR app.brand = :brand) " + // 🌟 브랜드 필터
+            "AND (:status IS NULL OR w.diagnosisResult = :status) " + // 🌟 진단결과 필터
             "ORDER BY r.scheduledDate ASC")
     List<AsAssignment> findCompletedAssignmentsWithDetails(
             @Param("engineerId") Long engineerId,
             @Param("startDate") java.time.LocalDate startDate,
-            @Param("endDate") java.time.LocalDate endDate);
-
-    // 파일 경로: src/main/java/com/careflow/assignment/repository/AsAssignmentRepository.java
-// 기존 코드 하단에 추가해 주세요!
+            @Param("endDate") java.time.LocalDate endDate,
+            @Param("brand") String brand,
+            @Param("status") com.careflow.report.domain.enums.DiagnosisResult status);
 
     // [기사용] 본인이 담당한 적 있는 고객(User) 목록 조회 (중복 제거)
     @org.springframework.data.jpa.repository.Query(

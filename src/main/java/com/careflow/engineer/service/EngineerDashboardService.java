@@ -8,6 +8,7 @@ import com.careflow.bank_account.entity.BankAccount;
 import com.careflow.bank_account.repository.BankAccountRepository;
 import com.careflow.engineer.domain.entity.EngineerProfile;
 import com.careflow.engineer.dto.EngineerDashboardResponse;
+import com.careflow.report.domain.enums.DiagnosisResult;
 import com.careflow.settlement.dto.EngineerSettlementSummaryResponse;
 import com.careflow.engineer.repository.EngineerProfileRepository;
 import com.careflow.notification.repository.NotificationRepository;
@@ -151,13 +152,29 @@ public class EngineerDashboardService {
     }
 
     // 2. 실적/정산 요약 API
-    public EngineerSettlementSummaryResponse getSettlementSummary(Long engineerId, LocalDate dateFrom, LocalDate dateTo) {
+    public EngineerSettlementSummaryResponse getSettlementSummary(Long engineerId, LocalDate dateFrom, LocalDate dateTo, String brand, String status) {
         EngineerProfile profile = engineerProfileRepository.findByUser_Id(engineerId).orElseThrow();
 
         LocalDate start = dateFrom != null ? dateFrom : LocalDate.now().withDayOfMonth(1);
         LocalDate end = dateTo != null ? dateTo : start.plusMonths(1).minusDays(1);
 
-        List<AsAssignment> completedAssignments = asAssignmentRepository.findCompletedAssignmentsWithDetails(engineerId, start, end);
+        // 🌟 String으로 들어온 상태값을 Enum으로 안전하게 변환
+        DiagnosisResult statusEnum = null;
+        if (status != null && !status.isBlank()) {
+            try {
+                statusEnum = com.careflow.report.domain.enums.DiagnosisResult.valueOf(status.toUpperCase());
+            } catch (IllegalArgumentException e) {
+                // 프론트에서 잘못된 값이 오면 무시 (필터 미적용)
+                statusEnum = null;
+            }
+        }
+
+        // 빈 문자열 방어
+        String filterBrand = (brand != null && !brand.isBlank()) ? brand : null;
+
+        // 🌟 수정된 Repository 호출 (파라미터 추가)
+        List<AsAssignment> completedAssignments = asAssignmentRepository.findCompletedAssignmentsWithDetails(
+                engineerId, start, end, filterBrand, statusEnum);
 
         long rejectedCount = asAssignmentRepository.findByEngineer_IdAndStatus(engineerId, "REJECTED").stream()
                 .filter(a -> a.getAssignedAt() != null && !a.getAssignedAt().toLocalDate().isBefore(start) && !a.getAssignedAt().toLocalDate().isAfter(end))
@@ -228,15 +245,15 @@ public class EngineerDashboardService {
 
                     String workDate = a.getAsRequest().getScheduledDate() != null ? a.getAsRequest().getScheduledDate().format(DateTimeFormatter.ofPattern("MM.dd")) : "";
                     String customerName = a.getAsRequest().getCustomer() != null ? a.getAsRequest().getCustomer().getName() : "미상";
-                    String brand = a.getAsRequest().getAppliance() != null ? a.getAsRequest().getAppliance().getBrand() : "";
+                    String applianceBrand = a.getAsRequest().getAppliance() != null ? a.getAsRequest().getAppliance().getBrand() : "";
                     String model = a.getAsRequest().getAppliance() != null ? a.getAsRequest().getAppliance().getModelName() : "";
 
                     return EngineerSettlementSummaryResponse.PerformanceItem.builder()
                             .requestId(reqId)
                             .workDate(workDate)
                             .customerName(customerName)
-                            .productName((brand + " " + model).trim())
-                            .brand(brand)
+                            .productName((applianceBrand + " " + model).trim())
+                            .brand(applianceBrand)
                             .grossAmount(a.getAsRequest().getWorkReport() != null ? a.getAsRequest().getWorkReport().getFinalAmount() : 0)
                             .diagnosisResult(a.getAsRequest().getWorkReport() != null && a.getAsRequest().getWorkReport().getDiagnosisResult() != null ? a.getAsRequest().getWorkReport().getDiagnosisResult().name() : "NORMAL")
                             .rating(a.getAsRequest().getReview() != null && a.getAsRequest().getReview().getRating() != null ? a.getAsRequest().getReview().getRating() : 0.0)
@@ -244,14 +261,12 @@ public class EngineerDashboardService {
                 }).toList();
 
         // 4. 정산 요약 및 계좌 (v21 명세 반영)
-        // 🔧 [수정] 하드코딩 수수료율(10%/5%) 제거 — settlements 테이블의 실제 스냅샷 컬럼을 집계한다.
-        //   · gross/platformFee/agencyFee/net 이 모두 같은 정산 행에서 나오므로 net = gross - platform - agency 로 정합.
-        //   · 대행사별로 다른 실제 수수료율(agency_fee_rate 스냅샷)이 반영됨.
-        //   · 날짜 기준은 기존과 동일하게 정산 생성일(createdAt). 상단 totalGrossAmount(작업 실적, scheduledDate·workReport 기준)과는 관점이 다른 값임에 유의.
         LocalDateTime settlementFrom = start.atStartOfDay();
         LocalDateTime settlementTo = end.plusDays(1).atStartOfDay();
+
+        // 🌟 수정 포인트 2: filterBrand, statusEnum 파라미터 함께 넘기기!
         SettlementRepository.MonthlySummaryProjection settlementAgg =
-                settlementRepository.findEngineerMonthlySummary(engineerId, settlementFrom, settlementTo);
+                settlementRepository.findEngineerMonthlySummary(engineerId, settlementFrom, settlementTo, filterBrand, statusEnum);
 
         int settleGross = (settlementAgg != null && settlementAgg.getTotalGrossAmount() != null) ? settlementAgg.getTotalGrossAmount().intValue() : 0;
         int settlePlatformFee = (settlementAgg != null && settlementAgg.getTotalPlatformFee() != null) ? settlementAgg.getTotalPlatformFee().intValue() : 0;
@@ -275,9 +290,6 @@ public class EngineerDashboardService {
                 .build();
 
         // ── [추가] 작업 건수 세분화 (완료/진행/취소) — 조회 기간(start~end, scheduledDate 기준)
-        //   · 완료: totalCompleted (위에서 이미 산정)
-        //   · 진행: 배정 status = ACCEPTED (수락했으나 아직 미완료). 세부 현장상태(출발/도착/작업중)는 구분하지 않는 대략치.
-        //   · 취소: 이 기사에게 배정됐던 A/S 중 요청 status = CANCELLED (기사 거절건 제외)
         long inProgressCount = asAssignmentRepository.countByEngineerAndStatusInPeriod(engineerId, "ACCEPTED", start, end);
         long cancelledCount = asAssignmentRepository.countRequestsByEngineerAndRequestStatusInPeriod(engineerId, AsStatus.CANCELLED, start, end);
 
@@ -321,8 +333,8 @@ public class EngineerDashboardService {
 
         return EngineerSettlementSummaryResponse.builder()
                 .totalCompletedCount(totalCompleted)
-                .inProgressCount(inProgressCount)   // [추가]
-                .cancelledCount(cancelledCount)     // [추가]
+                .inProgressCount(inProgressCount)
+                .cancelledCount(cancelledCount)
                 .totalGrossAmount(totalGross)
                 .avgRating(avgRating)
                 .customerSatisfaction(customerSatisfaction)
@@ -332,7 +344,7 @@ public class EngineerDashboardService {
                 .statusDistributions(statusDists)
                 .performanceList(performanceList)
                 .settlementSummary(settlementSummary)
-                .monthlyComparison(monthlyComparison) // [추가]
+                .monthlyComparison(monthlyComparison)
                 .build();
     }
 }

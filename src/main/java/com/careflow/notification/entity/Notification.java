@@ -31,7 +31,7 @@ public class Notification {
 
     // columnDefinition 삭제하지 말아주세요(H2 DB 테스트에 필요)
     @Column(name = "type", nullable = false, length = 20,
-            columnDefinition = "ENUM('AS_STATUS','CONSUMABLE','WARRANTY','LMS') NOT NULL")
+            columnDefinition = "ENUM('AS_STATUS','CONSUMABLE','WARRANTY','LMS', 'QUIZ_REMINDER') NOT NULL")
     private String type;
 
     @Column(name = "title", nullable = false, length = 200)

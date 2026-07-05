@@ -98,4 +98,15 @@ public class WorkReportController {
         workReportService.cancelApprovalRequest(userDetails.getUserId(), reportId);
         return ResponseEntity.ok("보고서 승인 요청이 취소되었습니다.");
     }
+
+    @PutMapping("/{reportId}")
+    @PreAuthorize("hasRole('ENGINEER')")
+    public ResponseEntity<String> updateReport(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long reportId,
+            @RequestBody @Valid CreateWorkReportRequest request) throws IllegalAccessException {
+
+        workReportService.updateWorkReport(userDetails.getUserId(), reportId, request);
+        return ResponseEntity.ok("작업 보고서가 성공적으로 수정되었습니다.");
+    }
 }

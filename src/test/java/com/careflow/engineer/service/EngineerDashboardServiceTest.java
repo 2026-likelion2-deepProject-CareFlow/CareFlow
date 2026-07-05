@@ -118,8 +118,8 @@ class EngineerDashboardServiceTest {
         EngineerProfile profile = EngineerProfile.createInitial(User.builder().build());
         given(engineerProfileRepository.findByUser_Id(engineerId)).willReturn(Optional.of(profile));
 
-        // 빈 리스트 모킹
-        given(asAssignmentRepository.findCompletedAssignmentsWithDetails(any(), any(), any())).willReturn(java.util.List.of());
+        // 🌟 수정: 파라미터가 5개로 늘어났으므로 any()를 5개로 수정!
+        given(asAssignmentRepository.findCompletedAssignmentsWithDetails(any(), any(), any(), any(), any())).willReturn(java.util.List.of());
         given(asAssignmentRepository.countByEngineerAndStatusInPeriod(any(), any(), any(), any())).willReturn(3L); // 예: 진행중 3건
         given(asAssignmentRepository.countRequestsByEngineerAndRequestStatusInPeriod(any(), any(), any(), any())).willReturn(1L); // 예: 취소 1건
 
@@ -130,14 +130,17 @@ class EngineerDashboardServiceTest {
         given(mockAgg.getTotalPlatformFee()).willReturn(10000L);
         given(mockAgg.getTotalAgencyFee()).willReturn(5000L);
         given(mockAgg.getTotalEngineerPayout()).willReturn(85000L);
-        given(settlementRepository.findEngineerMonthlySummary(any(), any(), any())).willReturn(mockAgg);
+
+        // 🌟 수정: 파라미터가 5개로 늘어났으므로 any()를 5개로 수정!
+        given(settlementRepository.findEngineerMonthlySummary(any(), any(), any(), any(), any())).willReturn(mockAgg);
 
         // 월간 비교 데이터 모킹
         given(settlementRepository.sumExpectedEarningByEngineerIdAndDate(any(), any(), any())).willReturn(85000, 50000); // 이번달 85000, 지난달 50000
 
         // When
+        // 🌟 수정: 호출 파라미터 5개로 맞춤 (brand, status 파라미터 추가)
         com.careflow.settlement.dto.EngineerSettlementSummaryResponse response =
-                engineerDashboardService.getSettlementSummary(engineerId, null, null);
+                engineerDashboardService.getSettlementSummary(engineerId, null, null, null, null);
 
         // Then
         // 1. 카운트 검증

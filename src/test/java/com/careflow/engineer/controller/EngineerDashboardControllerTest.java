@@ -45,7 +45,7 @@ class EngineerDashboardControllerTest {
 
     @MockitoBean private EngineerDashboardService engineerDashboardService;
     @MockitoBean private JwtProvider jwtProvider;
-    @MockitoBean private StringRedisTemplate stringRedisTemplate; // 🌟 핵심: Redis 의존성 Mock 처리
+    @MockitoBean private StringRedisTemplate stringRedisTemplate;
     @MockitoBean private JpaMetamodelMappingContext jpaMetamodelMappingContext;
     @MockitoBean private CustomOAuth2UserService customOAuth2UserService;
     @MockitoBean private OAuth2LoginSuccessHandler oAuth2LoginSuccessHandler;
@@ -83,7 +83,7 @@ class EngineerDashboardControllerTest {
         @DisplayName("실패: CUSTOMER 권한 접근 - 403 Forbidden")
         void fail_notEngineer_403() throws Exception {
             mockMvc.perform(get("/api/engineer/dashboard").with(customerAuth))
-                    .andExpect(status().isForbidden()); // GlobalExceptionHandler가 403으로 변환해줌
+                    .andExpect(status().isForbidden());
         }
     }
 
@@ -91,19 +91,22 @@ class EngineerDashboardControllerTest {
     @DisplayName("GET /api/engineer/settlements/summary - 실적/정산 요약 조회")
     class GetSettlementSummary {
         @Test
-        @DisplayName("성공: 날짜 파라미터 유무와 관계없이 정상 조회 - 200 OK")
+        @DisplayName("성공: 날짜 및 필터 파라미터 유무와 관계없이 정상 조회 - 200 OK")
         void success_200() throws Exception {
-            given(engineerDashboardService.getSettlementSummary(any(), any(), any()))
+            // 🌟 수정: 파라미터가 5개(engineerId, dateFrom, dateTo, brand, status)로 늘어났으므로 any() 5개 적용
+            given(engineerDashboardService.getSettlementSummary(any(), any(), any(), any(), any()))
                     .willReturn(EngineerSettlementSummaryResponse.builder().build());
 
             // 1. 파라미터 없이 호출
             mockMvc.perform(get("/api/engineer/settlements/summary").with(engineerAuth))
                     .andExpect(status().isOk());
 
-            // 2. 파라미터 포함 호출
+            // 2. 파라미터 모두 포함하여 호출 (새로 추가된 brand, status 파라미터 포함)
             mockMvc.perform(get("/api/engineer/settlements/summary")
                             .param("dateFrom", LocalDate.now().minusDays(30).toString())
                             .param("dateTo", LocalDate.now().toString())
+                            .param("brand", "삼성")
+                            .param("status", "NORMAL")
                             .with(engineerAuth))
                     .andExpect(status().isOk());
         }

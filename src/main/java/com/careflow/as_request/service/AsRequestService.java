@@ -309,7 +309,10 @@ public class AsRequestService {
         }
 
         User engineer = userRepository.findById(engineerId).orElseThrow();
-        String oldStatusStr = asRequest.getStatus().name();
+
+        // 해당 요청의 가장 최근 상태 로그를 가져옵니다. (없으면 기본값 WAITING)
+        List<AsStatusLog> logs = asStatusLogRepository.findByAsRequest_IdOrderByCreatedAtAsc(requestId);
+        String oldStatusStr = logs.isEmpty() ? "WAITING" : logs.get(logs.size() - 1).getToStatus();
 
         // 2. 도메인 메서드로 상태 변경 (더티 체킹)
         String actionMemo = "";
