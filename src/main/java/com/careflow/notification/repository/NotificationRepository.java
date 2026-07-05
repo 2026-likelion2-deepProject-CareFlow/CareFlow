@@ -60,4 +60,8 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
             @org.springframework.data.repository.query.Param("userId") Long userId,
             @org.springframework.data.repository.query.Param("type") String type,
             org.springframework.data.domain.Pageable pageable);
+
+    // [기사용 API] 특정 사용자의 알림 유형(type)별 갯수 집계
+    @Query("SELECT n.type, COUNT(n) FROM Notification n WHERE n.user.id = :userId GROUP BY n.type")
+    List<Object[]> countGroupByTypeForUser(@org.springframework.data.repository.query.Param("userId") Long userId);
 }
