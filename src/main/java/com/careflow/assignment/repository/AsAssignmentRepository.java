@@ -23,6 +23,10 @@ public interface AsAssignmentRepository extends JpaRepository<AsAssignment, Long
     List<AsAssignment> findByAsRequest_Id(Long requestId);
     List<AsAssignment> findByEngineer_IdAndStatus(Long engineerId, String status);
 
+    // 고객 A/S 목록(GET /api/as-requests/me)에 배정 기사 정보를 붙이기 위한 배치 조회 — N+1 방지용 JOIN FETCH
+    @Query("SELECT a FROM AsAssignment a JOIN FETCH a.engineer WHERE a.asRequest.id IN :requestIds")
+    List<AsAssignment> findByAsRequest_IdInWithEngineer(@Param("requestIds") List<Long> requestIds);
+
     // 부하 반영 복합 점수(Option B) 산정을 위해 기기별 대기 중 배차 수 조회
     long countByEngineer_IdAndStatus(Long engineerId, String status);
 

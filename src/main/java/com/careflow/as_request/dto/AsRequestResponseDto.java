@@ -5,6 +5,7 @@ import com.careflow.common.enums.AsStatus;
 import com.careflow.report.domain.entity.WorkReport;
 import lombok.Getter;
 
+import java.math.BigDecimal;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 
@@ -26,8 +27,15 @@ public class AsRequestResponseDto {
     private final String brand;
     private final String modelName;
     private final Long reportId;
+    // 배정된 기사 정보 — 배정 전 상태이거나 배정이 거절된 경우 null
+    private final String engineerName;
+    private final BigDecimal engineerRating;
 
     public AsRequestResponseDto(AsRequest entity) {
+        this(entity, null, null);
+    }
+
+    public AsRequestResponseDto(AsRequest entity, String engineerName, BigDecimal engineerRating) {
         this.requestId = entity.getId();
         // 연관관계 객체에서 ID 값 추출
         this.applianceId = entity.getAppliance().getId();
@@ -45,5 +53,7 @@ public class AsRequestResponseDto {
         this.modelName = entity.getAppliance().getModelName();
         WorkReport report = entity.getWorkReport();
         this.reportId = report != null ? report.getReportId() : null;
+        this.engineerName = engineerName;
+        this.engineerRating = engineerRating;
     }
 }

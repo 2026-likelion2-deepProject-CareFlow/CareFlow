@@ -137,11 +137,14 @@ public class AsRequest {
     }
 
     /**
-     * 고객용: ASSIGNED 이전(PENDING, AGENCY_RECEIVED)까지만 취소 가능
+     * 고객용: 예약 확정(ACCEPTED) 이전(PENDING, AGENCY_RECEIVED, ASSIGNED)까지만 취소 가능
+     * ASSIGNED는 기사가 배정되었지만 아직 수락(ACCEPTED)하기 전 단계이므로 취소 허용 대상에 포함한다.
      */
     public void cancel(String cancelReason) {
-        if (this.status != AsStatus.PENDING && this.status != AsStatus.AGENCY_RECEIVED) {
-            throw new IllegalStateException("기사 배정이 진행된 요청은 취소할 수 없습니다.");
+        if (this.status != AsStatus.PENDING
+                && this.status != AsStatus.AGENCY_RECEIVED
+                && this.status != AsStatus.ASSIGNED) {
+            throw new IllegalStateException("예약이 확정된 요청은 취소할 수 없습니다.");
         }
         this.status = AsStatus.CANCELLED;
         this.cancelReason = cancelReason;

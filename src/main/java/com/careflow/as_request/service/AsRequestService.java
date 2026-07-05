@@ -33,10 +33,12 @@ import org.springframework.context.ApplicationEventPublisher;
 import com.careflow.notification.event.AsStatusNotificationEvent;
 
 
+import java.math.BigDecimal;
 import java.time.LocalTime;
 import java.time.format.DateTimeParseException;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.stream.Collectors;
 
@@ -238,9 +240,40 @@ public class AsRequestService {
 
     @Transactional(readOnly = true)
     public List<AsRequestResponseDto> getMyAsRequests(Long customerId) {
-        return asRequestRepository.findByCustomer_IdOrderByIdDesc(customerId)
-                .stream()
-                .map(AsRequestResponseDto::new)
+        List<AsRequest> requests = asRequestRepository.findByCustomer_IdOrderByIdDesc(customerId);
+        if (requests.isEmpty()) {
+            return List.of();
+        }
+
+        List<Long> requestIds = requests.stream().map(AsRequest::getId).collect(Collectors.toList());
+
+        // requestId → 유효한(REJECTED 아닌) 배정 중 가장 최근 배정 1건 매핑 — 목록에 기사 이름/평점을 붙이기 위함
+        Map<Long, AsAssignment> latestAssignmentByRequestId = asAssignmentRepository
+                .findByAsRequest_IdInWithEngineer(requestIds).stream()
+                .filter(a -> !"REJECTED".equals(a.getStatus()))
+                .collect(Collectors.toMap(
+                        a -> a.getAsRequest().getId(),
+                        a -> a,
+                        (a1, a2) -> a1.getAssignedAt().isAfter(a2.getAssignedAt()) ? a1 : a2));
+
+        List<Long> engineerIds = latestAssignmentByRequestId.values().stream()
+                .map(a -> a.getEngineer().getId())
+                .distinct()
+                .collect(Collectors.toList());
+
+        Map<Long, BigDecimal> ratingByEngineerId = engineerProfileRepository.findByUser_IdIn(engineerIds).stream()
+                .collect(Collectors.toMap(ep -> ep.getUser().getId(), EngineerProfile::getAvgRating));
+
+        return requests.stream()
+                .map(r -> {
+                    AsAssignment assignment = latestAssignmentByRequestId.get(r.getId());
+                    if (assignment == null) {
+                        return new AsRequestResponseDto(r);
+                    }
+                    String engineerName = assignment.getEngineer().getName();
+                    BigDecimal engineerRating = ratingByEngineerId.get(assignment.getEngineer().getId());
+                    return new AsRequestResponseDto(r, engineerName, engineerRating);
+                })
                 .collect(Collectors.toList());
     }
 
@@ -255,6 +288,12 @@ public class AsRequestService {
         }
 
         asRequest.cancel(cancelReason);
+
+        // ASSIGNED 상태에서 취소된 경우 기사가 아직 수락하지 않은(WAITING) 배정이 남아있으므로 함께 취소 처리
+        // (그대로 두면 이미 취소된 요청의 배정을 기사가 수락/거절할 수 있는 상태로 남게 됨)
+        asAssignmentRepository.findByAsRequest_Id(asRequestId).stream()
+                .filter(a -> "WAITING".equals(a.getStatus()))
+                .forEach(AsAssignment::cancel);
     }
 
     /**
