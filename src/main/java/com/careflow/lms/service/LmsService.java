@@ -255,6 +255,15 @@ public class LmsService {
                 .toList();
     }
 
+    /**
+     * [대행사] 소속 기사 전체 LMS 이수 현황 목록
+     *
+     * [버그 수정] completedCount가 현재 등급 기준 필수 콘텐츠와 무관하게
+     * "올해 활성 이수 기록 전체 개수"를 그대로 세고 있었음.
+     * getAnnualStatus()와 동일하게, "현재 필수 콘텐츠 ID"와 "이수한 콘텐츠 ID"의
+     * 교집합만 세도록 수정 — 등급이 바뀐 기사의 과거 이수 기록이 현재 완료율에
+     * 잘못 반영되는 문제를 해소.
+     */
     @Transactional(readOnly = true)
     public List<LmsEngineerStatusDto> getAgencyEngineersLmsStatus(Long agencyId, Long requestUserId) {
         User requestUser = getUserOrThrow(requestUserId);
@@ -271,15 +280,20 @@ public class LmsService {
                     Long userId = profile.getUser().getId();
                     RequiredLevel requiredLevel = RequiredLevel.valueOf(profile.getSkillLevel().name());
 
-                    int totalCount = lmsContentRepository.findRequiredContents(
+                    Set<Long> requiredIds = lmsContentRepository.findRequiredContents(
                             profile.getCategory().getCategoryId(),
                             requiredLevel
-                    ).size();
+                    ).stream().map(LmsContent::getContentId).collect(Collectors.toSet());
 
-                    // [v10 변경] is_active=true 조건 추가
-                    int completedCount = lmsConfirmationRepository
-                            .findContentIdsByUserIdAndYearAndIsActive(userId, currentYear, true)
-                            .size();
+                    int totalCount = requiredIds.size();
+
+                    Set<Long> completedIds = new HashSet<>(
+                            lmsConfirmationRepository.findContentIdsByUserIdAndYearAndIsActive(
+                                    userId, currentYear, true)
+                    );
+                    completedIds.retainAll(requiredIds); // 현재 필수 목록에 속하는 것만 카운트
+
+                    int completedCount = completedIds.size();
 
                     return new LmsEngineerStatusDto(
                             userId,
@@ -294,6 +308,13 @@ public class LmsService {
                 .toList();
     }
 
+    /**
+     * [대행사] 미이수 기사에게 LMS 이수 독려 알림 발송
+     *
+     * [버그 수정] completedCount가 위와 동일한 문제로 부정확했음.
+     * 등급 변경 이력이 있는 기사의 경우 remainingCount(= totalCount - completedCount)가
+     * 음수로 계산될 수도 있었던 지점 — requiredIds 교집합 방식으로 수정.
+     */
     @Transactional
     public void sendLmsNotification(Long agencyId, Long engineerUserId, Long requestUserId) {
         User requestUser = getUserOrThrow(requestUserId);
@@ -312,16 +333,20 @@ public class LmsService {
         int currentYear = LocalDate.now().getYear();
         RequiredLevel requiredLevel = RequiredLevel.valueOf(profile.getSkillLevel().name());
 
-        int totalCount = lmsContentRepository.findRequiredContents(
+        Set<Long> requiredIds = lmsContentRepository.findRequiredContents(
                 profile.getCategory().getCategoryId(),
                 requiredLevel
-        ).size();
+        ).stream().map(LmsContent::getContentId).collect(Collectors.toSet());
 
-        // [v10 변경] is_active=true 조건 추가
-        int completedCount = lmsConfirmationRepository
-                .findContentIdsByUserIdAndYearAndIsActive(engineerUserId, currentYear, true)
-                .size();
+        int totalCount = requiredIds.size();
 
+        Set<Long> completedIds = new HashSet<>(
+                lmsConfirmationRepository.findContentIdsByUserIdAndYearAndIsActive(
+                        engineerUserId, currentYear, true)
+        );
+        completedIds.retainAll(requiredIds); // 현재 필수 목록에 속하는 것만 카운트
+
+        int completedCount = completedIds.size();
         int remainingCount = totalCount - completedCount;
 
         notificationService.send(
