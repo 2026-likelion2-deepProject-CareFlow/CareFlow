@@ -26,6 +26,8 @@ public class AsRequestResponseDto {
     private final LocalDateTime createdAt;
     private final String brand;
     private final String modelName;
+    // 가전 카테고리명(예: 냉장고, 세탁기) — 목록 아이콘 표시용
+    private final String categoryName;
     private final Long reportId;
     // 배정된 기사 정보 — 배정 전 상태이거나 배정이 거절된 경우 null
     private final String engineerName;
@@ -51,6 +53,7 @@ public class AsRequestResponseDto {
         this.createdAt = entity.getCreatedAt();
         this.brand = entity.getAppliance().getBrand();
         this.modelName = entity.getAppliance().getModelName();
+        this.categoryName = entity.getAppliance().getCategory().getName();
         WorkReport report = entity.getWorkReport();
         this.reportId = report != null ? report.getReportId() : null;
         this.engineerName = engineerName;
