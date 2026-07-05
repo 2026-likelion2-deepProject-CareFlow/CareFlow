@@ -293,4 +293,13 @@ public interface AsAssignmentRepository extends JpaRepository<AsAssignment, Long
             @Param("regionId") Integer regionId,
             @Param("brand") String brand,
             Pageable pageable);
+
+    // 🌟 신규 추가: 담당 고객들이 보유한 활성 가전의 브랜드 목록 중복 제거 조회
+    @Query("SELECT DISTINCT app.brand FROM Appliance app " +
+            "WHERE app.user.id IN (" +
+            "    SELECT DISTINCT r.customer.id " +
+            "    FROM AsAssignment a JOIN a.asRequest r " +
+            "    WHERE a.engineer.id = :engineerId" +
+            ") AND app.deletedAt IS NULL AND app.brand IS NOT NULL")
+    List<String> findCustomerApplianceBrandsByEngineerId(@Param("engineerId") Long engineerId);
 }
