@@ -35,4 +35,18 @@ public class ReviewController {
                 userDetails.getUserId(), requestId, dto);
         return ResponseEntity.status(HttpStatus.CREATED).body(response);
     }
+
+    /**
+     * 고객용: 본인이 특정 A/S 요청에 작성한 리뷰 단건 조회
+     * - 아직 리뷰를 작성하지 않은 경우 404 반환(GlobalExceptionHandler가 NoSuchElementException 매핑)
+     * - 본인 요청이 아닌 경우 401 반환
+     */
+    @GetMapping("/{requestId}/reviews")
+    public ResponseEntity<ReviewResponse> getMyReview(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long requestId) throws IllegalAccessException {
+
+        ReviewResponse response = reviewService.getMyReview(userDetails.getUserId(), requestId);
+        return ResponseEntity.ok(response);
+    }
 }
