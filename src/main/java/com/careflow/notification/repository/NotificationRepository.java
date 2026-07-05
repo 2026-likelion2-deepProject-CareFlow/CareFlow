@@ -65,9 +65,28 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     @Query("SELECT n.type, COUNT(n) FROM Notification n WHERE n.user.id = :userId GROUP BY n.type")
     List<Object[]> countGroupByTypeForUser(@org.springframework.data.repository.query.Param("userId") Long userId);
 
+    // [고객용 API] 특정 사용자의 유형별 "미열람" 알림 갯수 집계 — countGroupByTypeForUser(전체 건수)와 짝을 이뤄
+    // 카테고리별 count/unreadCount 를 함께 내려주는 고객 알림센터 요약에 사용
+    @Query("SELECT n.type, COUNT(n) FROM Notification n WHERE n.user.id = :userId AND n.isRead = false GROUP BY n.type")
+    List<Object[]> countUnreadGroupByTypeForUser(@org.springframework.data.repository.query.Param("userId") Long userId);
+
     // [기사용 API] 특정 사용자의 미열람 알림 전체를 일괄 읽음 처리
     @Modifying
     @Transactional
     @Query("UPDATE Notification n SET n.isRead = true WHERE n.user.id = :userId AND n.isRead = false")
     int markAllAsReadByUserId(@Param("userId") Long userId);
+
+    // [고객용 API] 알림 목록 페이징 + type 필터 + "안읽음만 보기" 필터 동시 지원
+    // 최근 알림 순 정렬 — 스케줄러가 여러 건을 같은 초에 한꺼번에 생성할 수 있어 createdAt이 같을 때는
+    // id DESC(생성 순서)로 2차 정렬해 항상 결정적인 "최신순"을 보장한다.
+    @Query("SELECT n FROM Notification n " +
+            "WHERE n.user.id = :userId " +
+            "AND (:type IS NULL OR n.type = :type) " +
+            "AND (:unreadOnly = false OR n.isRead = false) " +
+            "ORDER BY n.createdAt DESC, n.id DESC")
+    org.springframework.data.domain.Page<Notification> findByUserIdAndTypeAndUnreadOnly(
+            @org.springframework.data.repository.query.Param("userId") Long userId,
+            @org.springframework.data.repository.query.Param("type") String type,
+            @org.springframework.data.repository.query.Param("unreadOnly") boolean unreadOnly,
+            org.springframework.data.domain.Pageable pageable);
 }
