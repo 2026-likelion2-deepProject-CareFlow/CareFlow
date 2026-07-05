@@ -11,6 +11,7 @@ import java.time.format.DateTimeFormatter;
 public class EngineerAssignmentResponse {
     private Long assignmentId;
     private String requestId;
+    private Long asRequestId;
     private String assignStatus;
     private String logStatus;
     private boolean isNew;
@@ -66,6 +67,7 @@ public class EngineerAssignmentResponse {
         return EngineerAssignmentResponse.builder()
                 .assignmentId(assignment.getId())
                 .requestId(formattedRequestId)
+                .asRequestId(req != null ? req.getId() : null)
                 .assignStatus(assignment.getStatus() != null ? assignment.getStatus() : "WAITING")
                 .logStatus(latestLogStatus != null ? latestLogStatus : "WAITING")
                 .isNew("WAITING".equals(assignment.getStatus()))
