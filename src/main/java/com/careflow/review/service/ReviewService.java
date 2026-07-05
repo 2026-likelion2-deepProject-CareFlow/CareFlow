@@ -106,6 +106,33 @@ public class ReviewService {
     }
 
     /**
+     * 고객용: 본인이 특정 A/S 요청에 작성한 리뷰 단건 조회
+     * - 아직 리뷰를 작성하지 않은 경우 NoSuchElementException(404) — 프론트는 이를 "리뷰 없음"으로 처리
+     */
+    @Transactional(readOnly = true)
+    public ReviewResponse getMyReview(Long customerId, Long requestId) throws IllegalAccessException {
+
+        AsRequest asRequest = asRequestRepository.findById(requestId)
+                .orElseThrow(() -> new NoSuchElementException("존재하지 않는 A/S 요청입니다."));
+
+        if (!asRequest.getCustomer().getId().equals(customerId)) {
+            throw new IllegalAccessException("본인의 A/S 요청에 대해서만 리뷰를 조회할 수 있습니다.");
+        }
+
+        Review review = reviewRepository.findByAsRequest_Id(requestId)
+                .orElseThrow(() -> new NoSuchElementException("작성된 리뷰가 없습니다."));
+
+        return new ReviewResponse(
+                review.getId(),
+                requestId,
+                review.getEngineer().getId(),
+                review.getRating(),
+                review.getContent(),
+                review.getCreatedAt()
+        );
+    }
+
+    /**
      * 수리기사(ENGINEER)용: 본인에게 달린 리뷰 목록 조회
      */
     @Transactional(readOnly = true)
