@@ -30,6 +30,17 @@ public interface SettlementRepository extends JpaRepository<Settlement, Long> {
                       @Param("paidAt") LocalDateTime paidAt);
 
     /**
+     * ADMIN이 platform_settlement 1건을 지급 승인 처리할 때, 그 배치에 묶인 하위 Settlement 중
+     * PENDING 상태인 건만 일괄 PAID로 전이한다 (건별 조회 후 markPaid() 대신 벌크 UPDATE로 처리 — 대상이 많을 수 있음).
+     * DISPUTED로 보류 중인 건은 관리자가 개별적으로 재검토(PENDING 복귀) 후 다시 승인해야 하므로 제외한다.
+     */
+    @Modifying
+    @Transactional
+    @Query("UPDATE Settlement s SET s.status = 'PAID', s.paidAt = :paidAt WHERE s.platformSettlement.id = :platformSettlementId AND s.status = 'PENDING'")
+    int markPaidByPlatformSettlementId(@Param("platformSettlementId") Long platformSettlementId,
+                                        @Param("paidAt") LocalDateTime paidAt);
+
+    /**
      * 통합 테스트에서 created_at 을 지정 일시로 직접 설정하기 위한 UPDATE 쿼리
      * (findMonthlySummary 는 createdAt 기준으로 월 범위를 필터링하므로 테스트 제어에 필요)
      */
@@ -312,36 +323,6 @@ public interface SettlementRepository extends JpaRepository<Settlement, Long> {
             """)
     List<Settlement> findAgencySettlementDetails(
             @Param("agencyId") Long agencyId,
-            @Param("from") LocalDateTime from,
-            @Param("to") LocalDateTime to);
-
-    /**
-     * [⑨] 특정 대행사의 월별 미지급 정산 목록 (지급 승인 대상)
-     * - status <> 'PAID'인 건만 조회 → 서비스 레이어에서 각각 markPaid() 호출
-     */
-    @Query("""
-            SELECT s FROM Settlement s
-            WHERE s.agency.id = :agencyId
-              AND s.createdAt >= :from
-              AND s.createdAt < :to
-              AND s.status <> 'PAID'
-            """)
-    List<Settlement> findUnpaidByAgencyAndMonth(
-            @Param("agencyId") Long agencyId,
-            @Param("from") LocalDateTime from,
-            @Param("to") LocalDateTime to);
-
-    /**
-     * [⑩] 전체 대행사 대상 월별 미지급 정산 목록 (일괄 지급 승인 대상)
-     * - agencyId 필터 없이 status <> 'PAID'인 전체 건 조회
-     */
-    @Query("""
-            SELECT s FROM Settlement s
-            WHERE s.createdAt >= :from
-              AND s.createdAt < :to
-              AND s.status <> 'PAID'
-            """)
-    List<Settlement> findUnpaidByMonth(
             @Param("from") LocalDateTime from,
             @Param("to") LocalDateTime to);
 

@@ -3,9 +3,10 @@
   "configurations": [
     {
       "name": "backend",
-      "runtimeExecutable": "C:\\Pro2026\\DeepProject\\CareFlow\\gradlew.bat",
-      "runtimeArgs": ["bootRun"],
-      "port": 8080
+      "runtimeExecutable": "powershell.exe",
+      "runtimeArgs": ["-NoProfile", "-ExecutionPolicy", "Bypass", "-File", "C:\\Pro2026\\DeepProject\\CareFlow\\scripts\\run-backend-dev.ps1"],
+      "port": 8080,
+      "autoPort": true
     },
     {
       "name": "frontend",

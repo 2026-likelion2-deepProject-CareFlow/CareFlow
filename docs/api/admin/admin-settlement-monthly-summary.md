@@ -77,7 +77,9 @@ Authorization: Bearer {accessToken}
       "totalRevenue": 5200000,
       "careflowFee": 520000,
       "agencyPay": 4680000,
-      "status": "PENDING"
+      "status": "PENDING",
+      "platformSettlementStatus": "DISPUTED",
+      "paidBankAccount": null
     },
     {
       "agencyId": 5,
@@ -86,7 +88,9 @@ Authorization: Bearer {accessToken}
       "totalRevenue": 0,
       "careflowFee": 0,
       "agencyPay": 0,
-      "status": "NONE"
+      "status": "NONE",
+      "platformSettlementStatus": null,
+      "paidBankAccount": null
     }
   ]
 }
@@ -106,7 +110,9 @@ Authorization: Bearer {accessToken}
 | `agencies[].totalRevenue` | long | 해당 월 `gross_amount` 합계 |
 | `agencies[].careflowFee` | long | 해당 월 `platform_fee` 합계 |
 | `agencies[].agencyPay` | long | `totalRevenue - careflowFee` |
-| `agencies[].status` | String | `PENDING` / `PAID` / `NONE` |
+| `agencies[].status` | String | `settlements` 집계 기반 파생 상태 — `PENDING` / `PAID` / `NONE` (화면 필터/버튼 노출용, DISPUTED와 PENDING을 구분하지 않음) |
+| `agencies[].platformSettlementStatus` | String\|null | `platform_settlements.status` 원본값 — `PENDING`/`PAID`/`DISPUTED`. 해당 월 배치가 아직 생성되지 않았으면 `null`. `status`와 달리 배치 자체의 실제 상태를 그대로 노출하므로 DISPUTED 여부를 구분할 수 있다 |
+| `agencies[].paidBankAccount` | String\|null | 지급 승인 시점에 스냅샷된 수취 계좌 "은행명 계좌번호" (`platform_settlements.paid_bank_account_id` → `agency_bank_accounts` 조회). 미지급/배치 없음이면 `null` |
 
 ### 에러 응답
 
@@ -124,8 +130,9 @@ Authorization: Bearer {accessToken}
 2. **month 검증**: 1~12 범위 확인 → 벗어나면 `IllegalArgumentException` ("월은 1~12 사이여야 합니다.")
 3. **기간 계산**: `from = LocalDate.of(year, month, 1).atStartOfDay()`, `to = from.plusMonths(1)`
 4. **집계 조회**: `SettlementRepository.findAllAgenciesMonthlySummary(from, to)` — `Agencies`(approval_status=APPROVED) 기준 `Settlement`를 LEFT JOIN ON(agency + createdAt 범위)하여 대행사 단위로 GROUP BY, DB 레벨에서 `COUNT`/`SUM`/미지급 건수(`unpaidCount`)까지 한 번에 집계
-5. **DTO 매핑**: 각 로우에서 `status` 파생(`asCount`/`unpaidCount` 기준), `agencyPay = totalRevenue - careflowFee` 계산
-6. **summary 집계**: 이미 조회된 대행사별 리스트를 스트림으로 합산(대행사 수가 많지 않으므로 애플리케이션 레벨 합산 허용), `pendingCount`는 `status == "PENDING"` 개수
+5. **배치 원본 조회**: `PlatformSettlementRepository.findBySettlementYearAndSettlementMonth(year, month)` — 해당 월 전체 `platform_settlements` 배치를 agencyId 기준 Map으로 구성
+6. **DTO 매핑**: 각 로우에서 `status` 파생(`asCount`/`unpaidCount` 기준), `agencyPay = totalRevenue - careflowFee` 계산, 배치 Map에서 해당 대행사 배치를 찾아 `platformSettlementStatus`(원본 status) + `paidBankAccount`(`paidBankAccountId` → `AgencyBankAccountRepository.findById` 조회 후 포맷) 매핑 — 배치가 없으면 둘 다 `null`
+7. **summary 집계**: 이미 조회된 대행사별 리스트를 스트림으로 합산(대행사 수가 많지 않으므로 애플리케이션 레벨 합산 허용), `pendingCount`는 `status == "PENDING"` 개수
 
 ---
 

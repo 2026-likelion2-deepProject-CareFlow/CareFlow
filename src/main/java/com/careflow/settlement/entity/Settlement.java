@@ -86,6 +86,12 @@ public class Settlement {
     @JoinColumn(name = "platform_settlement_id", nullable = true)
     private PlatformSettlement platformSettlement;
 
+    // [DDL v14 신규] 이 건의 engineer_net_amount가 집계된 월별 대행사→기사 지급 배치 (집계 전 NULL)
+    // platformSettlement와 완전히 독립적으로 채워짐 — 선후 관계를 강제하지 않음
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "engineer_payout_id", nullable = true)
+    private EngineerPayout engineerPayout;
+
     @Column(name = "paid_at")
     private LocalDateTime paidAt;
 
@@ -149,5 +155,10 @@ public class Settlement {
     // [DDL v11 신규] 월초 배치 Job이 platform_settlements 1건을 생성하며 이 건의 집계 소속을 채움
     public void assignPlatformSettlement(PlatformSettlement platformSettlement) {
         this.platformSettlement = platformSettlement;
+    }
+
+    // [DDL v14 신규] 월초 배치 Job이 engineer_payouts 1건을 생성하며 이 건의 집계 소속을 채움
+    public void assignEngineerPayout(EngineerPayout engineerPayout) {
+        this.engineerPayout = engineerPayout;
     }
 }

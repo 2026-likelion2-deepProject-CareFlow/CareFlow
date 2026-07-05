@@ -179,7 +179,7 @@ public class AuthService {
         }
 
         String newAccessToken = jwtProvider.generateAccessToken(
-                user.getId(), user.getEmail(), user.getRole().name(), resolveAgencyId(user));
+                user.getId(), user.getEmail(), user.getRole().name(), resolveAgencyId(user), resolveIsRepresentative(user));
 
         return TokenResponse.builder()
                 .accessToken(newAccessToken)
@@ -288,6 +288,19 @@ public class AuthService {
     }
 
     /**
+     * 대행사 슈퍼 계정(대표 담당자) 여부 결정
+     * - AGENCY 역할이면서, 소속 대행사의 representative_user_id가 본인 user_id와 일치하는 경우 true
+     * - AGENCY 역할이지만 대표 담당자가 아닌 경우(일반 관리자 계정) false
+     * - AGENCY 역할이 아닌 경우(CUSTOMER/ENGINEER/ADMIN)는 의미가 없으므로 null
+     */
+    private Boolean resolveIsRepresentative(User user) {
+        if (user.getRole() != Role.AGENCY) {
+            return null;
+        }
+        return agenciesRepository.findByRepresentativeById(user.getId()).isPresent();
+    }
+
+    /**
      * 로그인/구글로그인 공통: JWT 발급 + Redis에 refreshToken 저장
      */
     @Transactional
@@ -295,7 +308,7 @@ public class AuthService {
         user.updateLastLogin();
 
         String accessToken = jwtProvider.generateAccessToken(
-                user.getId(), user.getEmail(), user.getRole().name(), resolveAgencyId(user));
+                user.getId(), user.getEmail(), user.getRole().name(), resolveAgencyId(user), resolveIsRepresentative(user));
         String refreshToken = jwtProvider.generateRefreshToken(user.getId());
 
         redisTemplate.opsForValue().set(

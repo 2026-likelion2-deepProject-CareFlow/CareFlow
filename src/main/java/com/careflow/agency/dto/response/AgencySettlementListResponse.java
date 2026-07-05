@@ -48,13 +48,18 @@ public record AgencySettlementListResponse(
             BigDecimal agencyFeeRate,
             int agencyFee,
             int engineerNetAmount,
-            String status,
+            String status,                // [E 수정] CareFlow→대행사 지급 상태 (settlements.status) — ADMIN 배치 승인으로만 PAID 전이
             LocalDateTime calculatedAt,   // 정산 레코드가 계산/생성된 시각 — 상태와 무관하게 항상 존재
-            LocalDateTime paidAt,         // 기사/대행사에게 실제 지급 완료된 일시 — null이면 미지급(PENDING/DISPUTED)
+            LocalDateTime paidAt,         // CareFlow→대행사 지급 완료 일시 — null이면 미지급(PENDING/DISPUTED)
             // payMethod / bankAccount: bank_accounts 테이블 미존재로 현재 null 반환
             // 추후 해당 테이블 추가 시 매핑 예정
             String payMethod,
-            String bankAccount
+            String bankAccount,
+            // [engineer_payouts 신규] 대행사→기사 지급 상태 — settings.status와 별개의 자금 흐름.
+            // engineerPayoutId가 null이면 아직 이 건이 월별 지급 배치에 집계되지 않은 것(정상적으로는 발생 안 함).
+            Long engineerPayoutId,
+            String engineerPayoutStatus,   // PENDING / PAID / DISPUTED
+            LocalDateTime engineerPayoutPaidAt
     ) {}
 
     public static AgencySettlementListResponse of(Stats stats, Page<SettlementSummary> page) {

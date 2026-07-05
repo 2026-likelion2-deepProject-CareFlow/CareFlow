@@ -38,9 +38,9 @@ public class SettlementGenerationJob implements Job {
                     settlementGenerationService.generateForMonth(targetMonth);
 
             long elapsedMs = System.currentTimeMillis() - startMs;
-            log.info("[월별 정산] Job 완료 — 생성: {}건, 스킵: {}건, 오류: {}건, 플랫폼정산집계: {}건, 소요시간: {}ms",
+            log.info("[월별 정산] Job 완료 — 생성: {}건, 스킵: {}건, 오류: {}건, 플랫폼정산집계: {}건, 기사지급집계: {}건, 소요시간: {}ms",
                     result.created(), result.skipped(), result.failed(),
-                    result.platformSettlementsCreated(), elapsedMs);
+                    result.platformSettlementsCreated(), result.engineerPayoutsCreated(), elapsedMs);
 
         } catch (Exception e) {
             log.error("[월별 정산] Job 실행 중 예상치 못한 오류 발생: {}", e.getMessage(), e);

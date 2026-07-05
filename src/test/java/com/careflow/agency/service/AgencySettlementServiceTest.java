@@ -33,6 +33,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.*;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
@@ -355,4 +356,5 @@ class AgencySettlementServiceTest {
         given(s.getCreatedAt()).willReturn(LocalDateTime.of(2024, 6, 15, 10, 0));
         return s;
     }
+
 }

@@ -34,8 +34,9 @@ public class JwtFilter extends OncePerRequestFilter {
             String email = jwtProvider.getEmail(token);
             String role = jwtProvider.getRole(token);
             Long agencyId = jwtProvider.getAgencyId(token);
+            Boolean isRepresentative = jwtProvider.getIsRepresentative(token);
 
-            CustomUserDetails userDetails = new CustomUserDetails(userId, email, null, role, agencyId);
+            CustomUserDetails userDetails = new CustomUserDetails(userId, email, null, role, agencyId, isRepresentative);
             UsernamePasswordAuthenticationToken authentication =
                     new UsernamePasswordAuthenticationToken(userDetails, null, userDetails.getAuthorities());
 

@@ -47,11 +47,13 @@ Authorization: Bearer {accessToken}
 
 ## 알려진 제약 (구현 전 반드시 인지할 것)
 
-- **상태 전이 범위**: [admin-settlement-approve.md](admin-settlement-approve.md)의 "상태 전이 범위" 항목과 동일 — 대상 월의 **전체 대행사**에 걸쳐 `PAID`가 아닌 모든 정산(`PENDING`/`DISPUTED`)을 `Settlement.markPaid()`로 직접 전이한다. ([DDL v11] `settlements.status`에서 `APPROVED`가 실제로 제거되어, 이제 이 API의 전이 대상은 곧 DB 상태 도메인 전체와 정확히 일치한다.)
-- **멱등성**: 미지급 건이 0개(전체 이미 PAID)여도 에러 없이 200 OK를 반환한다.
-- **agencyId 경로 변수 없음**: 단일 대행사 승인과 달리 대행사 존재 검증 단계가 없다 — 대상 월에 정산 자체가 하나도 없어도 정상 200 OK(빈 처리).
-- **처리량**: 전체 대행사 대상이므로 대상 건수가 많을 수 있다. 벌크 JPQL UPDATE 대신 엔티티 조회 후 도메인 메서드 호출 방식(더티 체킹)을 유지하되, 조회 시 `agency`/`engineer` 등 불필요한 연관관계를 즉시 로딩하지 않도록 주의한다(상태 변경만 필요하므로 fetch join 불필요).
-- **더티 체킹 사용**: `admin-settlement-approve.md`와 동일하게 Setter 없이 도메인 메서드로 상태 변경한다.
+> **[D 수정, DDL v14 반영]** [admin-settlement-approve.md](admin-settlement-approve.md)와 동일하게, `settlements` 건별 직접 승인 방식에서 **`platform_settlements` 배치 단위 일괄 승인**으로 재구현되었다.
+
+- **대상 조회**: 대상 월(agencyId 필터 없이) `platform_settlements.status <> 'PAID'`인 배치 전체를 조회한다.
+- **계좌 미등록 대행사는 개별 스킵**: 단일 승인과 달리 이 API는 여러 대행사를 한 번에 처리하므로, 특정 대행사의 계좌가 미등록이어도 그 대행사만 건너뛰고(경고 로그 남김) **나머지 대행사는 계속 처리**한다 — 한 대행사의 계좌 미등록이 전체 일괄 승인을 막지 않도록 함. (단일 승인 API처럼 즉시 `IllegalStateException`을 던져 전체를 중단시키지 않음.)
+- **멱등성**: 미지급 배치가 0개(전체 이미 PAID)여도 에러 없이 200 OK를 반환한다.
+- **agencyId 경로 변수 없음**: 단일 대행사 승인과 달리 대행사 존재 검증 단계가 없다 — 대상 월에 배치 자체가 하나도 없어도 정상 200 OK(빈 처리).
+- **캐스케이드**: 승인된 배치마다 `admin-settlement-approve.md`와 동일하게 `platform_settlement.markPaid(계좌ID)` + `SettlementRepository.markPaidByPlatformSettlementId(...)` 벌크 UPDATE로 하위 settlements를 일괄 전이한다.
 
 ---
 
@@ -75,9 +77,11 @@ Authorization: Bearer {accessToken}
 
 1. **검증**: ADMIN role 확인 → 아니면 `IllegalAccessException`
 2. **month 검증**: 1~12 범위 확인 → `IllegalArgumentException`
-3. **기간 계산**: `from = LocalDate.of(year, month, 1).atStartOfDay()`, `to = from.plusMonths(1)`
-4. **대상 조회**: `SettlementRepository.findUnpaidByMonth(from, to)` — agencyId 필터 없이 `status <> 'PAID'`인 전체 건 조회
-5. **상태 전이**: 조회된 각 `Settlement`에 대해 `markPaid()` 호출 (더티 체킹으로 UPDATE, 대상이 0건이면 아무 것도 하지 않고 정상 종료)
+3. **대상 조회**: `PlatformSettlementRepository.findBySettlementYearAndSettlementMonthAndStatusNot(year, month, "PAID")` — agencyId 필터 없이 미지급 배치 전체 조회
+4. **배치별 처리 반복**: 각 배치에 대해
+   - 이미 `PAID`면 스킵(멱등)
+   - `AgencyBankAccountRepository.findByAgencyId(agencyId)` 없으면 `IllegalStateException` 발생 → **이 배치만 경고 로그 남기고 continue**, 나머지 배치는 계속 진행
+   - 계좌가 있으면 `markPaid(계좌ID)` + 하위 settlements 벌크 UPDATE
 
 ---
 
@@ -85,10 +89,10 @@ Authorization: Bearer {accessToken}
 
 | 계층 | 클래스 |
 |---|---|
-| Controller | `com.careflow.admin.controller.AdminSettlementController` |
-| Service | `com.careflow.admin.service.AdminSettlementService` |
-| Repository (수정) | `com.careflow.settlement.repository.SettlementRepository` (`findUnpaidByMonth` 쿼리 추가) |
-| Entity (재사용, 수정 없음) | `com.careflow.settlement.entity.Settlement.markPaid()` |
+| Controller | `com.careflow.admin.controller.AdminSettlementController` (변경 없음) |
+| Service (수정) | `com.careflow.admin.service.AdminSettlementService` — `approvePlatformSettlement()` private 공통 메서드를 ⑨/⑩에서 재사용 |
+| Repository (신규) | `com.careflow.settlement.repository.PlatformSettlementRepository.findBySettlementYearAndSettlementMonthAndStatusNot` |
+| Repository (신규) | `com.careflow.settlement.repository.SettlementRepository.markPaidByPlatformSettlementId` (벌크 UPDATE) |
 
 ---
 
@@ -98,23 +102,25 @@ Authorization: Bearer {accessToken}
 
 **파일**: `src/test/java/com/careflow/admin/service/AdminSettlementServiceTest.java` (⑩ 전용 `@Nested` 그룹)
 
-- TC-1. 정상 일괄 승인 — 여러 대행사에 걸친 미지급 정산 5건 → 전부 `markPaid()` 호출 검증(Mockito verify)
+- TC-1. 대행사 2곳의 미지급 배치 + 둘 다 계좌 등록됨 → 둘 다 PAID 전이
 - TC-2. role이 ADMIN이 아닌 경우 → `IllegalAccessException`
 - TC-3. month가 0 또는 13 → `IllegalArgumentException`
-- TC-4. 미지급 건 0개 → 예외 없이 정상 종료, `markPaid()` 호출 없음
+- TC-4. 미지급 배치 0개 → 예외 없이 정상 종료
+- TC-5. 계좌 미등록 대행사는 스킵되고, 나머지 대행사는 정상 처리된다
 
 ### JUnit 5 통합 테스트 (H2 DB, `@SpringBootTest` + `@ActiveProfiles("local")`)
 
 **파일**: `src/test/java/com/careflow/admin/service/AdminSettlementServiceIntegrationTest.java` (⑩ 전용 `@Nested` 그룹)
 
-- TC-I-1. 대행사 3곳에 걸친 미지급 정산 일괄 승인 — 전부 H2 실제 조회 시 `status="PAID"`로 변경 확인
-- TC-I-2. 이미 PAID인 건은 영향받지 않음 (paidAt 불변)
-- TC-I-3. 타 월 정산 불변 — 대상 월이 아닌 정산은 변경되지 않음
-- TC-I-4. 정산이 하나도 없는 월 요청 → 에러 없이 정상 종료
+- TC-I-1. 대행사 여러 곳에 걸친 미지급 배치가 전부 PAID로 전이된다
+- TC-I-2. 이미 PAID인 배치는 영향받지 않음 (paidAt 불변)
+- TC-I-3. 대상 월이 아닌 배치는 변경되지 않는다
+- TC-I-4. 정산 배치가 하나도 없는 월 요청 → 에러 없이 정상 종료
+- TC-I-5. 계좌 미등록 대행사는 스킵되고, 나머지 대행사는 정상 처리된다
 
 ### JUnit 5 컨트롤러 테스트 (`@WebMvcTest`)
 
-**파일**: `src/test/java/com/careflow/admin/controller/AdminSettlementControllerTest.java` (⑩ 전용 메서드)
+**파일**: `src/test/java/com/careflow/admin/controller/AdminSettlementControllerTest.java` (⑩ 전용 메서드, 서비스 mock — 변경 없음)
 
 - TC-C-1. 인증된 ADMIN — 200 OK
 - TC-C-2. 인증 없음 → 401

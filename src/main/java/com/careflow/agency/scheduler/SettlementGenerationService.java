@@ -5,10 +5,13 @@ import com.careflow.assignment.entity.AsAssignment;
 import com.careflow.assignment.repository.AsAssignmentRepository;
 import com.careflow.payment.entity.Payment;
 import com.careflow.payment.repository.PaymentRepository;
+import com.careflow.settlement.entity.EngineerPayout;
 import com.careflow.settlement.entity.PlatformSettlement;
 import com.careflow.settlement.entity.Settlement;
+import com.careflow.settlement.repository.EngineerPayoutRepository;
 import com.careflow.settlement.repository.PlatformSettlementRepository;
 import com.careflow.settlement.repository.SettlementRepository;
+import com.careflow.user.entity.User;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -42,6 +45,7 @@ public class SettlementGenerationService {
     private final SettlementRepository settlementRepository;
     private final AsAssignmentRepository asAssignmentRepository;
     private final PlatformSettlementRepository platformSettlementRepository;
+    private final EngineerPayoutRepository engineerPayoutRepository;
 
     // CareFlow 플랫폼 수수료율 — 전 대행사 공통 고정값(10%). 대행사별 agencyFeeRate와는 별개
     private static final BigDecimal PLATFORM_FEE_RATE = BigDecimal.valueOf(0.10);
@@ -92,7 +96,10 @@ public class SettlementGenerationService {
         // 이어서 생성된 Settlement를 대행사·연·월 단위로 집계해 platform_settlements 생성
         int platformSettlementsCreated = generatePlatformSettlements(targetMonth, createdSettlements);
 
-        return new Result(created, skipped, failed, platformSettlementsCreated);
+        // 같은 배치에서 생성된 Settlement를 대행사+기사·연·월 단위로 집계해 engineer_payouts 생성
+        int engineerPayoutsCreated = generateEngineerPayouts(targetMonth, createdSettlements);
+
+        return new Result(created, skipped, failed, platformSettlementsCreated, engineerPayoutsCreated);
     }
 
     /**
@@ -125,9 +132,13 @@ public class SettlementGenerationService {
         for (List<Settlement> settlements : byAgencyId.values()) {
             Agencies agency = settlements.get(0).getAgency();
 
-            int totalGross = settlements.stream().mapToInt(Settlement::getGrossAmount).sum();
-            int totalFee   = settlements.stream().mapToInt(Settlement::getPlatformFee).sum();
-            int count      = settlements.size();
+            int totalGross  = settlements.stream().mapToInt(Settlement::getGrossAmount).sum();
+            int totalFee    = settlements.stream().mapToInt(Settlement::getPlatformFee).sum();
+            // [v14] CareFlow가 대행사에 실제 지급할 금액 = SUM(agency_fee) + SUM(engineer_net_amount)
+            int totalPayout = settlements.stream()
+                    .mapToInt(s -> s.getAgencyFee() + s.getEngineerNetAmount())
+                    .sum();
+            int count       = settlements.size();
 
             PlatformSettlement platformSettlement = platformSettlementRepository
                     .findByAgency_IdAndSettlementYearAndSettlementMonth(agency.getId(), year, month)
@@ -135,12 +146,12 @@ public class SettlementGenerationService {
 
             if (platformSettlement == null) {
                 platformSettlement = PlatformSettlement.create(
-                        agency, year, month, totalGross, totalFee, count);
+                        agency, year, month, totalGross, totalFee, totalPayout, count);
                 platformSettlementRepository.save(platformSettlement);
                 newlyCreated++;
             } else if ("PENDING".equals(platformSettlement.getStatus())) {
                 // 스케줄러 재실행(Misfire 복구) 등으로 동일 기간에 대해 추가 집계된 경우 — 기존 합계에 누적
-                platformSettlement.accumulate(totalGross, totalFee, count);
+                platformSettlement.accumulate(totalGross, totalFee, totalPayout, count);
             } else {
                 // 이미 PAID/DISPUTED로 상태가 바뀐 뒤라면 재무 데이터 무결성을 위해 합계를 임의로 변경하지 않음
                 log.warn("[플랫폼 정산 집계] 이미 {} 상태인 platform_settlement에 대해 신규 집계 스킵 — agency={}, {}년 {}월. "
@@ -161,6 +172,74 @@ public class SettlementGenerationService {
 
         return newlyCreated;
     }
+
+    /**
+     * 이번 배치에서 생성된 Settlement 목록을 (대행사, 기사) 단위로 GROUP BY 집계하여
+     * engineer_payouts(대행사→기사 월별 지급 배치) 레코드를 생성한다.
+     *
+     * platform_settlements 집계와 완전히 독립적으로 수행된다 — 같은 Settlement가 두 배치에
+     * 동시에 속할 수 있으며(platform_settlement_id, engineer_payout_id 각각 별도 FK), 한쪽의
+     * 생성/누적 실패가 다른 쪽에 영향을 주지 않는다.
+     *
+     * @return 신규 생성된 EngineerPayout 건수 (기존 레코드에 누적만 한 경우는 미포함)
+     */
+    private int generateEngineerPayouts(YearMonth targetMonth, List<Settlement> createdSettlements) {
+        if (createdSettlements.isEmpty()) {
+            return 0;
+        }
+
+        int year  = targetMonth.getYear();
+        int month = targetMonth.getMonthValue();
+
+        Map<AgencyEngineerKey, List<Settlement>> byAgencyAndEngineer = createdSettlements.stream()
+                .collect(Collectors.groupingBy(s -> new AgencyEngineerKey(s.getAgency().getId(), s.getEngineer().getId())));
+
+        log.info("[기사 지급 집계] 대행사·기사 조합 {}건 대상 집계 시작 — 대상 Settlement {}건",
+                byAgencyAndEngineer.size(), createdSettlements.size());
+
+        int newlyCreated = 0;
+
+        for (List<Settlement> settlements : byAgencyAndEngineer.values()) {
+            Agencies agency = settlements.get(0).getAgency();
+            User engineer = settlements.get(0).getEngineer();
+
+            int totalNet = settlements.stream().mapToInt(Settlement::getEngineerNetAmount).sum();
+            int count    = settlements.size();
+
+            EngineerPayout engineerPayout = engineerPayoutRepository
+                    .findByAgency_IdAndEngineer_IdAndPayoutYearAndPayoutMonth(agency.getId(), engineer.getId(), year, month)
+                    .orElse(null);
+
+            if (engineerPayout == null) {
+                engineerPayout = EngineerPayout.create(agency, engineer, year, month, totalNet, count);
+                engineerPayoutRepository.save(engineerPayout);
+                newlyCreated++;
+            } else if ("PENDING".equals(engineerPayout.getStatus())) {
+                // 스케줄러 재실행(Misfire 복구) 등으로 동일 기간에 대해 추가 집계된 경우 — 기존 합계에 누적
+                engineerPayout.accumulate(totalNet, count);
+            } else {
+                // 이미 PAID/DISPUTED로 상태가 바뀐 뒤라면 재무 데이터 무결성을 위해 합계를 임의로 변경하지 않음
+                log.warn("[기사 지급 집계] 이미 {} 상태인 engineer_payout에 대해 신규 집계 스킵 — agency={}, engineer={}, {}년 {}월. "
+                                + "해당 {}건의 settlement는 engineer_payout 미할당 상태로 남습니다.",
+                        engineerPayout.getStatus(), agency.getId(), engineer.getId(), year, month, count);
+                continue;
+            }
+
+            for (Settlement settlement : settlements) {
+                settlement.assignEngineerPayout(engineerPayout);
+            }
+
+            log.debug("[기사 지급 집계] agency={}, engineer={}, {}년 {}월, 건수={}, net={}원",
+                    agency.getAgencyName(), engineer.getName(), year, month, count, totalNet);
+        }
+
+        log.info("[기사 지급 집계] 생성 완료: {}건", newlyCreated);
+
+        return newlyCreated;
+    }
+
+    /** (agency_id, engineer_id) 그룹핑 키 */
+    private record AgencyEngineerKey(Long agencyId, Long engineerId) {}
 
     /**
      * Payment 1건에 대한 Settlement 생성
@@ -231,5 +310,5 @@ public class SettlementGenerationService {
     }
 
     /** 처리 결과 요약 레코드 */
-    public record Result(int created, int skipped, int failed, int platformSettlementsCreated) {}
+    public record Result(int created, int skipped, int failed, int platformSettlementsCreated, int engineerPayoutsCreated) {}
 }

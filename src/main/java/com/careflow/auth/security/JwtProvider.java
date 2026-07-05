@@ -31,13 +31,19 @@ public class JwtProvider {
         this.key = Keys.hmacShaKeyFor(secretKeyString.getBytes(StandardCharsets.UTF_8));
     }
 
+    // 기존 호출부(테스트 등) 호환용 — isRepresentative 미지정 시 null(AGENCY 외 역할과 동일하게 취급)
     public String generateAccessToken(Long userId, String email, String role, Long agencyId) {
+        return generateAccessToken(userId, email, role, agencyId, null);
+    }
+
+    public String generateAccessToken(Long userId, String email, String role, Long agencyId, Boolean isRepresentative) {
         Date now = new Date();
         return Jwts.builder()
                 .subject(String.valueOf(userId))
                 .claim("email", email)
                 .claim("role", role)
                 .claim("agencyId", agencyId)
+                .claim("isRepresentative", isRepresentative)
                 .issuedAt(now)
                 .expiration(new Date(now.getTime() + accessTokenExpiration))
                 .signWith(key)
@@ -67,6 +73,7 @@ public class JwtProvider {
     public String getEmail(String token) { return getClaims(token).get("email", String.class); }
     public String getRole(String token) { return getClaims(token).get("role", String.class); }
     public Long getAgencyId(String token) { return getClaims(token).get("agencyId", Long.class); }
+    public Boolean getIsRepresentative(String token) { return getClaims(token).get("isRepresentative", Boolean.class); }
     public long getAccessTokenExpiration() { return accessTokenExpiration; }
     public long getRefreshTokenExpiration() { return refreshTokenExpiration; }
 }

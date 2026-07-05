@@ -51,13 +51,15 @@ Authorization: Bearer {accessToken}
 
 ## 알려진 제약 (구현 전 반드시 인지할 것)
 
-- **상태 전이 범위**: [DDL v11]에서 `settlements.status` ENUM이 실제로 `PENDING → PAID`(또는 `DISPUTED`) 3단계로 재정비되어 `APPROVED`가 완전히 제거됐다 — "월초 일괄 승인 단계가 상태 전이 없이 바로 지급으로 이어지는 구조라 APPROVED가 별도 상태로 존재할 실익이 없다"는 DDL 변경 사유가 이 Admin API 설계 의도와 정확히 일치한다.
-  본 API는 대상 월의 해당 대행사 정산 중 **`PAID`가 아닌 모든 건**(`PENDING`/`DISPUTED`)을 `Settlement.markPaid()`를 호출해 **직접 `PAID`로 전이**시킨다.
-  > DISPUTED 건까지 admin이 일괄 PAID 처리하는 것이 실제 운영 요구사항과 다르다면(예: DISPUTED는 별도 검토 후 처리해야 함 등) 추후 조정이 필요할 수 있으므로, PR 시 리뷰어에게 이 결정을 명시적으로 알린다.
-- **멱등성**: 이미 전부 `PAID`인 경우(미지급 건 0개)에도 에러 없이 200 OK를 반환한다 (버튼 중복 클릭·재요청에 안전).
-- **`paidAt` 값**: 처리 시점의 `LocalDateTime.now()`로 일괄 설정한다 (건별로 시각이 약간씩 달라질 수 있음 — 정밀한 동시성 제어가 필요한 도메인이 아니므로 허용).
-- **더티 체킹 사용**: 벌크 JPQL UPDATE가 아니라 엔티티를 조회해 `Settlement.markPaid()` 도메인 메서드를 호출하고 트랜잭션 커밋 시점에 더티 체킹으로 반영한다 (CLAUDE.md 컨벤션 — Setter 대신 도메인 메서드로 상태 변경).
-- **대행사 존재 검증**: `agencyId`가 존재하지 않으면 `NoSuchElementException` (404).
+> **[D 수정, DDL v14 반영]** 아래는 `settlements` 건별 직접 승인 방식이었던 v11~v13 시점의 설계였다. v14에서 `platform_settlements`(CareFlow→대행사 월별 지급 배치)와 `agency_bank_accounts`(대행사 정산금 수취 계좌)가 도입되면서, 본 API는 **`settlements` 건별이 아니라 `platform_settlements` 배치 단위로 승인**하도록 재구현되었다.
+
+- **승인 단위 변경**: 대상 월·대행사의 `platform_settlements` 1건(`agency_id + settlement_year + settlement_month` 유니크 키)을 조회해 승인 처리한다. 해당 배치가 아예 존재하지 않으면(집계 배치가 생성된 적 없음) `NoSuchElementException`(404) — "승인할 대상 자체가 없다"는 뜻이므로 조용히 넘어가지 않는다.
+- **정산금 수취 계좌 필수 검증**: `agency_bank_accounts`에 이 대행사의 계좌가 등록되어 있지 않으면 `IllegalStateException`(403)으로 지급을 막는다. DDL 설계 의도(계좌 미등록 대행사는 지급 승인 불가) 그대로 반영.
+- **캐스케이드 전이**: `platform_settlements.markPaid(계좌ID)`로 배치를 확정(`status=PAID`, `paid_bank_account_id` 스냅샷, `paid_at`)한 뒤, 그 배치에 연결된(`settlements.platform_settlement_id` 기준) 하위 `settlements` 전체를 벌크 UPDATE로 `PAID` 전이한다. 개별 `Settlement`의 기존 상태가 `PENDING`이든 `DISPUTED`이든 상관없이 이 배치에 속해 있으면 전부 `PAID`로 전이된다(기존 "DISPUTED도 포함" 정책 유지).
+- **멱등성**: 대상 배치가 이미 `PAID`이면 아무 것도 하지 않고 정상 종료한다 (버튼 중복 클릭·재요청에 안전).
+- **`paidAt` 값**: 처리 시점의 `LocalDateTime.now()`를 배치와 하위 settlements에 동일하게 적용한다.
+- **벌크 UPDATE 사용**: 하위 settlements 전이는 건별 조회 후 `markPaid()` 호출이 아니라 `SettlementRepository.markPaidByPlatformSettlementId(platformSettlementId, paidAt)` 벌크 JPQL UPDATE로 처리한다 (배치 규모가 클 수 있어 N+1 방지).
+- **대행사 존재 검증**: `agencyId`가 존재하지 않으면 `NoSuchElementException` (404) — 기존과 동일.
 
 ---
 
@@ -72,8 +74,8 @@ Authorization: Bearer {accessToken}
 | HTTP 상태 | 조건 |
 |---|---|
 | 401 Unauthorized | JWT 토큰 없음/만료 |
-| 403 Forbidden | 인증은 되었으나 role != ADMIN |
-| 404 Not Found | 존재하지 않는 `agencyId` |
+| 403 Forbidden | 인증은 되었으나 role != ADMIN, 또는 정산금 수취 계좌 미등록(`IllegalStateException`) |
+| 404 Not Found | 존재하지 않는 `agencyId`, 또는 해당 기간의 `platform_settlements` 배치가 존재하지 않음 |
 | 400 Bad Request | `month`이 1~12 범위를 벗어남 |
 
 ---
@@ -81,11 +83,13 @@ Authorization: Bearer {accessToken}
 ## 처리 로직 (Pipeline)
 
 1. **검증**: ADMIN role 확인 → 아니면 `IllegalAccessException`
-2. **대행사 존재 검증**: `AgenciesRepository.findById(agencyId)` → 없으면 `NoSuchElementException`
+2. **대행사 존재 검증**: `AgenciesRepository.existsById(agencyId)` → 없으면 `NoSuchElementException`
 3. **month 검증**: 1~12 범위 확인 → `IllegalArgumentException`
-4. **기간 계산**: `from = LocalDate.of(year, month, 1).atStartOfDay()`, `to = from.plusMonths(1)`
-5. **대상 조회**: `SettlementRepository.findUnpaidByAgencyAndMonth(agencyId, from, to)` — `status <> 'PAID'`인 건만 조회
-6. **상태 전이**: 조회된 각 `Settlement`에 대해 `markPaid()` 호출 (더티 체킹으로 UPDATE, 대상이 0건이면 아무 것도 하지 않고 정상 종료)
+4. **배치 조회**: `PlatformSettlementRepository.findByAgency_IdAndSettlementYearAndSettlementMonth(agencyId, year, month)` → 없으면 `NoSuchElementException`
+5. **멱등 체크**: 배치 `status == "PAID"`면 아무 것도 하지 않고 정상 종료
+6. **계좌 검증**: `AgencyBankAccountRepository.findByAgencyId(agencyId)` → 없으면 `IllegalStateException`
+7. **배치 확정**: `platformSettlement.markPaid(bankAccount.getId())` (status=PAID, paid_bank_account_id, paid_at 세팅)
+8. **캐스케이드**: `SettlementRepository.markPaidByPlatformSettlementId(platformSettlement.getId(), paidAt)` 벌크 UPDATE로 하위 settlements 전체 PAID 전이
 
 ---
 
@@ -93,10 +97,11 @@ Authorization: Bearer {accessToken}
 
 | 계층 | 클래스 |
 |---|---|
-| Controller | `com.careflow.admin.controller.AdminSettlementController` |
-| Service | `com.careflow.admin.service.AdminSettlementService` |
-| Repository (수정) | `com.careflow.settlement.repository.SettlementRepository` (`findUnpaidByAgencyAndMonth` 쿼리 추가) |
-| Entity (재사용, 수정 없음) | `com.careflow.settlement.entity.Settlement.markPaid()` |
+| Controller | `com.careflow.admin.controller.AdminSettlementController` (변경 없음) |
+| Service (수정) | `com.careflow.admin.service.AdminSettlementService` — `PlatformSettlementRepository`, `AgencyBankAccountRepository` 의존성 추가 |
+| Repository (신규) | `com.careflow.settlement.repository.PlatformSettlementRepository.findBySettlementYearAndSettlementMonthAndStatusNot` |
+| Repository (신규) | `com.careflow.settlement.repository.SettlementRepository.markPaidByPlatformSettlementId` (벌크 UPDATE) |
+| Entity (수정) | `com.careflow.settlement.entity.PlatformSettlement.markPaid(Long paidBankAccountId)` |
 
 ---
 
@@ -106,25 +111,29 @@ Authorization: Bearer {accessToken}
 
 **파일**: `src/test/java/com/careflow/admin/service/AdminSettlementServiceTest.java` (⑨ 전용 `@Nested` 그룹)
 
-- TC-1. 정상 승인 — 미지급 정산 3건(PENDING/DISPUTED 혼합) → 전부 `markPaid()` 호출 검증(Mockito verify)
+- TC-1. PENDING 배치 + 계좌 등록됨 → `markPaid(계좌ID)` 및 하위 settlements 캐스케이드 호출 검증
 - TC-2. role이 ADMIN이 아닌 경우 → `IllegalAccessException`
 - TC-3. 존재하지 않는 agencyId → `NoSuchElementException`
 - TC-4. month가 0 또는 13 → `IllegalArgumentException`
-- TC-5. 미지급 건 0개(전부 PAID) → 예외 없이 정상 종료, `markPaid()` 호출 없음
+- TC-5. 해당 기간 정산 배치가 없으면 → `NoSuchElementException`
+- TC-6. 이미 PAID인 배치 재승인 요청 → 에러 없이 정상 종료, 값 변경 없음(멱등)
+- TC-7. 정산금 수취 계좌 미등록 → `IllegalStateException`, 배치 상태 변경 없음
 
 ### JUnit 5 통합 테스트 (H2 DB, `@SpringBootTest` + `@ActiveProfiles("local")`)
 
 **파일**: `src/test/java/com/careflow/admin/service/AdminSettlementServiceIntegrationTest.java` (⑨ 전용 `@Nested` 그룹)
 
-- TC-I-1. PENDING 2건 승인 → H2 실제 조회 시 두 건 모두 `status="PAID"`, `paidAt` not null로 변경 확인
-- TC-I-2. 타 대행사 정산 불변 — 승인 대상이 아닌 타 대행사 정산의 `status`는 변경되지 않음
-- TC-I-3. 타 월 정산 불변 — 대상 월이 아닌 정산은 변경되지 않음
-- TC-I-4. 이미 PAID인 건 재승인 요청 — 에러 없이 정상 종료, 기존 `paidAt` 값 변경 없음(대상에서 제외되므로)
-- TC-I-5. DISPUTED 건도 승인 대상에 포함되어 PAID로 전이되는지 검증
+- TC-I-1. PENDING 배치 승인 → 배치·하위 settlements 모두 `status="PAID"`, `paidAt`/`paid_bank_account_id` 확정 확인
+- TC-I-2. 타 대행사 배치의 settlement는 변경되지 않는다
+- TC-I-3. 배치에 연결되지 않은(다른 달 소속) settlement는 변경되지 않는다
+- TC-I-4. 이미 PAID인 배치 재승인 요청 → 에러 없이 정상 종료, 기존 `paidAt`/계좌 값 변경 없음(멱등)
+- TC-I-5. DISPUTED 건도 배치에 묶여 있으면 승인 시 PAID로 전이되는지 검증
+- TC-I-6. 해당 기간 정산 배치가 없으면 `NoSuchElementException`
+- TC-I-7. 정산금 수취 계좌 미등록 → `IllegalStateException`, 배치·하위 정산 상태 변경 없음
 
 ### JUnit 5 컨트롤러 테스트 (`@WebMvcTest`)
 
-**파일**: `src/test/java/com/careflow/admin/controller/AdminSettlementControllerTest.java` (⑨ 전용 메서드)
+**파일**: `src/test/java/com/careflow/admin/controller/AdminSettlementControllerTest.java` (⑨ 전용 메서드, 서비스 mock — 변경 없음)
 
 - TC-C-1. 인증된 ADMIN — 200 OK
 - TC-C-2. 인증 없음 → 401

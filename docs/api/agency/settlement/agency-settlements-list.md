@@ -56,7 +56,8 @@ Authorization: Bearer {access_token}
 - **`period` 파생 필드**: `settlements` 테이블에 기간 컬럼이 없다. `periodStart` = `created_at` 월의 1일, `periodEnd` = `created_at` 월의 마지막 날로 파생한다. 추후 DB 마이그레이션 시 수정 가능.
 - **`completedCount`**: 1건의 settlement = 1건의 A/S 작업이므로 항상 1로 반환한다.
 - **`type`**: 현재 `settlements` 테이블은 기사(ENGINEER) 단위 정산만 지원하므로 항상 `"ENGINEER"`로 반환한다. AGENCY 타입 정산은 미구현이다.
-- **`payMethod` / `bankAccount`**: 별도 `bank_accounts` 테이블 미존재로 현재 `null` 반환. 추후 해당 테이블 추가 시 매핑 예정이며 코드 내 한글 주석으로 명시한다.
+- **`payMethod` / `bankAccount`**: `bank_accounts`(기사 계좌) 테이블에서 조회해 매핑한다. 기사가 계좌를 등록하지 않았으면 `null`.
+- **`engineerPayoutId` / `engineerPayoutStatus` / `engineerPayoutPaidAt`** ([engineer_payouts 신규]): 이 정산 건이 집계된 대행사→기사 월별 지급 배치 정보. `status`(CareFlow→대행사)와는 독립적인 자금 흐름이므로 혼동하지 말 것 — 자세한 배경은 [agency-engineer-payouts-list.md](./agency-engineer-payouts-list.md) 참고.
 - **`stats` 집계 기준** ([변경] 프론트 피드백 반영): `stats`는 **현재 조회 필터(status/dateFrom/dateTo/keyword)로 조회된 결과 전체** 기준으로 집계한다(= `content` 조회와 동일한 WHERE 조건). 필터를 아예 지정하지 않으면 전체 기간 기준으로 집계된다. `paidAmount`/`pendingAmount`/`disputedAmount`도 이 필터링된 범위 내 해당 상태 건의 `gross_amount` 합계이다.
   - 필드명(`thisMonthGrossAmount`/`thisMonthCount`)은 프론트 하위 호환을 위해 그대로 유지하지만, 필터가 걸린 경우 실제로는 "이번 달"이 아니라 "필터링된 기간"의 값을 의미한다.
 - **`prevMonthCountDiff`/`prevMonthGrossDiff`(전월 대비)**: 필터가 하나라도 걸려 있으면 의미가 없어지므로 **필터가 전혀 없을 때만** "이번 달 vs 전월"을 별도로 집계해서 계산한다. 필터가 하나라도 걸려 있으면 `null`로 반환한다.
@@ -98,7 +99,10 @@ Authorization: Bearer {access_token}
       "status": "PAID",
       "settledAt": "2024-06-18T15:30:00",
       "payMethod": null,
-      "bankAccount": null
+      "bankAccount": null,
+      "engineerPayoutId": 42,
+      "engineerPayoutStatus": "PENDING",
+      "engineerPayoutPaidAt": null
     }
   ],
   "totalElements": 1248,
@@ -134,10 +138,13 @@ Authorization: Bearer {access_token}
 | `content[].agencyFeeRate` | BigDecimal | 대행사 수수료율 스냅샷 (%) |
 | `content[].agencyFee` | int | 대행사 수수료 (원) |
 | `content[].engineerNetAmount` | int | 기사 실수령액 (원) |
-| `content[].status` | String | `PENDING` / `PAID` / `DISPUTED` |
-| `content[].settledAt` | LocalDateTime | 지급 일시 (`settlements.paid_at`, null 가능) |
-| `content[].payMethod` | String | 지급 방식 — **미구현, 항상 null** (미래 bank_accounts 테이블 예정) |
-| `content[].bankAccount` | String | 지급 계좌 — **미구현, 항상 null** (미래 bank_accounts 테이블 예정) |
+| `content[].status` | String | `PENDING` / `PAID` / `DISPUTED` — **[E 수정] CareFlow→대행사** 지급 상태. 대행사가 직접 `PAID`로 바꿀 수 없음(ADMIN 배치 승인 전용) |
+| `content[].settledAt` | LocalDateTime | CareFlow→대행사 지급 완료 일시 (`settlements.paid_at`, null 가능) |
+| `content[].payMethod` | String | 지급 방식 (`bank_accounts.pay_method` 한글 레이블, 기사 계좌 미등록 시 null) |
+| `content[].bankAccount` | String | 지급 계좌 ("은행명 계좌번호" 포맷, 기사 계좌 미등록 시 null) |
+| `content[].engineerPayoutId` | Long (nullable) | **[engineer_payouts 신규]** 이 건이 집계된 대행사→기사 지급 배치 ID. 월 배치가 아직 안 돌았거나 다른 사유로 미할당이면 null |
+| `content[].engineerPayoutStatus` | String (nullable) | **대행사→기사** 지급 상태(`PENDING`/`PAID`/`DISPUTED`) — `status`(CareFlow→대행사)와 완전히 별개. `PATCH /api/agency/engineer-payouts/{engineerPayoutId}/pay`로 대행사가 직접 PAID 전이 |
+| `content[].engineerPayoutPaidAt` | LocalDateTime (nullable) | 대행사→기사 지급 완료 일시 |
 | `totalElements` | long | 검색 필터 적용 후 전체 건수 |
 | `totalPages` | int | 전체 페이지 수 |
 | `currentPage` | int | 현재 페이지 번호 |

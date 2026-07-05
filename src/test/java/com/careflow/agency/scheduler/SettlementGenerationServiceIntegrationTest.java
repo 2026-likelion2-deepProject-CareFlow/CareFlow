@@ -69,6 +69,7 @@ class SettlementGenerationServiceIntegrationTest {
     @Autowired private AsAssignmentRepository asAssignmentRepository;
     @Autowired private SettlementRepository settlementRepository;
     @Autowired private PlatformSettlementRepository platformSettlementRepository;
+    @Autowired private com.careflow.settlement.repository.EngineerPayoutRepository engineerPayoutRepository;
 
     private Agencies agency;
     private User engineerUser;
@@ -84,8 +85,9 @@ class SettlementGenerationServiceIntegrationTest {
     void setUp() {
         targetMonth = YearMonth.now();
 
+        // agencyFeeRate는 DDL v14 기준 소수 형태로 저장(예: 0.1 = 10%) — gross_amount * agencyFeeRate로 바로 곱해 쓰는 값
         agency = agencyRepository.save(
-                Agencies.create("테스트대행사", "123-45-67890", "서울시 강남구", 10.0));
+                Agencies.create("테스트대행사", "123-45-67890", "서울시 강남구", 0.1));
 
         engineerUser = userRepository.save(User.builder()
                 .email("engineer@test.com").passwordHash("hashed")
@@ -189,6 +191,8 @@ class SettlementGenerationServiceIntegrationTest {
         assertThat(platformSettlement.getTotalPlatformFee()).isEqualTo(50000);
         assertThat(platformSettlement.getSettlementCount()).isEqualTo(2);
         assertThat(platformSettlement.getStatus()).isEqualTo("PENDING");
+        // payoutAmountSum = gross - platformFee (agencyFee + engineerNetAmount 합) = 500000 - 50000
+        assertThat(platformSettlement.getPayoutAmountSum()).isEqualTo(450000);
 
         // settlements.platform_settlement_id FK 연결 검증
         List<Settlement> settlements = settlementRepository.findAll();
@@ -196,6 +200,92 @@ class SettlementGenerationServiceIntegrationTest {
         assertThat(settlements)
                 .allSatisfy(s -> assertThat(s.getPlatformSettlement().getId())
                         .isEqualTo(platformSettlement.getId()));
+    }
+
+    @Test
+    @DisplayName("성공: 동일 대행사+기사 정산 2건 생성 — engineer_payout 1건에 합계·건수 집계, settlement에 FK 연결")
+    void success_generatesEngineerPayout_aggregatedFromCreatedSettlements() {
+        // Given
+        createSettlementTargetPayment(agency, engineerUser, 200000);
+        createSettlementTargetPayment(agency, engineerUser, 300000);
+
+        // When
+        SettlementGenerationService.Result result = settlementGenerationService.generateForMonth(targetMonth);
+
+        // Then
+        assertThat(result.engineerPayoutsCreated()).isEqualTo(1);
+
+        com.careflow.settlement.entity.EngineerPayout engineerPayout = engineerPayoutRepository
+                .findByAgency_IdAndEngineer_IdAndPayoutYearAndPayoutMonth(
+                        agency.getId(), engineerUser.getId(), targetMonth.getYear(), targetMonth.getMonthValue())
+                .orElseThrow();
+
+        // agencyFeeRate=0.1(10%), platformFee=10%(고정) → net = gross*0.8: 200000*0.8+300000*0.8=400000
+        assertThat(engineerPayout.getNetAmountSum()).isEqualTo(400000);
+        assertThat(engineerPayout.getCaseCount()).isEqualTo(2);
+        assertThat(engineerPayout.getStatus()).isEqualTo("PENDING");
+
+        List<Settlement> settlements = settlementRepository.findAll();
+        assertThat(settlements)
+                .allSatisfy(s -> assertThat(s.getEngineerPayout().getId())
+                        .isEqualTo(engineerPayout.getId()));
+    }
+
+    @Test
+    @DisplayName("성공: 동일 기간 engineer_payout이 이미 PENDING으로 존재하면 신규 생성 대신 누적")
+    void success_accumulatesIntoExistingPendingEngineerPayout() {
+        com.careflow.settlement.entity.EngineerPayout existing =
+                com.careflow.settlement.entity.EngineerPayout.create(agency, engineerUser,
+                        targetMonth.getYear(), targetMonth.getMonthValue(), 100000, 1);
+        engineerPayoutRepository.save(existing);
+
+        createSettlementTargetPayment(agency, engineerUser, 200000);
+
+        SettlementGenerationService.Result result = settlementGenerationService.generateForMonth(targetMonth);
+
+        assertThat(result.created()).isEqualTo(1);
+        assertThat(result.engineerPayoutsCreated()).isZero();
+        assertThat(engineerPayoutRepository.findAll()).hasSize(1);
+
+        com.careflow.settlement.entity.EngineerPayout accumulated = engineerPayoutRepository
+                .findByAgency_IdAndEngineer_IdAndPayoutYearAndPayoutMonth(
+                        agency.getId(), engineerUser.getId(), targetMonth.getYear(), targetMonth.getMonthValue())
+                .orElseThrow();
+
+        // net: 100000(기존) + 200000*0.8(신규 160000) = 260000, count: 1+1=2
+        assertThat(accumulated.getNetAmountSum()).isEqualTo(260000);
+        assertThat(accumulated.getCaseCount()).isEqualTo(2);
+    }
+
+    @Test
+    @DisplayName("성공: 동일 기간 engineer_payout이 이미 PAID면 합계를 변경하지 않고 스킵")
+    void success_doesNotMutatePaidEngineerPayout() {
+        com.careflow.settlement.entity.EngineerPayout paid =
+                com.careflow.settlement.entity.EngineerPayout.create(agency, engineerUser,
+                        targetMonth.getYear(), targetMonth.getMonthValue(), 100000, 1);
+        paid.markPaid();
+        engineerPayoutRepository.save(paid);
+
+        createSettlementTargetPayment(agency, engineerUser, 200000);
+
+        SettlementGenerationService.Result result = settlementGenerationService.generateForMonth(targetMonth);
+
+        assertThat(result.created()).isEqualTo(1);
+        assertThat(result.engineerPayoutsCreated()).isZero();
+
+        com.careflow.settlement.entity.EngineerPayout unchanged = engineerPayoutRepository
+                .findByAgency_IdAndEngineer_IdAndPayoutYearAndPayoutMonth(
+                        agency.getId(), engineerUser.getId(), targetMonth.getYear(), targetMonth.getMonthValue())
+                .orElseThrow();
+        assertThat(unchanged.getNetAmountSum()).isEqualTo(100000);
+        assertThat(unchanged.getCaseCount()).isEqualTo(1);
+        assertThat(unchanged.getStatus()).isEqualTo("PAID");
+
+        Optional<Settlement> newSettlement = settlementRepository.findAll().stream()
+                .filter(s -> s.getGrossAmount() == 200000)
+                .findFirst();
+        assertThat(newSettlement).isPresent();
+        assertThat(newSettlement.get().getEngineerPayout()).isNull();
     }
 
     @Test
@@ -220,7 +310,7 @@ class SettlementGenerationServiceIntegrationTest {
     void success_accumulatesIntoExistingPendingPlatformSettlement() {
         // Given — 이전 배치 실행으로 이미 만들어진 PENDING 상태의 platform_settlement 1건 선(先) 존재
         PlatformSettlement existing = PlatformSettlement.create(
-                agency, targetMonth.getYear(), targetMonth.getMonthValue(), 100000, 10000, 1);
+                agency, targetMonth.getYear(), targetMonth.getMonthValue(), 100000, 10000, 90000, 1);
         platformSettlementRepository.save(existing);
 
         createSettlementTargetPayment(agency, engineerUser, 200000);
@@ -242,6 +332,8 @@ class SettlementGenerationServiceIntegrationTest {
         assertThat(accumulated.getTotalGrossAmount()).isEqualTo(300000);
         assertThat(accumulated.getTotalPlatformFee()).isEqualTo(30000);
         assertThat(accumulated.getSettlementCount()).isEqualTo(2);
+        // payoutAmountSum: 90000 + (200000 - 20000) = 270000
+        assertThat(accumulated.getPayoutAmountSum()).isEqualTo(270000);
     }
 
     @Test
@@ -249,8 +341,8 @@ class SettlementGenerationServiceIntegrationTest {
     void success_doesNotMutatePaidPlatformSettlement() {
         // Given — 이미 지급 완료(PAID) 처리된 platform_settlement 1건 선(先) 존재
         PlatformSettlement paid = PlatformSettlement.create(
-                agency, targetMonth.getYear(), targetMonth.getMonthValue(), 100000, 10000, 1);
-        paid.markPaid();
+                agency, targetMonth.getYear(), targetMonth.getMonthValue(), 100000, 10000, 90000, 1);
+        paid.markPaid(null);
         platformSettlementRepository.save(paid);
 
         createSettlementTargetPayment(agency, engineerUser, 200000);

@@ -53,6 +53,7 @@ class SettlementGenerationServiceTest {
     @Mock private SettlementRepository settlementRepository;
     @Mock private AsAssignmentRepository asAssignmentRepository;
     @Mock private PlatformSettlementRepository platformSettlementRepository;
+    @Mock private com.careflow.settlement.repository.EngineerPayoutRepository engineerPayoutRepository;
 
     private static final YearMonth TARGET_MONTH = YearMonth.of(2026, 6);
 
@@ -140,6 +141,8 @@ class SettlementGenerationServiceTest {
             assertThat(saved.getSettlementCount()).isEqualTo(2);
             assertThat(saved.getSettlementYear()).isEqualTo(2026);
             assertThat(saved.getSettlementMonth()).isEqualTo(6);
+            // payoutAmountSum = gross - platformFee (agencyFee + engineerNetAmount) = 500000 - 50000
+            assertThat(saved.getPayoutAmountSum()).isEqualTo(450000);
         }
 
         @Test
@@ -203,7 +206,7 @@ class SettlementGenerationServiceTest {
                     .willReturn(List.of(completedAssignment(agency, engineer, LocalDateTime.now())));
             stubSettlementSaveReturnsArgument();
 
-            PlatformSettlement existing = PlatformSettlement.create(agency, 2026, 6, 100000, 10000, 1);
+            PlatformSettlement existing = PlatformSettlement.create(agency, 2026, 6, 100000, 10000, 90000, 1);
             given(platformSettlementRepository.findByAgency_IdAndSettlementYearAndSettlementMonth(1L, 2026, 6))
                     .willReturn(Optional.of(existing));
 
@@ -218,6 +221,8 @@ class SettlementGenerationServiceTest {
             assertThat(existing.getTotalGrossAmount()).isEqualTo(300000);
             assertThat(existing.getTotalPlatformFee()).isEqualTo(30000);
             assertThat(existing.getSettlementCount()).isEqualTo(2);
+            // payoutAmountSum: 90000 + (200000 - 20000) = 270000
+            assertThat(existing.getPayoutAmountSum()).isEqualTo(270000);
         }
 
         @Test
@@ -233,8 +238,8 @@ class SettlementGenerationServiceTest {
                     .willReturn(List.of(completedAssignment(agency, engineer, LocalDateTime.now())));
             stubSettlementSaveReturnsArgument();
 
-            PlatformSettlement paidSettlement = PlatformSettlement.create(agency, 2026, 6, 100000, 10000, 1);
-            paidSettlement.markPaid();
+            PlatformSettlement paidSettlement = PlatformSettlement.create(agency, 2026, 6, 100000, 10000, 90000, 1);
+            paidSettlement.markPaid(null);
             given(platformSettlementRepository.findByAgency_IdAndSettlementYearAndSettlementMonth(1L, 2026, 6))
                     .willReturn(Optional.of(paidSettlement));
 
@@ -246,6 +251,138 @@ class SettlementGenerationServiceTest {
             verify(platformSettlementRepository, never()).save(any());
             assertThat(paidSettlement.getTotalGrossAmount()).isEqualTo(100000);
             assertThat(paidSettlement.getSettlementCount()).isEqualTo(1);
+        }
+    }
+
+    @Nested
+    @DisplayName("generateForMonth — engineer_payouts 집계")
+    class GenerateEngineerPayouts {
+
+        @Test
+        @DisplayName("성공: 동일 대행사+기사 결제 2건 → engineer_payout 1건에 합계·건수 집계")
+        void success_sameAgencyAndEngineer_aggregatedIntoOneEngineerPayout() {
+            Agencies agency = mockAgency(1L, "케어플로우 서울대행사", 0.1);
+            User engineer = mockEngineer(10L, "홍길동");
+
+            Payment payment1 = mockPayment(100L, 1000L, 200000);
+            Payment payment2 = mockPayment(101L, 1001L, 300000);
+
+            given(paymentRepository.findSettlementTargets(any(), any()))
+                    .willReturn(List.of(payment1, payment2));
+            given(asAssignmentRepository.findByAsRequest_Id(1000L))
+                    .willReturn(List.of(completedAssignment(agency, engineer, LocalDateTime.now())));
+            given(asAssignmentRepository.findByAsRequest_Id(1001L))
+                    .willReturn(List.of(completedAssignment(agency, engineer, LocalDateTime.now())));
+            stubSettlementSaveReturnsArgument();
+
+            given(platformSettlementRepository.findByAgency_IdAndSettlementYearAndSettlementMonth(1L, 2026, 6))
+                    .willReturn(Optional.empty());
+            given(engineerPayoutRepository.findByAgency_IdAndEngineer_IdAndPayoutYearAndPayoutMonth(1L, 10L, 2026, 6))
+                    .willReturn(Optional.empty());
+
+            SettlementGenerationService.Result result = settlementGenerationService.generateForMonth(TARGET_MONTH);
+
+            assertThat(result.engineerPayoutsCreated()).isEqualTo(1);
+
+            ArgumentCaptor<com.careflow.settlement.entity.EngineerPayout> captor =
+                    ArgumentCaptor.forClass(com.careflow.settlement.entity.EngineerPayout.class);
+            verify(engineerPayoutRepository).save(captor.capture());
+            com.careflow.settlement.entity.EngineerPayout saved = captor.getValue();
+
+            // agencyFeeRate=0.1(mock, 10%), platformFee=10%(고정) → net = gross - 10%(fee) - 10%(agencyFee) = gross*0.8
+            // net: 200000*0.8 + 300000*0.8 = 160000 + 240000 = 400000
+            assertThat(saved.getNetAmountSum()).isEqualTo(400000);
+            assertThat(saved.getCaseCount()).isEqualTo(2);
+            assertThat(saved.getPayoutYear()).isEqualTo(2026);
+            assertThat(saved.getPayoutMonth()).isEqualTo(6);
+        }
+
+        @Test
+        @DisplayName("성공: 같은 대행사 소속 서로 다른 기사 결제 각 1건 → engineer_payout 각각 생성")
+        void success_differentEngineers_createSeparateEngineerPayouts() {
+            Agencies agency = mockAgency(1L, "케어플로우 서울대행사", 0.1);
+            User engineerA = mockEngineer(10L, "홍길동");
+            User engineerB = mockEngineer(20L, "김철수");
+
+            Payment payment1 = mockPayment(100L, 1000L, 200000);
+            Payment payment2 = mockPayment(101L, 1001L, 100000);
+
+            given(paymentRepository.findSettlementTargets(any(), any()))
+                    .willReturn(List.of(payment1, payment2));
+            given(asAssignmentRepository.findByAsRequest_Id(1000L))
+                    .willReturn(List.of(completedAssignment(agency, engineerA, LocalDateTime.now())));
+            given(asAssignmentRepository.findByAsRequest_Id(1001L))
+                    .willReturn(List.of(completedAssignment(agency, engineerB, LocalDateTime.now())));
+            stubSettlementSaveReturnsArgument();
+
+            given(platformSettlementRepository.findByAgency_IdAndSettlementYearAndSettlementMonth(anyLong(), eq(2026), eq(6)))
+                    .willReturn(Optional.empty());
+            given(engineerPayoutRepository.findByAgency_IdAndEngineer_IdAndPayoutYearAndPayoutMonth(anyLong(), anyLong(), eq(2026), eq(6)))
+                    .willReturn(Optional.empty());
+
+            SettlementGenerationService.Result result = settlementGenerationService.generateForMonth(TARGET_MONTH);
+
+            assertThat(result.engineerPayoutsCreated()).isEqualTo(2);
+            verify(engineerPayoutRepository, times(2)).save(any());
+        }
+
+        @Test
+        @DisplayName("성공: 기존 PENDING engineer_payout 존재 시 신규 생성 대신 기존 합계에 누적")
+        void success_existingPendingEngineerPayout_accumulatesInsteadOfCreating() {
+            Agencies agency = mockAgency(1L, "케어플로우 서울대행사", 0.1);
+            User engineer = mockEngineer(10L, "홍길동");
+
+            Payment payment = mockPayment(100L, 1000L, 200000);
+            given(paymentRepository.findSettlementTargets(any(), any())).willReturn(List.of(payment));
+            given(asAssignmentRepository.findByAsRequest_Id(1000L))
+                    .willReturn(List.of(completedAssignment(agency, engineer, LocalDateTime.now())));
+            stubSettlementSaveReturnsArgument();
+
+            given(platformSettlementRepository.findByAgency_IdAndSettlementYearAndSettlementMonth(1L, 2026, 6))
+                    .willReturn(Optional.empty());
+
+            com.careflow.settlement.entity.EngineerPayout existing =
+                    com.careflow.settlement.entity.EngineerPayout.create(agency, engineer, 2026, 6, 100000, 1);
+            given(engineerPayoutRepository.findByAgency_IdAndEngineer_IdAndPayoutYearAndPayoutMonth(1L, 10L, 2026, 6))
+                    .willReturn(Optional.of(existing));
+
+            SettlementGenerationService.Result result = settlementGenerationService.generateForMonth(TARGET_MONTH);
+
+            assertThat(result.engineerPayoutsCreated()).isZero();
+            verify(engineerPayoutRepository, never()).save(any());
+
+            // net: 기존 100000 + 신규(200000*0.8=160000) = 260000, count: 1+1=2
+            assertThat(existing.getNetAmountSum()).isEqualTo(260000);
+            assertThat(existing.getCaseCount()).isEqualTo(2);
+        }
+
+        @Test
+        @DisplayName("성공: 기존 engineer_payout이 이미 PAID면 누적하지 않고 스킵")
+        void success_existingPaidEngineerPayout_skipsWithoutMutating() {
+            Agencies agency = mockAgency(1L, "케어플로우 서울대행사", 0.1);
+            User engineer = mockEngineer(10L, "홍길동");
+
+            Payment payment = mockPayment(100L, 1000L, 200000);
+            given(paymentRepository.findSettlementTargets(any(), any())).willReturn(List.of(payment));
+            given(asAssignmentRepository.findByAsRequest_Id(1000L))
+                    .willReturn(List.of(completedAssignment(agency, engineer, LocalDateTime.now())));
+            stubSettlementSaveReturnsArgument();
+
+            given(platformSettlementRepository.findByAgency_IdAndSettlementYearAndSettlementMonth(1L, 2026, 6))
+                    .willReturn(Optional.empty());
+
+            com.careflow.settlement.entity.EngineerPayout paid =
+                    com.careflow.settlement.entity.EngineerPayout.create(agency, engineer, 2026, 6, 100000, 1);
+            paid.markPaid();
+            given(engineerPayoutRepository.findByAgency_IdAndEngineer_IdAndPayoutYearAndPayoutMonth(1L, 10L, 2026, 6))
+                    .willReturn(Optional.of(paid));
+
+            SettlementGenerationService.Result result = settlementGenerationService.generateForMonth(TARGET_MONTH);
+
+            assertThat(result.engineerPayoutsCreated()).isZero();
+            verify(engineerPayoutRepository, never()).save(any());
+            assertThat(paid.getNetAmountSum()).isEqualTo(100000);
+            assertThat(paid.getCaseCount()).isEqualTo(1);
         }
     }
 }

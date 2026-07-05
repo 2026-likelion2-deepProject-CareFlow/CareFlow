@@ -49,12 +49,18 @@ public class PlatformSettlement {
     private Integer settlementMonth;
 
     // 집계 대상 settlements.gross_amount 합계 (원) — 검증·감사용
-    @Column(name = "total_gross_amount", nullable = false)
+    // [v14] DDL 컬럼명 gross_amount_sum과 일치시킴 (기존 total_gross_amount는 v12 시점에 이미 이름이 바뀐 컬럼이었음)
+    @Column(name = "gross_amount_sum", nullable = false)
     private Integer totalGrossAmount;
 
-    // 집계 대상 settlements.platform_fee 합계 (원) — 대행사가 플랫폼에 납부할 금액
-    @Column(name = "total_platform_fee", nullable = false)
+    // 집계 대상 settlements.platform_fee 합계 (원) — CareFlow가 결제 선수취 시점에 이미 보유한 수수료(검증·감사용)
+    // [v14] DDL 컬럼명 platform_fee_sum과 일치시킴 (기존 total_platform_fee는 v12 시점에 이미 이름이 바뀐 컬럼이었음)
+    @Column(name = "platform_fee_sum", nullable = false)
     private Integer totalPlatformFee;
+
+    // [v14 신규] CareFlow가 대행사에 실제 지급할 금액 = SUM(agency_fee) + SUM(engineer_net_amount)
+    @Column(name = "payout_amount_sum", nullable = false)
+    private Integer payoutAmountSum;
 
     // 집계된 settlements 건수
     @Column(name = "settlement_count", nullable = false)
@@ -65,6 +71,10 @@ public class PlatformSettlement {
     @Column(name = "status", nullable = false, length = 20,
             columnDefinition = "ENUM('PENDING','PAID','DISPUTED') DEFAULT 'PENDING'")
     private String status = "PENDING";
+
+    // [v14 신규] 지급 시점 대행사 수취 계좌 스냅샷 (agency_bank_accounts 참조, 계좌 변경 이력과 무관하게 실제 송금 계좌 추적)
+    @Column(name = "paid_bank_account_id")
+    private Long paidBankAccountId;
 
     // 플랫폼 수수료 납부 완료 일시
     @Column(name = "paid_at")
@@ -77,39 +87,45 @@ public class PlatformSettlement {
 
     @Builder
     public PlatformSettlement(Agencies agency, Integer settlementYear, Integer settlementMonth,
-                              Integer totalGrossAmount, Integer totalPlatformFee, Integer settlementCount) {
+                              Integer totalGrossAmount, Integer totalPlatformFee, Integer payoutAmountSum,
+                              Integer settlementCount) {
         this.agency = agency;
         this.settlementYear = settlementYear;
         this.settlementMonth = settlementMonth;
         this.totalGrossAmount = totalGrossAmount;
         this.totalPlatformFee = totalPlatformFee;
+        this.payoutAmountSum = payoutAmountSum;
         this.settlementCount = settlementCount != null ? settlementCount : 0;
         this.status = "PENDING";
         this.createdAt = LocalDateTime.now();
     }
 
     public static PlatformSettlement create(Agencies agency, Integer settlementYear, Integer settlementMonth,
-                                             Integer totalGrossAmount, Integer totalPlatformFee, Integer settlementCount) {
+                                             Integer totalGrossAmount, Integer totalPlatformFee,
+                                             Integer payoutAmountSum, Integer settlementCount) {
         return PlatformSettlement.builder()
                 .agency(agency)
                 .settlementYear(settlementYear)
                 .settlementMonth(settlementMonth)
                 .totalGrossAmount(totalGrossAmount)
                 .totalPlatformFee(totalPlatformFee)
+                .payoutAmountSum(payoutAmountSum)
                 .settlementCount(settlementCount)
                 .build();
     }
 
     // [월별 정산 배치 재실행 대비] 동일 기간(agency+year+month)에 대해 추가로 집계된 건을 기존 합계에 누적 — 더티 체킹으로 UPDATE
-    public void accumulate(int additionalGrossAmount, int additionalPlatformFee, int additionalCount) {
+    public void accumulate(int additionalGrossAmount, int additionalPlatformFee, int additionalPayoutAmount, int additionalCount) {
         this.totalGrossAmount += additionalGrossAmount;
         this.totalPlatformFee += additionalPlatformFee;
+        this.payoutAmountSum += additionalPayoutAmount;
         this.settlementCount += additionalCount;
     }
 
-    // 플랫폼 수수료 납부 완료 처리 — 더티 체킹으로 UPDATE
-    public void markPaid() {
+    // 플랫폼 수수료 납부 완료 처리 — ADMIN 지급 승인 시 실제 송금 계좌 스냅샷과 함께 확정 — 더티 체킹으로 UPDATE
+    public void markPaid(Long paidBankAccountId) {
         this.status = "PAID";
+        this.paidBankAccountId = paidBankAccountId;
         this.paidAt = LocalDateTime.now();
     }
 
