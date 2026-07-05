@@ -168,9 +168,9 @@ class CustomerPaymentSummaryControllerTest {
         @DisplayName("성공: 로그인한 본인의 결제 내역을 상태 필터 없이 최신순으로 반환 — 200 OK")
         void success_200() throws Exception {
             List<PaymentResponse> stub = List.of(
-                    new PaymentResponse(3L, 30L, 50_000, "SUCCESS", "MOCK", LocalDateTime.of(2026, 7, 1, 10, 0)),
-                    new PaymentResponse(2L, 20L, 30_000, "FAILED", "MOCK", null),
-                    new PaymentResponse(1L, 10L, 45_000, "REFUNDED", "MOCK", LocalDateTime.of(2026, 5, 1, 9, 0))
+                    new PaymentResponse(3L, 30L, "삼성전자", "그랑데 세탁기", "김기사", 50_000, "SUCCESS", "MOCK", LocalDateTime.of(2026, 7, 1, 10, 0)),
+                    new PaymentResponse(2L, 20L, "LG전자", "휘센 에어컨", "이기사", 30_000, "FAILED", "MOCK", null),
+                    new PaymentResponse(1L, 10L, "삼성전자", "비스포크 냉장고", "박기사", 45_000, "REFUNDED", "MOCK", LocalDateTime.of(2026, 5, 1, 9, 0))
             );
             given(paymentService.getPaymentList(CUSTOMER_USER_ID)).willReturn(stub);
 
@@ -178,6 +178,9 @@ class CustomerPaymentSummaryControllerTest {
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.length()").value(3))
                     .andExpect(jsonPath("$[0].paymentId").value(3))
+                    .andExpect(jsonPath("$[0].applianceBrand").value("삼성전자"))
+                    .andExpect(jsonPath("$[0].applianceModelName").value("그랑데 세탁기"))
+                    .andExpect(jsonPath("$[0].engineerName").value("김기사"))
                     .andExpect(jsonPath("$[0].status").value("SUCCESS"))
                     .andExpect(jsonPath("$[1].status").value("FAILED"))
                     .andExpect(jsonPath("$[1].paidAt").doesNotExist())
