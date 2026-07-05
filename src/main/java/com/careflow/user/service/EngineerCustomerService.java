@@ -66,6 +66,10 @@ public class EngineerCustomerService {
         Map<Long, LocalDateTime> lastWorkMap = asRequestRepository.findLatestAsDateByCustomerIds(customerIds).stream()
                 .collect(Collectors.toMap(r -> (Long) r[0], r -> (LocalDateTime) r[1]));
 
+        // 4) 진행 중인 작업 건수 맵
+        Map<Long, Long> inProgressCountMap = asAssignmentRepository.countInProgressByCustomerIds(engineerId, customerIds).stream()
+                .collect(Collectors.toMap(r -> (Long) r[0], r -> (Long) r[1]));
+
         return customers.map(c -> {
             LocalDateTime lastDate = lastWorkMap.get(c.getId());
             return EngineerCustomerListResponse.builder()
@@ -76,6 +80,7 @@ public class EngineerCustomerService {
                     .status(c.getStatus())
                     .appliancesCount(applianceCountMap.getOrDefault(c.getId(), 0L).intValue())
                     .totalAsCount(asCountMap.getOrDefault(c.getId(), 0L).intValue())
+                    .inProgressCount(inProgressCountMap.getOrDefault(c.getId(), 0L).intValue())
                     .lastWorkDate(lastDate != null ? lastDate.format(DateTimeFormatter.ofPattern("yyyy-MM-dd")) : "-")
                     .build();
         });
