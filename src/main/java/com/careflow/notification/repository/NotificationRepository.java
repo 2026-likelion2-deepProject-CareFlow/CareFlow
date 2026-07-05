@@ -64,4 +64,10 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     // [기사용 API] 특정 사용자의 알림 유형(type)별 갯수 집계
     @Query("SELECT n.type, COUNT(n) FROM Notification n WHERE n.user.id = :userId GROUP BY n.type")
     List<Object[]> countGroupByTypeForUser(@org.springframework.data.repository.query.Param("userId") Long userId);
+
+    // [기사용 API] 특정 사용자의 미열람 알림 전체를 일괄 읽음 처리
+    @Modifying
+    @Transactional
+    @Query("UPDATE Notification n SET n.isRead = true WHERE n.user.id = :userId AND n.isRead = false")
+    int markAllAsReadByUserId(@Param("userId") Long userId);
 }

@@ -1,4 +1,3 @@
-// 파일 경로: src/main/java/com/careflow/engineer/dto/ScheduleResponse.java
 package com.careflow.engineer.dto;
 
 import com.careflow.engineer.domain.entity.EngineerSchedule;

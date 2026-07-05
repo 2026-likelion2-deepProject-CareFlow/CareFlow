@@ -310,12 +310,19 @@ public class AsRequestService {
 
         User engineer = userRepository.findById(engineerId).orElseThrow();
 
-        // 해당 요청의 가장 최근 상태 로그를 가져옵니다. (없으면 기본값 WAITING)
+        // 해당 요청의 가장 최근 "세부 진행상태"를 as_status_logs 에서 조회 (없으면 기본값 WAITING)
+        // 세부 진행상태(ENGINEER_DEPARTED/ENGINEER_ARRIVED)는 as_requests.status ENUM 에 존재하지 않으므로,
+        // 순서 검증은 반드시 로그(to_status)를 유일한 기준으로 삼는다.
         List<AsStatusLog> logs = asStatusLogRepository.findByAsRequest_IdOrderByCreatedAtAsc(requestId);
-        String oldStatusStr = logs.isEmpty() ? "WAITING" : logs.get(logs.size() - 1).getToStatus();
+        String lastLogStatus = logs.isEmpty() ? "WAITING" : logs.get(logs.size() - 1).getToStatus();
 
-        // 2. 도메인 메서드로 상태 변경 (더티 체킹)
-        String actionMemo = "";
+        // 2. 세부 진행상태 순서 검증 (로그 기준)
+        validateProgressOrder(lastLogStatus, newStatus);
+
+        // 3. 도메인 메서드로 상태 변경 (더티 체킹)
+        //    - 출발/도착: as_requests.status 는 ACCEPTED 로 유지, 로그로만 기록
+        //    - 작업시작: as_requests.status 를 IN_PROGRESS 로 전환
+        String actionMemo;
         switch (newStatus) {
             case ENGINEER_DEPARTED -> {
                 asRequest.depart();
@@ -332,11 +339,11 @@ public class AsRequestService {
             default -> throw new IllegalArgumentException("해당 API로는 출발/도착/작업시작 상태만 변경 가능합니다.");
         }
 
-        // 🌟 3. 상태 변경 로그(AsStatusLog) 기록
+        // 🌟 4. 상태 변경 로그(AsStatusLog) 기록 (세부 진행상태의 진실의 원천)
         AsStatusLog statusLog = AsStatusLog.builder()
                 .asRequest(asRequest)
                 .changedBy(engineer)
-                .fromStatus(oldStatusStr)
+                .fromStatus(lastLogStatus)
                 .toStatus(newStatus.name())
                 .memo(actionMemo)
                 .build();
@@ -360,5 +367,40 @@ public class AsRequestService {
         if (asRequest.getAgency() != null && asRequest.getAgency().getRepresentativeId() != null) {
             eventPublisher.publishEvent(new AsStatusNotificationEvent(asRequest.getAgency().getRepresentativeId(), title, body));
         }
+    }
+
+    /**
+     * 세부 진행상태(출발/도착/작업시작) 순서를 as_status_logs 최신 상태를 기준으로 검증한다.
+     * as_requests.status 에는 ENGINEER_DEPARTED/ENGINEER_ARRIVED 가 저장되지 않으므로,
+     * 이 순서 검증은 로그(to_status)를 유일한 기준으로 삼는다.
+     */
+    private void validateProgressOrder(String lastLogStatus, AsStatus target) {
+        switch (target) {
+            case ENGINEER_DEPARTED -> {
+                if (isDepartedOrLater(lastLogStatus)) {
+                    throw new IllegalStateException("이미 출발 이후 단계입니다. (현재 진행상태: " + lastLogStatus + ")");
+                }
+            }
+            case ENGINEER_ARRIVED -> {
+                if (!AsStatus.ENGINEER_DEPARTED.name().equals(lastLogStatus)) {
+                    throw new IllegalStateException("출발 처리 후에만 도착할 수 있습니다. (현재 진행상태: " + lastLogStatus + ")");
+                }
+            }
+            case IN_PROGRESS -> {
+                if (!AsStatus.ENGINEER_ARRIVED.name().equals(lastLogStatus)) {
+                    throw new IllegalStateException("도착 처리 후에만 작업을 시작할 수 있습니다. (현재 진행상태: " + lastLogStatus + ")");
+                }
+            }
+            default -> { /* 그 외 상태는 이 API 범위 밖 */ }
+        }
+    }
+
+    /** 로그상 이미 '출발' 이후 단계인지 여부 (중복 출발/역행 방지용) */
+    private boolean isDepartedOrLater(String logStatus) {
+        return AsStatus.ENGINEER_DEPARTED.name().equals(logStatus)
+                || AsStatus.ENGINEER_ARRIVED.name().equals(logStatus)
+                || AsStatus.IN_PROGRESS.name().equals(logStatus)
+                || AsStatus.COMPLETED.name().equals(logStatus)
+                || AsStatus.PAID.name().equals(logStatus);
     }
 }

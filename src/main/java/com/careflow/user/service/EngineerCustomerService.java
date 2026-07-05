@@ -2,7 +2,10 @@ package com.careflow.user.service;
 
 import com.careflow.appliance.entity.Appliance;
 import com.careflow.appliance.repository.ApplianceRepository;
+import com.careflow.as_request.entity.AsRequest;
 import com.careflow.as_request.repository.AsRequestRepository;
+import com.careflow.as_status_log.entity.AsStatusLog;
+import com.careflow.as_status_log.repository.AsStatusLogRepository;
 import com.careflow.assignment.repository.AsAssignmentRepository;
 import com.careflow.report.domain.entity.WorkReport;
 import com.careflow.report.repository.WorkReportRepository;
@@ -35,6 +38,7 @@ public class EngineerCustomerService {
     private final AsAssignmentRepository asAssignmentRepository;
     private final ApplianceRepository applianceRepository;
     private final AsRequestRepository asRequestRepository;
+    private final AsStatusLogRepository asStatusLogRepository;
 
     /**
      * 1. 내 고객 목록 페이징 조회 (가전 개수, A/S 건수, 최근 작업일 N+1 방지 집계 포함)
@@ -111,26 +115,59 @@ public class EngineerCustomerService {
                     .build();
         }).toList();
 
-        // 4. 현재 기사가 해당 고객에게 진행 중인(WAITING/ACCEPTED ~ IN_PROGRESS) 최신 A/S 건 확인
-        Long inProgressId = asAssignmentRepository.findActiveByEngineerId(engineerId).stream()
-                .filter(a -> a.getAsRequest().getCustomer().getId().equals(customerId))
+        // 4. 현재 기사가 해당 고객에게 진행 중인(ACCEPTED ~ IN_PROGRESS) 최신 A/S 건 확인
+        AsRequest inProgressRequest = asAssignmentRepository.findActiveByEngineerId(engineerId).stream()
+                .map(a -> a.getAsRequest())
+                .filter(r -> r != null && r.getCustomer().getId().equals(customerId))
                 .findFirst()
-                .map(a -> a.getAsRequest().getId())
                 .orElse(null);
+
+        Long inProgressId = inProgressRequest != null ? inProgressRequest.getId() : null;
+
+        // 4-1. 🌟 진행 중 작업 상세 카드 구성 (제품명/증상/방문일/진행상태/상태)
+        //      세부 진행상태(progressStatus)는 as_status_logs 의 최신 to_status 를 사용한다.
+        EngineerCustomerDetailResponse.InProgressWorkDto inProgressWork = null;
+        if (inProgressRequest != null) {
+            List<AsStatusLog> progressLogs =
+                    asStatusLogRepository.findByAsRequest_IdOrderByCreatedAtAsc(inProgressRequest.getId());
+            String progressStatus = progressLogs.isEmpty()
+                    ? null : progressLogs.get(progressLogs.size() - 1).getToStatus();
+
+            String productName = inProgressRequest.getAppliance().getBrand()
+                    + " " + inProgressRequest.getAppliance().getModelName();
+
+            inProgressWork = EngineerCustomerDetailResponse.InProgressWorkDto.builder()
+                    .requestId(inProgressRequest.getId())
+                    .productName(productName)
+                    .symptom(inProgressRequest.getSymptom().getSymptomName())
+                    .visitDate(inProgressRequest.getScheduledDate() != null
+                            ? inProgressRequest.getScheduledDate().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))
+                            : null)
+                    .progressStatus(progressStatus)
+                    .status(inProgressRequest.getStatus() != null ? inProgressRequest.getStatus().name() : null)
+                    .build();
+        }
 
         // 5. DTO 조립
         String regionName = customer.getRegionId() != null ? customer.getRegionId().getName() : "지역 미상";
 
         return EngineerCustomerDetailResponse.builder()
                 .customerId(customer.getId())
-                .email(customer.getEmail()) // 🌟 프론트 요청 추가
+                .email(customer.getEmail())
                 .name(customer.getName())
                 .phone(customer.getPhone())
                 .region(regionName)
                 .addressDetail(customer.getAddressDetail() != null ? customer.getAddressDetail() : "")
-                .joinedAt(customer.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd"))) // 🌟 프론트 요청 추가
-                .appliances(applianceDtos) // 🌟 프론트 요청 추가
-                .inProgressRequestId(inProgressId) // 🌟 프론트 요청 추가
+                .joinedAt(customer.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyy-MM-dd")))
+                .status(customer.getStatus()) // 🌟 추가: 고객 계정 상태
+                // ⚠ 아래 필드는 DB 미지원 → placeholder (프론트가 null / 빈 목록을 안전하게 처리)
+                .grade(null)
+                .preferredContactTime(null)
+                .memo(null)
+                .memos(List.of())
+                .appliances(applianceDtos)
+                .inProgressRequestId(inProgressId)      // 하위호환 유지
+                .inProgressWork(inProgressWork)          // 🌟 추가: 진행 중 작업 상세
                 .asHistory(historyList)
                 .build();
     }

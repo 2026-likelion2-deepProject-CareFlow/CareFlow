@@ -156,25 +156,39 @@ public class AsRequest {
         this.updatedAt = LocalDateTime.now();
     }
 
-    public void depart() {   // 기사용: 현장으로 출발
+    /**
+     * 기사용: 현장으로 출발 (세부 진행상태)
+     * ⚠ as_requests.status ENUM 은 PENDING/AGENCY_RECEIVED/ASSIGNED/ACCEPTED/IN_PROGRESS/COMPLETED/PAID/CANCELLED
+     *    만 허용한다. ENGINEER_DEPARTED/ENGINEER_ARRIVED 같은 세부 진행상태를 이 컬럼에 저장하면
+     *    "Data truncated for column 'status'" 오류가 발생하므로, as_status_logs.to_status 로만 기록한다.
+     *    (coarse status 는 ACCEPTED 로 유지)
+     */
+    public void depart() {
         if (this.status != AsStatus.ACCEPTED) {
-            throw new IllegalStateException("배정을 수락한(ACCEPTED) 상태에서만 출발 처리할 수 있습니다.");
+            throw new IllegalStateException("배정을 수락한(ACCEPTED) 상태에서만 출발 처리할 수 있습니다. (현재 상태: " + this.status + ")");
         }
-        this.status = AsStatus.ENGINEER_DEPARTED;
         this.updatedAt = LocalDateTime.now();
     }
 
-    public void arrive() {   // 기사용: 현장 도착
-        if (this.status != AsStatus.ENGINEER_DEPARTED) {
-            throw new IllegalStateException("출발(ENGINEER_DEPARTED) 상태에서만 도착 처리할 수 있습니다.");
+    /**
+     * 기사용: 현장 도착 (세부 진행상태)
+     * 출발과 동일하게 as_requests.status 는 ACCEPTED 로 유지하고 세부 상태는 로그로만 관리한다.
+     * '출발 -> 도착' 순서 검증은 서비스 계층에서 as_status_logs 최신 상태를 기준으로 수행한다.
+     */
+    public void arrive() {
+        if (this.status != AsStatus.ACCEPTED) {
+            throw new IllegalStateException("수락(ACCEPTED) 상태에서만 도착 처리할 수 있습니다. (현재 상태: " + this.status + ")");
         }
-        this.status = AsStatus.ENGINEER_ARRIVED;
         this.updatedAt = LocalDateTime.now();
     }
 
-    public void startWork() {   // 기사용: 수리 시작 (수정됨)
-        if (this.status != AsStatus.ENGINEER_ARRIVED) {
-            throw new IllegalStateException("현장 도착(ENGINEER_ARRIVED) 완료 후 작업을 시작할 수 있습니다.");
+    /**
+     * 기사용: 수리 시작 — 이 시점에 비로소 coarse status 를 IN_PROGRESS 로 전환한다.
+     * (출발/도착 동안 status 는 ACCEPTED 로 유지되었으므로 ACCEPTED -> IN_PROGRESS)
+     */
+    public void startWork() {
+        if (this.status != AsStatus.ACCEPTED) {
+            throw new IllegalStateException("수락(ACCEPTED) 상태에서만 작업을 시작할 수 있습니다. (현재 상태: " + this.status + ")");
         }
         this.status = AsStatus.IN_PROGRESS;
         this.updatedAt = LocalDateTime.now();

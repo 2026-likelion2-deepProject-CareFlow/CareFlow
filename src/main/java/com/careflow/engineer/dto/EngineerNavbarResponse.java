@@ -1,4 +1,3 @@
-// 파일 경로: src/main/java/com/careflow/engineer/dto/EngineerNavbarResponse.java
 package com.careflow.engineer.dto;
 
 import lombok.Builder;

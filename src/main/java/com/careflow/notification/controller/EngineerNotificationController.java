@@ -8,10 +8,7 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestParam;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import java.util.Map;
 
@@ -49,5 +46,30 @@ public class EngineerNotificationController {
 
         Map<String, Long> summary = notificationService.getNotificationSummary(userDetails.getUserId());
         return ResponseEntity.ok(summary);
+    }
+
+    /**
+     * 기사 본인의 알림 단건 읽음 처리
+     * PATCH /api/engineer/notifications/{notificationId}/read
+     */
+    @PatchMapping("/{notificationId}/read")
+    public ResponseEntity<Void> markAsRead(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @PathVariable Long notificationId) {
+
+        notificationService.markAsRead(userDetails.getUserId(), notificationId);
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * 기사 본인의 알림 전체 일괄 읽음 처리
+     * PATCH /api/engineer/notifications/read-all
+     */
+    @PatchMapping("/read-all")
+    public ResponseEntity<Void> markAllAsRead(
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+
+        notificationService.markAllAsRead(userDetails.getUserId());
+        return ResponseEntity.noContent().build();
     }
 }

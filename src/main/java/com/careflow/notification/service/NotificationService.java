@@ -13,10 +13,7 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
-import java.util.LinkedHashMap;
-import java.util.List;
-import java.util.Map;
-import java.util.UUID;
+import java.util.*;
 
 @Slf4j
 @Service
@@ -134,5 +131,30 @@ public class NotificationService {
         summary.put("ALL", totalCount);
 
         return summary;
+    }
+
+    /**
+     * [기사용 API] 알림 단건 읽음 처리
+     */
+    @org.springframework.transaction.annotation.Transactional
+    public void markAsRead(Long userId, Long notificationId) {
+        Notification notification = notificationRepository.findById(notificationId)
+                .orElseThrow(() -> new NoSuchElementException("존재하지 않는 알림입니다."));
+
+        // 본인 소유의 알림인지 철저히 검증 (BOLA 취약점 방어)
+        if (!notification.getUser().getId().equals(userId)) {
+            throw new IllegalStateException("본인의 알림만 읽음 처리할 수 있습니다.");
+        }
+
+        notification.markAsRead(); // 엔티티 더티 체킹으로 자동 UPDATE
+    }
+
+    /**
+     * [기사용 API] 알림 전체 읽음 처리
+     */
+    @org.springframework.transaction.annotation.Transactional
+    public void markAllAsRead(Long userId) {
+        // 벌크 연산 쿼리 호출로 성능 최적화
+        notificationRepository.markAllAsReadByUserId(userId);
     }
 }
