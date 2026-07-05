@@ -13,6 +13,8 @@ import org.springframework.stereotype.Service;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 import java.io.IOException;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 
@@ -100,5 +102,37 @@ public class NotificationService {
 
         Page<Notification> notifications = notificationRepository.findByUserIdAndTypeWithPaging(userId, filterType, pageable);
         return notifications.map(NotificationResponse::from);
+    }
+
+    /**
+     * [기사용 API] 알림 수신함 통계 요약 (유형별 알림 건수 + 전체 건수)
+     */
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public Map<String, Long> getNotificationSummary(Long userId) {
+        List<Object[]> rows = notificationRepository.countGroupByTypeForUser(userId);
+
+        // 프론트엔드에서 undefined 에러가 나지 않도록 기본값 0으로 초기화
+        Map<String, Long> summary = new LinkedHashMap<>();
+        summary.put("ALL", 0L);
+        summary.put("AS_STATUS", 0L);
+        summary.put("LMS", 0L);
+        summary.put("CONSUMABLE", 0L);
+        summary.put("WARRANTY", 0L);
+
+        long totalCount = 0L;
+
+        // DB에서 조회된 타입별 갯수를 덮어쓰기 및 전체 갯수(ALL) 합산
+        for (Object[] row : rows) {
+            String type = (String) row[0];
+            Long count = (Long) row[1];
+
+            summary.put(type, count);
+            totalCount += count;
+        }
+
+        // 총합을 ALL 키에 저장
+        summary.put("ALL", totalCount);
+
+        return summary;
     }
 }

@@ -13,6 +13,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
+import java.util.Map;
+
 @RestController
 @RequestMapping("/api/engineer/notifications")
 @RequiredArgsConstructor
@@ -35,5 +37,17 @@ public class EngineerNotificationController {
         Page<NotificationResponse> response = notificationService.getNotifications(userDetails.getUserId(), type, pageRequest);
 
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * 기사 본인의 알림 유형별 통계 요약 조회
+     * GET /api/engineer/notifications/summary
+     */
+    @GetMapping("/summary")
+    public ResponseEntity<Map<String, Long>> getNotificationSummary(
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+
+        Map<String, Long> summary = notificationService.getNotificationSummary(userDetails.getUserId());
+        return ResponseEntity.ok(summary);
     }
 }
