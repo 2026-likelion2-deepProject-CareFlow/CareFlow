@@ -16,10 +16,16 @@ import java.util.NoSuchElementException;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
+    // Bean Validation(@Valid) 실패 시 스프링 내부 예외 텍스트를 그대로 노출하지 않고
+    // 첫 번째 필드 오류의 메시지만 깔끔하게 뽑아서 반환 (예: "비밀번호는 8자 이상 64자 이하로 입력해주세요.")
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleValidation(MethodArgumentNotValidException e) {
+        String message = e.getBindingResult().getFieldErrors().stream()
+                .findFirst()
+                .map(fe -> fe.getDefaultMessage())
+                .orElse("입력값이 올바르지 않습니다.");
         return ResponseEntity.badRequest()
-                .body(ErrorResponse.of(e.getMessage()));
+                .body(ErrorResponse.of(message));
     }
 
     // 필수 요청 파라미터 누락 시 400 반환
