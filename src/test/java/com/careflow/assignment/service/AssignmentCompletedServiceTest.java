@@ -9,7 +9,7 @@ import com.careflow.auth.security.CustomUserDetails;
 import com.careflow.engineer.domain.entity.EngineerProfile;
 import com.careflow.engineer.repository.EngineerProfileRepository;
 import com.careflow.report.domain.entity.WorkReport;
-import com.careflow.report.domain.enums.DiagnosisResult;
+import com.careflow.common.enums.DiagnosisResult;
 import com.careflow.report.repository.WorkReportRepository;
 import com.careflow.review.entity.Review;
 import com.careflow.review.repository.ReviewRepository;

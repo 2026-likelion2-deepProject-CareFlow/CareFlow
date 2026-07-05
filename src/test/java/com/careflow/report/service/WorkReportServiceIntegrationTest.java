@@ -24,8 +24,8 @@ import com.careflow.part.repository.RepairPartRepository;
 import com.careflow.region.entity.Regions;
 import com.careflow.report.domain.entity.WorkReport;
 import com.careflow.report.domain.entity.WorkReportPart;
-import com.careflow.report.domain.enums.DiagnosisResult;
-import com.careflow.report.domain.enums.PartImportance;
+import com.careflow.common.enums.DiagnosisResult;
+import com.careflow.common.enums.PartImportance;
 import com.careflow.report.dto.RepairHistoryResponse;
 import com.careflow.report.dto.WorkReportDetailResponse;
 import com.careflow.report.repository.WorkReportRepository;
@@ -232,7 +232,7 @@ class WorkReportServiceIntegrationTest {
         WorkReport report1 = WorkReport.builder()
                 .asRequest(testAsRequest)
                 .engineer(testEngineer)
-                .diagnosisResult(com.careflow.report.domain.enums.DiagnosisResult.REPAIRED)
+                .diagnosisResult(DiagnosisResult.REPAIRED)
                 .workDurationMin(60)
                 .finalAmount(50000)
                 .memo("첫 번째 수리")
@@ -263,7 +263,7 @@ class WorkReportServiceIntegrationTest {
         WorkReport report2 = WorkReport.builder()
                 .asRequest(request2)
                 .engineer(testEngineer)
-                .diagnosisResult(com.careflow.report.domain.enums.DiagnosisResult.PART_REPLACED)
+                .diagnosisResult(DiagnosisResult.PART_REPLACED)
                 .workDurationMin(120)
                 .finalAmount(150000)
                 .memo("두 번째 수리 (최신)")

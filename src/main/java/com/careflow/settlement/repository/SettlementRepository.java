@@ -1,5 +1,6 @@
 package com.careflow.settlement.repository;
 
+import com.careflow.common.enums.DiagnosisResult;
 import com.careflow.settlement.dto.EngineerSettlementSummary;
 import com.careflow.settlement.entity.Settlement;
 import org.springframework.data.domain.Page;
@@ -119,7 +120,7 @@ public interface SettlementRepository extends JpaRepository<Settlement, Long> {
             @Param("from") java.time.LocalDateTime from,
             @Param("to") java.time.LocalDateTime to,
             @Param("brand") String brand,
-            @Param("status") com.careflow.report.domain.enums.DiagnosisResult status);
+            @Param("status") DiagnosisResult status);
 
     /**
      * paid_at 기준 월 범위 내 대행사 정산 목록 전체 조회 (CSV 다운로드용)

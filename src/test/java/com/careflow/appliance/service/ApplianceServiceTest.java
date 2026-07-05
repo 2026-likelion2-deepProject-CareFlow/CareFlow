@@ -8,7 +8,7 @@ import com.careflow.appliance.repository.HealthCertificateRepository;
 import com.careflow.part.domain.entity.RepairPart;
 import com.careflow.report.domain.entity.WorkReport;
 import com.careflow.report.domain.entity.WorkReportPart;
-import com.careflow.report.domain.enums.PartImportance;
+import com.careflow.common.enums.PartImportance;
 import com.careflow.report.repository.WorkReportRepository;
 import com.careflow.user.entity.User;
 import org.junit.jupiter.api.DisplayName;

@@ -3,7 +3,7 @@ package com.careflow.engineer.service;
 import com.careflow.engineer.domain.entity.EngineerExpertBrand;
 import com.careflow.engineer.domain.entity.EngineerProfile;
 import com.careflow.engineer.domain.entity.EngineerSchedule;
-import com.careflow.engineer.domain.enums.ScheduleStatus;
+import com.careflow.common.enums.ScheduleStatus;
 import com.careflow.engineer.dto.CustomerEngineerAvailabilityResponse;
 import com.careflow.engineer.dto.CustomerEngineerSummaryResponse;
 import com.careflow.engineer.repository.EngineerExpertBrandRepository;

@@ -1,4 +1,4 @@
-package com.careflow.report.domain.enums;
+package com.careflow.common.enums;
 
 public enum PartImportance {
     CRITICAL(1),

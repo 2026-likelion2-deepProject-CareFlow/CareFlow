@@ -1,12 +1,9 @@
 package com.careflow.report.policy;
 
-import com.careflow.report.domain.enums.PartImportance;
+import com.careflow.common.enums.PartImportance;
 import com.careflow.report.domain.policy.HealthScoreCalculator;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
-
-import java.time.LocalDate;
-import java.time.LocalDateTime;
 
 import static org.assertj.core.api.Assertions.assertThat;
 

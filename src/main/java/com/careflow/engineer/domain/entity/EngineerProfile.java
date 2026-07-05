@@ -1,7 +1,7 @@
 package com.careflow.engineer.domain.entity;
 
 import com.careflow.appliance.entity.ApplianceCategory;
-import com.careflow.engineer.domain.enums.SkillLevel;
+import com.careflow.common.enums.SkillLevel;
 import com.careflow.user.entity.User;
 import jakarta.persistence.*;
 import lombok.AccessLevel;

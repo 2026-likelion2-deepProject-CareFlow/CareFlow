@@ -8,7 +8,7 @@ import com.careflow.bank_account.entity.BankAccount;
 import com.careflow.bank_account.repository.BankAccountRepository;
 import com.careflow.engineer.domain.entity.EngineerProfile;
 import com.careflow.engineer.dto.EngineerDashboardResponse;
-import com.careflow.report.domain.enums.DiagnosisResult;
+import com.careflow.common.enums.DiagnosisResult;
 import com.careflow.settlement.dto.EngineerSettlementSummaryResponse;
 import com.careflow.engineer.repository.EngineerProfileRepository;
 import com.careflow.notification.repository.NotificationRepository;
@@ -162,7 +162,7 @@ public class EngineerDashboardService {
         DiagnosisResult statusEnum = null;
         if (status != null && !status.isBlank()) {
             try {
-                statusEnum = com.careflow.report.domain.enums.DiagnosisResult.valueOf(status.toUpperCase());
+                statusEnum = DiagnosisResult.valueOf(status.toUpperCase());
             } catch (IllegalArgumentException e) {
                 // 프론트에서 잘못된 값이 오면 무시 (필터 미적용)
                 statusEnum = null;

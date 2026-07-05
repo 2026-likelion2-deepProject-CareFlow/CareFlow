@@ -1,6 +1,6 @@
 package com.careflow.appliance.entity;
 
-import com.careflow.report.domain.enums.PartImportance; // 🎯 도메인 의존성 해결(Nit)은 추후 common 이동 시 일괄 처리
+import com.careflow.common.enums.PartImportance; // 🎯 도메인 의존성 해결(Nit)은 추후 common 이동 시 일괄 처리
 import com.careflow.report.domain.policy.HealthScoreCalculator;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
@@ -13,7 +13,6 @@ import org.springframework.data.jpa.domain.support.AuditingEntityListener;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;
-import java.time.temporal.ChronoUnit;
 
 @Entity
 @Table(

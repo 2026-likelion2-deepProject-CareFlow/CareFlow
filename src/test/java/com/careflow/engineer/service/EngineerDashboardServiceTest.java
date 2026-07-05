@@ -4,7 +4,7 @@ import com.careflow.as_status_log.repository.AsStatusLogRepository;
 import com.careflow.assignment.repository.AsAssignmentRepository;
 import com.careflow.bank_account.repository.BankAccountRepository;
 import com.careflow.engineer.domain.entity.EngineerProfile;
-import com.careflow.engineer.domain.enums.SkillLevel;
+import com.careflow.common.enums.SkillLevel;
 import com.careflow.engineer.dto.EngineerDashboardResponse;
 import com.careflow.engineer.repository.EngineerProfileRepository;
 import com.careflow.notification.repository.NotificationRepository;

@@ -11,6 +11,7 @@ import com.careflow.as_status_log.repository.AsStatusLogRepository;
 import com.careflow.assignment.entity.AsAssignment;
 import com.careflow.assignment.repository.AsAssignmentRepository;
 import com.careflow.common.enums.AsStatus;
+import com.careflow.common.enums.DiagnosisResult;
 import com.careflow.engineer.dto.CreateWorkReportRequest;
 import com.careflow.notification.service.NotificationService;
 import com.careflow.part.repository.RepairPartRepository;
@@ -213,7 +214,7 @@ class WorkReportServiceTest {
         given(symptom.getSymptomName()).willReturn("냉방 불량");
         given(report.getEngineer()).willReturn(engineer);
         given(engineer.getName()).willReturn("김기사");
-        given(report.getDiagnosisResult()).willReturn(com.careflow.report.domain.enums.DiagnosisResult.REPAIRED);
+        given(report.getDiagnosisResult()).willReturn(DiagnosisResult.REPAIRED);
         given(report.getFinalAmount()).willReturn(50000);
 
         given(workReportRepository.findByApplianceIdOrderBySubmittedAtDesc(applianceId)).willReturn(List.of(report));
@@ -272,7 +273,7 @@ class WorkReportServiceTest {
         given(report.getReportId()).willReturn(reportId);
         given(report.getAsRequest()).willReturn(asRequest);
         given(report.getEngineer()).willReturn(engineer);
-        given(report.getDiagnosisResult()).willReturn(com.careflow.report.domain.enums.DiagnosisResult.NORMAL);
+        given(report.getDiagnosisResult()).willReturn(DiagnosisResult.NORMAL);
         given(report.getParts()).willReturn(List.of());
 
         given(workReportRepository.findByIdWithParts(reportId)).willReturn(Optional.of(report));
@@ -352,7 +353,7 @@ class WorkReportServiceTest {
             if (hasReport) {
                 WorkReport report = mock(WorkReport.class);
                 given(report.getReportId()).willReturn(10L);
-                given(report.getDiagnosisResult()).willReturn(com.careflow.report.domain.enums.DiagnosisResult.REPAIRED);
+                given(report.getDiagnosisResult()).willReturn(DiagnosisResult.REPAIRED);
                 given(report.getFinalAmount()).willReturn(50000);
                 given(report.isCustomerApproved()).willReturn(isApproved);
                 given(report.getSubmittedAt()).willReturn(LocalDateTime.of(2024, 6, 18, 15, 30));

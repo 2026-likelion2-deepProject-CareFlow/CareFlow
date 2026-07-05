@@ -11,7 +11,7 @@ import com.careflow.appliance.entity.ApplianceCategory;
 import com.careflow.appliance.repository.HealthCertificateRepository;
 import com.careflow.report.domain.entity.WorkReport;
 import com.careflow.report.domain.entity.WorkReportPart;
-import com.careflow.report.domain.enums.PartImportance;
+import com.careflow.common.enums.PartImportance;
 import com.careflow.report.domain.policy.HealthScoreCalculator;
 import com.careflow.report.repository.WorkReportRepository;
 import com.careflow.user.entity.User;

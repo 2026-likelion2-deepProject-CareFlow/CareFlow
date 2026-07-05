@@ -2,6 +2,7 @@ package com.careflow.assignment.repository;
 
 import com.careflow.assignment.entity.AsAssignment;
 import com.careflow.assignment.dto.EngineerCompletedCount;
+import com.careflow.common.enums.DiagnosisResult;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -221,7 +222,7 @@ public interface AsAssignmentRepository extends JpaRepository<AsAssignment, Long
             @Param("startDate") java.time.LocalDate startDate,
             @Param("endDate") java.time.LocalDate endDate,
             @Param("brand") String brand,
-            @Param("status") com.careflow.report.domain.enums.DiagnosisResult status);
+            @Param("status") DiagnosisResult status);
 
     // [기사용] 본인이 담당한 적 있는 고객(User) 목록 조회 (중복 제거)
     @org.springframework.data.jpa.repository.Query(

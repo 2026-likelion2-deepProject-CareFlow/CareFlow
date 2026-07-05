@@ -4,7 +4,7 @@ import com.careflow.appliance.entity.Appliance;
 import com.careflow.as_request.entity.AsRequest;
 import com.careflow.region.entity.Regions;
 import com.careflow.report.domain.entity.WorkReport;
-import com.careflow.report.domain.enums.DiagnosisResult;
+import com.careflow.common.enums.DiagnosisResult;
 import com.careflow.report.repository.WorkReportRepository;
 import com.careflow.symptom.entity.Symptom;
 import com.careflow.user.dto.EngineerCustomerDetailResponse;

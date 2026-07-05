@@ -1,6 +1,6 @@
 package com.careflow.report.domain.policy;
 
-import com.careflow.report.domain.enums.PartImportance;
+import com.careflow.common.enums.PartImportance;
 
 import java.time.LocalDate;
 import java.time.LocalDateTime;

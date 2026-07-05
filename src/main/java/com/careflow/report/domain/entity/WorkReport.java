@@ -1,7 +1,7 @@
 package com.careflow.report.domain.entity;
 
 import com.careflow.as_request.entity.AsRequest;
-import com.careflow.report.domain.enums.DiagnosisResult;
+import com.careflow.common.enums.DiagnosisResult;
 import com.careflow.user.entity.User;
 import jakarta.persistence.*;
 import lombok.AccessLevel;

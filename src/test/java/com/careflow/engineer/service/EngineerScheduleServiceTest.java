@@ -1,12 +1,8 @@
 package com.careflow.engineer.service;
 
 import com.careflow.common.enums.Role;
-import com.careflow.appliance.entity.ApplianceCategory;
-import com.careflow.engineer.domain.entity.EngineerProfile;
 import com.careflow.engineer.domain.entity.EngineerSchedule;
-import com.careflow.engineer.domain.enums.ScheduleStatus;
-import com.careflow.engineer.domain.enums.SkillLevel;
-import com.careflow.engineer.dto.ScheduleRequest;
+import com.careflow.common.enums.ScheduleStatus;
 import com.careflow.engineer.dto.ScheduleResponse;
 import com.careflow.engineer.repository.EngineerProfileRepository;
 import com.careflow.engineer.repository.EngineerScheduleRepository;
@@ -22,7 +18,6 @@ import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
 import org.springframework.test.util.ReflectionTestUtils;
 
-import java.lang.reflect.Constructor;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;

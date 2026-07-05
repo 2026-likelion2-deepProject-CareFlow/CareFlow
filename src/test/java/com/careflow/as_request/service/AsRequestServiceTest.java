@@ -15,7 +15,7 @@ import com.careflow.common.enums.AsStatus;
 import com.careflow.common.enums.Role;
 import com.careflow.appliance.entity.ApplianceCategory;
 import com.careflow.engineer.domain.entity.EngineerProfile;
-import com.careflow.engineer.domain.enums.ScheduleStatus;
+import com.careflow.common.enums.ScheduleStatus;
 import com.careflow.engineer.repository.EngineerProfileRepository;
 import com.careflow.notification.service.NotificationService;
 import com.careflow.region.entity.Regions;

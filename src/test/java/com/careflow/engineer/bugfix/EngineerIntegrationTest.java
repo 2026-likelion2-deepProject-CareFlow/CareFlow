@@ -24,7 +24,7 @@ import com.careflow.payment.repository.PaymentRepository;
 import com.careflow.region.entity.Regions;
 import com.careflow.region.repository.RegionRepository;
 import com.careflow.report.domain.entity.WorkReport;
-import com.careflow.report.domain.enums.DiagnosisResult;
+import com.careflow.common.enums.DiagnosisResult;
 import com.careflow.report.repository.WorkReportRepository;
 import com.careflow.review.entity.Review;
 import com.careflow.review.repository.ReviewRepository;

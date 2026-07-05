@@ -1,6 +1,6 @@
 package com.careflow.engineer.domain.entity;
 
-import com.careflow.engineer.domain.enums.ScheduleStatus;
+import com.careflow.common.enums.ScheduleStatus;
 import com.careflow.user.entity.User;
 import jakarta.persistence.*;
 import lombok.AccessLevel;

@@ -1,6 +1,6 @@
 package com.careflow.part.domain.entity;
 
-import com.careflow.report.domain.enums.PartImportance;
+import com.careflow.common.enums.PartImportance;
 import jakarta.persistence.*;
 import lombok.AccessLevel;
 import lombok.Getter;

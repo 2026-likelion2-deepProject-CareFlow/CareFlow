@@ -5,7 +5,7 @@ import com.careflow.appliance.entity.ApplianceCategory;
 import com.careflow.engineer.domain.entity.EngineerExpertBrand;
 import com.careflow.engineer.domain.entity.EngineerProfile;
 import com.careflow.engineer.domain.entity.EngineerServiceRegion;
-import com.careflow.engineer.domain.enums.SkillLevel;
+import com.careflow.common.enums.SkillLevel;
 import com.careflow.engineer.dto.CreateProfileRequest;
 import com.careflow.engineer.dto.ProfileResponse;
 import com.careflow.engineer.dto.UpdateProfileRequest;
