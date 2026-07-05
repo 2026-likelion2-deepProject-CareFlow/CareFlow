@@ -9,6 +9,9 @@ import java.time.LocalDateTime;
 public record PaymentResponse(
         Long paymentId,
         Long requestId,
+        String applianceBrand,
+        String applianceModelName,
+        String engineerName,
         Integer amount,
         String status,
         String pgProvider,
