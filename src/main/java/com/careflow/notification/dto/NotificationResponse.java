@@ -16,7 +16,6 @@ public class NotificationResponse {
     private final String body;
     private final String channel;
     private final String createdAt;
-    private final boolean isRead;
 
     public static NotificationResponse from(Notification notification) {
         // 1. 날짜 포맷팅 (프론트 요구사항: 2024.06.18 09:30)
@@ -35,7 +34,6 @@ public class NotificationResponse {
                 .body(notification.getBody())
                 .channel(notification.getChannel())
                 .createdAt(formattedDate)
-                .isRead(notification.isRead())
                 .build();
     }
 }

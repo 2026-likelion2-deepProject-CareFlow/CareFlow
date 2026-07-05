@@ -3,8 +3,6 @@ package com.careflow.assignment.repository;
 import com.careflow.assignment.entity.AsAssignment;
 import com.careflow.assignment.dto.EngineerCompletedCount;
 import com.careflow.common.enums.DiagnosisResult;
-import com.careflow.user.entity.User;
-import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -260,37 +258,4 @@ public interface AsAssignmentRepository extends JpaRepository<AsAssignment, Long
                                                          @Param("reqStatus") com.careflow.common.enums.AsStatus reqStatus,
                                                          @Param("startDate") java.time.LocalDate startDate,
                                                          @Param("endDate") java.time.LocalDate endDate);
-
-    // 🌟 신규: 동적 필터링이 추가된 쿼리 작성
-    @Query(value = "SELECT DISTINCT c FROM AsAssignment a " +
-            "JOIN a.asRequest r " +
-            "JOIN r.customer c " +
-            "LEFT JOIN FETCH c.regionId " +
-            "LEFT JOIN Appliance app ON app.user.id = c.id " +
-            "WHERE a.engineer.id = :engineerId " +
-            "AND (:status IS NULL OR c.status = :status) " +
-            "AND (:regionId IS NULL OR c.regionId.id = :regionId) " +
-            "AND (:brand IS NULL OR app.brand = :brand) " +
-            "AND (:search IS NULL OR c.name LIKE CONCAT('%', :search, '%') " +
-            "      OR c.phone LIKE CONCAT('%', :search, '%') " +
-            "      OR c.email LIKE CONCAT('%', :search, '%')) " +
-            "ORDER BY c.createdAt DESC",
-            countQuery = "SELECT COUNT(DISTINCT c) FROM AsAssignment a " +
-                    "JOIN a.asRequest r " +
-                    "JOIN r.customer c " +
-                    "LEFT JOIN Appliance app ON app.user.id = c.id " +
-                    "WHERE a.engineer.id = :engineerId " +
-                    "AND (:status IS NULL OR c.status = :status) " +
-                    "AND (:regionId IS NULL OR c.regionId.id = :regionId) " +
-                    "AND (:brand IS NULL OR app.brand = :brand) " +
-                    "AND (:search IS NULL OR c.name LIKE CONCAT('%', :search, '%') " +
-                    "      OR c.phone LIKE CONCAT('%', :search, '%') " +
-                    "      OR c.email LIKE CONCAT('%', :search, '%'))")
-    Page<User> findCustomersByEngineerIdWithFilters(
-            @Param("engineerId") Long engineerId,
-            @Param("search") String search,
-            @Param("status") String status,
-            @Param("regionId") Integer regionId,
-            @Param("brand") String brand,
-            Pageable pageable);
 }
