@@ -3,6 +3,7 @@ package com.careflow.account_requests.entity;
 import com.careflow.agency.entity.Agencies;
 import com.careflow.common.enums.AccountRequestsRole;
 import com.careflow.common.enums.AccountRequestsStatus;
+import com.careflow.common.util.PhoneNumberUtils;
 import com.careflow.region.entity.Regions; // 호준이의 수정 사항: Regions 임포트
 import com.careflow.user.entity.User;
 import jakarta.persistence.*;
@@ -103,7 +104,7 @@ public class AccountRequests {
                 .email(email)
                 .password(password)
                 .name(name)
-                .phone(phone)
+                .phone(PhoneNumberUtils.stripHyphens(phone)) // 전화번호는 하이픈 없이 저장(사업자번호는 유지)
                 .requestsRole(requestsRole)
                 .addressDetail(addressDetail)
                 .region(region) // 객체 형태로 전달
