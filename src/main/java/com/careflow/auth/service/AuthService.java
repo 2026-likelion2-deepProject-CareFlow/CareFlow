@@ -9,6 +9,7 @@ import com.careflow.auth.dto.TokenResponse;
 import com.careflow.auth.security.JwtProvider;
 import com.careflow.common.enums.AgencyStatus;
 import com.careflow.common.enums.Role;
+import com.careflow.common.util.PhoneNumberUtils;
 import com.careflow.region.entity.Regions;
 import com.careflow.region.repository.RegionRepository;
 import com.careflow.user.entity.User;
@@ -56,7 +57,7 @@ public class AuthService {
                 .email(request.getEmail())
                 .passwordHash(passwordEncoder.encode(request.getPassword()))
                 .name(request.getName())
-                .phone(request.getPhone())
+                .phone(PhoneNumberUtils.stripHyphens(request.getPhone())) // 전화번호는 하이픈 없이 저장(사업자번호는 유지)
                 .role(Role.CUSTOMER)
                 .regionId(regions)
                 .addressDetail(request.getAddressDetail())
