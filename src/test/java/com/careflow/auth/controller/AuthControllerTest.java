@@ -5,6 +5,7 @@ import com.careflow.auth.security.CustomOAuth2UserService;
 import com.careflow.auth.security.JwtProvider;
 import com.careflow.auth.security.OAuth2LoginSuccessHandler;
 import com.careflow.auth.service.AuthService;
+import com.careflow.auth.service.PasswordResetService;
 import com.careflow.common.config.PasswordEncoderConfig;
 import com.careflow.common.config.SecurityConfig;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
@@ -33,6 +34,10 @@ class AuthControllerTest {
 
     @MockitoBean
     private AuthService authService;
+    // PR #106(비밀번호 재설정)에서 AuthController 생성자에 추가된 의존성 —
+    // Mock 없으면 WebMvcTest 컨텍스트 로딩 자체가 NoSuchBeanDefinitionException으로 실패
+    @MockitoBean
+    private PasswordResetService passwordResetService;
     @MockitoBean
     private JwtProvider jwtProvider;
     @MockitoBean
@@ -52,7 +57,7 @@ class AuthControllerTest {
 
     private SignUpRequest createSignUpRequest(){
         final String email = "ghwns6659@gmail.com";
-        final String password = "12345678";
+        final String password = "password123"; // 비밀번호 정책(영문+숫자 혼합) 검증 통과용
         final String name = "서호준";
         final String phoneNumber = "010-1234-5678";
         final Integer regionId = 1;

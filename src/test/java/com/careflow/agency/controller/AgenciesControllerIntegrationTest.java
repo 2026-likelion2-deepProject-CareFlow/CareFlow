@@ -62,7 +62,7 @@ class AgenciesControllerIntegrationTest {
     void signup_newAgency_201_andPendingRequestSaved() throws Exception {
         AgencyCreateRequest req = buildRequest(
                 "홍길동", "super@newagency.com",
-                "NEW-BIZ-001", "신규대행사"
+                "111-11-11111", "신규대행사"
         );
 
         String body = mockMvc.perform(post("/api/agencies/signup")
@@ -73,25 +73,25 @@ class AgenciesControllerIntegrationTest {
 
         Long accountRequestId = Long.parseLong(body);
 
-        assertThat(agenciesRepository.findByBusinessNumber("NEW-BIZ-001")).isPresent();
+        assertThat(agenciesRepository.findByBusinessNumber("111-11-11111")).isPresent();
 
         AccountRequests saved = accountRequestsRepository.findById(accountRequestId).orElseThrow();
         assertThat(saved.getStatus()).isEqualTo(AccountRequestsStatus.PENDING);
         assertThat(saved.getEmail()).isEqualTo("super@newagency.com");
         assertThat(saved.getRequestsRole()).isEqualTo(AccountRequestsRole.AGENCY);
         // lazy proxy 초기화 방지를 위해 별도 조회
-        Agencies savedAgency = agenciesRepository.findByBusinessNumber("NEW-BIZ-001").orElseThrow();
+        Agencies savedAgency = agenciesRepository.findByBusinessNumber("111-11-11111").orElseThrow();
         assertThat(savedAgency.getApprovalStatus()).isEqualTo(AgencyStatus.PENDING);
     }
 
     @Test
     @DisplayName("[signup] 성공: APPROVED 된 대행사에 일반 관리자 계정 요청 — 201 반환")
     void signup_existingApprovedAgency_201_andManagerRequestSaved() throws Exception {
-        Agencies approvedAgency = saveApprovedAgency("APPROVED-BIZ-001", "승인된대행사");
+        Agencies approvedAgency = saveApprovedAgency("222-22-22222", "승인된대행사");
 
         AgencyCreateRequest req = buildRequest(
                 "김관리", "manager@approvedagency.com",
-                "APPROVED-BIZ-001", "승인된대행사"
+                "222-22-22222", "승인된대행사"
         );
 
         String body = mockMvc.perform(post("/api/agencies/signup")
@@ -110,11 +110,11 @@ class AgenciesControllerIntegrationTest {
     @Test
     @DisplayName("[signup] 실패: PENDING 인 대행사에 추가 요청 — 403 Forbidden")
     void signup_pendingAgency_403() throws Exception {
-        savePendingAgency("PENDING-BIZ-001", "대기중대행사");
+        savePendingAgency("333-33-33333", "대기중대행사");
 
         AgencyCreateRequest req = buildRequest(
                 "이중복", "dup@pending.com",
-                "PENDING-BIZ-001", "대기중대행사"
+                "333-33-33333", "대기중대행사"
         );
 
         mockMvc.perform(post("/api/agencies/signup")
@@ -129,11 +129,11 @@ class AgenciesControllerIntegrationTest {
     @Test
     @DisplayName("[signup] 실패: REJECTED 된 대행사에 추가 요청 — 403 Forbidden")
     void signup_rejectedAgency_403() throws Exception {
-        saveRejectedAgency("REJECTED-BIZ-001", "거부된대행사");
+        saveRejectedAgency("444-44-44444", "거부된대행사");
 
         AgencyCreateRequest req = buildRequest(
                 "박재도전", "retry@rejected.com",
-                "REJECTED-BIZ-001", "거부된대행사"
+                "444-44-44444", "거부된대행사"
         );
 
         mockMvc.perform(post("/api/agencies/signup")
@@ -145,7 +145,7 @@ class AgenciesControllerIntegrationTest {
     @Test
     @DisplayName("[signup] 실패: 이미 가입된 이메일로 재요청 — 400 Bad Request")
     void signup_duplicateEmail_400() throws Exception {
-        Agencies agency = savePendingAgency("DUP-BIZ-001", "중복테스트대행사");
+        Agencies agency = savePendingAgency("555-55-55555", "중복테스트대행사");
         accountRequestsRepository.save(AccountRequests.create(
                 agency, "dup@test.com", "hashed", "홍길동",
                 "010-1111-2222", AccountRequestsRole.AGENCY, "상세주소", savedRegion
@@ -153,7 +153,7 @@ class AgenciesControllerIntegrationTest {
 
         AgencyCreateRequest req = buildRequest(
                 "최재시도", "dup@test.com",
-                "NEW-BIZ-002", "또다른대행사"
+                "666-66-66666", "또다른대행사"
         );
 
         mockMvc.perform(post("/api/agencies/signup")
@@ -169,12 +169,12 @@ class AgenciesControllerIntegrationTest {
     @Test
     @DisplayName("[getAgency] 성공: 존재하는 대행사 이름으로 조회 — 200 OK + 대행사 정보 반환")
     void getAgency_found_200() throws Exception {
-        saveApprovedAgency("FIND-BIZ-001", "조회가능대행사");
+        saveApprovedAgency("777-77-77777", "조회가능대행사");
 
         mockMvc.perform(get("/api/agencies/agency")
                         .param("agencyName", "조회가능대행사"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.businessNumber").value("FIND-BIZ-001"));
+                .andExpect(jsonPath("$.businessNumber").value("777-77-77777"));
     }
 
     @Test
