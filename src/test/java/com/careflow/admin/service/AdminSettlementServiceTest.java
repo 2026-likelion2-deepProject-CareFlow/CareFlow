@@ -451,6 +451,24 @@ class AdminSettlementServiceTest {
             assertThat(platformSettlement.getStatus()).isEqualTo("PENDING");
             verify(settlementRepository, never()).markPaidByPlatformSettlementId(any(), any());
         }
+
+        @Test
+        @DisplayName("TC-8. DISPUTED(배치 보류 중) 배치 승인 시도 → IllegalStateException, 배치 상태 변경 없음")
+        void 보류중인배치_승인시도시_예외() {
+            given(agenciesRepository.existsById(AGENCY_ID)).willReturn(true);
+            PlatformSettlement disputed =
+                    PlatformSettlement.create(mockAgency(AGENCY_ID), 2026, 6, 500000, 50000, 450000, 2);
+            disputed.dispute();
+            given(platformSettlementRepository.findByAgency_IdAndSettlementYearAndSettlementMonth(AGENCY_ID, 2026, 6))
+                    .willReturn(Optional.of(disputed));
+
+            assertThatThrownBy(() -> adminSettlementService.approveAgency(adminUser, AGENCY_ID, 2026, 6))
+                    .isInstanceOf(IllegalStateException.class);
+
+            assertThat(disputed.getStatus()).isEqualTo("DISPUTED"); // PAID로 강제 전환되지 않아야 함
+            verify(agencyBankAccountRepository, never()).findByAgencyId(any());
+            verify(settlementRepository, never()).markPaidByPlatformSettlementId(any(), any());
+        }
     }
 
     // ── [⑩] PATCH /api/admin/settlements/approve-all ──────────────
@@ -529,6 +547,26 @@ class AdminSettlementServiceTest {
 
             assertThat(noAccountBatch.getStatus()).isEqualTo("PENDING"); // 스킵되어 그대로
             assertThat(okBatch.getStatus()).isEqualTo("PAID");
+        }
+
+        @Test
+        @DisplayName("TC-6. DISPUTED(배치 보류 중) 배치는 스킵되고, 나머지 대행사는 정상 처리된다")
+        void 보류중인배치는_스킵하고_나머지는_처리() throws Exception {
+            PlatformSettlement disputedBatch = PlatformSettlement.create(mockAgency(1L), 2026, 6, 100000, 10000, 90000, 1);
+            disputedBatch.dispute();
+            PlatformSettlement okBatch = PlatformSettlement.create(mockAgency(2L), 2026, 6, 200000, 20000, 180000, 1);
+            given(platformSettlementRepository.findBySettlementYearAndSettlementMonthAndStatusNot(2026, 6, "PAID"))
+                    .willReturn(List.of(disputedBatch, okBatch));
+
+            AgencyBankAccount account2 = mock(AgencyBankAccount.class);
+            given(account2.getId()).willReturn(22L);
+            given(agencyBankAccountRepository.findByAgencyId(2L)).willReturn(Optional.of(account2));
+
+            adminSettlementService.approveAll(adminUser, 2026, 6);
+
+            assertThat(disputedBatch.getStatus()).isEqualTo("DISPUTED"); // 스킵되어 그대로, PAID로 강제 전환되지 않음
+            assertThat(okBatch.getStatus()).isEqualTo("PAID");
+            verify(agencyBankAccountRepository, never()).findByAgencyId(1L);
         }
     }
 

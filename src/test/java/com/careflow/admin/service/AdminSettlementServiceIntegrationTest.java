@@ -526,6 +526,21 @@ class AdminSettlementServiceIntegrationTest {
             assertThat(platformSettlementRepository.findById(ps.getId()).orElseThrow().getStatus()).isEqualTo("PENDING");
             assertThat(settlementRepository.findById(s.getId()).orElseThrow().getStatus()).isEqualTo("PENDING");
         }
+
+        @Test
+        @DisplayName("DISPUTED(배치 보류 중) 배치 승인 시도 → IllegalStateException, 배치·하위 정산 상태 변경 없음")
+        void 보류중인배치_승인시도시_예외() throws Exception {
+            Settlement s = createSettlement(engineerUser, agency, 95000, "PENDING", JUNE_1.plusDays(4), "김철수");
+            PlatformSettlement ps = createPlatformSettlementAndLink(agency, 2026, 6, "DISPUTED", List.of(s));
+            registerBankAccount(agency); // 계좌는 등록되어 있어도 DISPUTED면 승인 자체가 막혀야 함
+
+            assertThatThrownBy(() ->
+                    adminSettlementService.approveAgency(adminUserDetails(), agency.getId(), 2026, 6))
+                    .isInstanceOf(IllegalStateException.class);
+
+            assertThat(platformSettlementRepository.findById(ps.getId()).orElseThrow().getStatus()).isEqualTo("DISPUTED");
+            assertThat(settlementRepository.findById(s.getId()).orElseThrow().getStatus()).isEqualTo("PENDING");
+        }
     }
 
     // ── [⑩] 미지급 전체 일괄 승인 ────────────────────────────────
@@ -607,6 +622,27 @@ class AdminSettlementServiceIntegrationTest {
 
             assertThat(settlementRepository.findById(noAccountSettlement.getId()).orElseThrow().getStatus())
                     .isEqualTo("PENDING");
+            assertThat(settlementRepository.findById(okSettlement.getId()).orElseThrow().getStatus())
+                    .isEqualTo("PAID");
+        }
+
+        @Test
+        @DisplayName("DISPUTED(배치 보류 중) 대행사는 스킵되고, 나머지 대행사는 정상 처리된다")
+        void 보류중인배치는_스킵하고_나머지는_처리() throws Exception {
+            Settlement disputedSettlement = createSettlement(
+                    engineerUser, agency, 95000, "PENDING", JUNE_1.plusDays(4), "김철수");
+            createPlatformSettlementAndLink(agency, 2026, 6, "DISPUTED", List.of(disputedSettlement));
+            registerBankAccount(agency); // 계좌가 있어도 DISPUTED면 스킵되어야 함
+
+            Settlement okSettlement = createSettlement(
+                    otherEngineerUser, otherAgency, 72000, "PENDING", JUNE_1.plusDays(10), "이영희");
+            createPlatformSettlementAndLink(otherAgency, 2026, 6, "PENDING", List.of(okSettlement));
+            registerBankAccount(otherAgency);
+
+            adminSettlementService.approveAll(adminUserDetails(), 2026, 6);
+
+            assertThat(settlementRepository.findById(disputedSettlement.getId()).orElseThrow().getStatus())
+                    .isEqualTo("PENDING"); // 배치가 DISPUTED라 스킵되어 하위 settlement도 그대로
             assertThat(settlementRepository.findById(okSettlement.getId()).orElseThrow().getStatus())
                     .isEqualTo("PAID");
         }
