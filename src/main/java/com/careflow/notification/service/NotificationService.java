@@ -1,5 +1,6 @@
 package com.careflow.notification.service;
 
+import com.careflow.notification.dto.NotificationCategoryStat;
 import com.careflow.notification.dto.NotificationResponse;
 import com.careflow.notification.entity.Notification;
 import com.careflow.notification.repository.EmitterRepository;
@@ -99,6 +100,50 @@ public class NotificationService {
 
         Page<Notification> notifications = notificationRepository.findByUserIdAndTypeWithPaging(userId, filterType, pageable);
         return notifications.map(NotificationResponse::from);
+    }
+
+    /**
+     * [고객용 API] 알림 수신함 목록 조회 (페이징 + 타입 필터 + "안읽음만 보기" 필터 지원)
+     */
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public Page<NotificationResponse> getNotifications(Long userId, String type, boolean unreadOnly, Pageable pageable) {
+        String filterType = (type == null || type.isBlank()) ? null : type;
+
+        Page<Notification> notifications =
+                notificationRepository.findByUserIdAndTypeAndUnreadOnly(userId, filterType, unreadOnly, pageable);
+        return notifications.map(NotificationResponse::from);
+    }
+
+    /**
+     * [고객용 API] 알림 카테고리별(AS_STATUS/CONSUMABLE/WARRANTY) count·unreadCount 요약
+     * 고객 알림센터 KPI 카드가 "N건 / 읽지 않음 N건" 형태를 요구하므로, 기사용 getNotificationSummary와
+     * 별도로 유지한다 — 기존 기사 화면(Map<String, Long> 단순 합계) 계약을 건드리지 않기 위함.
+     */
+    @org.springframework.transaction.annotation.Transactional(readOnly = true)
+    public Map<String, NotificationCategoryStat> getNotificationSummaryWithUnread(Long userId) {
+        Map<String, Long> totalByType = new HashMap<>();
+        for (Object[] row : notificationRepository.countGroupByTypeForUser(userId)) {
+            totalByType.put((String) row[0], (Long) row[1]);
+        }
+
+        Map<String, Long> unreadByType = new HashMap<>();
+        for (Object[] row : notificationRepository.countUnreadGroupByTypeForUser(userId)) {
+            unreadByType.put((String) row[0], (Long) row[1]);
+        }
+
+        Map<String, NotificationCategoryStat> summary = new LinkedHashMap<>();
+        long totalCount = 0L;
+        long totalUnread = 0L;
+        for (String type : List.of("AS_STATUS", "CONSUMABLE", "WARRANTY")) {
+            long count = totalByType.getOrDefault(type, 0L);
+            long unread = unreadByType.getOrDefault(type, 0L);
+            summary.put(type, new NotificationCategoryStat(count, unread));
+            totalCount += count;
+            totalUnread += unread;
+        }
+        summary.put("total", new NotificationCategoryStat(totalCount, totalUnread));
+
+        return summary;
     }
 
     /**

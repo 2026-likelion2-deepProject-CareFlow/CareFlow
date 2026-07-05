@@ -145,7 +145,7 @@ class AgenciesControllerIntegrationTest {
     @Test
     @DisplayName("[signup] 실패: 이미 가입된 이메일로 재요청 — 400 Bad Request")
     void signup_duplicateEmail_400() throws Exception {
-        Agencies agency = savePendingAgency("DUP-BIZ-001", "중복테스트대행사");
+        Agencies agency = savePendingAgency("555-55-55555", "중복테스트대행사");
         accountRequestsRepository.save(AccountRequests.create(
                 agency, "dup@test.com", "hashed", "홍길동",
                 "010-1111-2222", AccountRequestsRole.AGENCY, "상세주소", savedRegion
@@ -169,12 +169,12 @@ class AgenciesControllerIntegrationTest {
     @Test
     @DisplayName("[getAgency] 성공: 존재하는 대행사 이름으로 조회 — 200 OK + 대행사 정보 반환")
     void getAgency_found_200() throws Exception {
-        saveApprovedAgency("FIND-BIZ-001", "조회가능대행사");
+        saveApprovedAgency("777-77-77777", "조회가능대행사");
 
         mockMvc.perform(get("/api/agencies/agency")
                         .param("agencyName", "조회가능대행사"))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$.businessNumber").value("FIND-BIZ-001"));
+                .andExpect(jsonPath("$.businessNumber").value("777-77-77777"));
     }
 
     @Test

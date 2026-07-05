@@ -38,7 +38,8 @@ public class AgenciesService {
     @Transactional(readOnly = true)
     public Agencies findByAgencyName(String agencyName) {
         // PENDING·REJECTED 상태의 대행사는 조회 대상에서 제외 — 수리기사 및 대행사 계정 요청 흐름에서 잘못된 대행사 선택 방지
-        return agenciesRepository.findByAgencyNameAndApprovalStatus(agencyName, AgencyStatus.APPROVED)
+        // 부분 일치 검색 — "한솔"만 입력해도 "한솔전자서비스"가 조회됨
+        return agenciesRepository.findFirstByAgencyNameContainingAndApprovalStatusOrderById(agencyName, AgencyStatus.APPROVED)
                 .orElseThrow(() -> new NoSuchElementException("해당 대행사 정보를 찾을 수 없습니다."));
     }
 

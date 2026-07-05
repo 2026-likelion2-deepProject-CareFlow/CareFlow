@@ -3,6 +3,7 @@ package com.careflow.agency.controller;
 import com.careflow.agency.dto.request.AgencyCreateRequest;
 import com.careflow.agency.dto.request.AgencyFeeRateUpdateRequest;
 import com.careflow.agency.dto.response.AgencyFeeRateResponse;
+import com.careflow.agency.dto.response.AgencyLookupResponse;
 import com.careflow.agency.entity.Agencies;
 import com.careflow.agency.service.AgenciesService;
 import com.careflow.auth.security.CustomUserDetails;
@@ -38,12 +39,12 @@ public class AgenciesController {
     기존에 데이터가 있는 경우 데이터 반환 및 대행사 회원가입 -> 관리자 계정요청으로 서비스 넘어감
      */
     @GetMapping("/agency")
-    public ResponseEntity<Agencies> getAgency(@Valid @RequestParam(name = "agencyName") String agencyName) {
+    public ResponseEntity<AgencyLookupResponse> getAgency(@Valid @RequestParam(name = "agencyName") String agencyName) {
 
         // 대행사 계정 회원가입 시도 중 대행사 조회 결과 200 ok 반환될 경우 프론트에서 flag = 1 설정
         // 대행사 조회 결과가 존재하지 않아 NoSuchElementException 발생 및 NotFound 반환 시 flag = 0 설정
         Agencies agencies = agenciesService.findByAgencyName(agencyName);
-        return ResponseEntity.ok(agencies);
+        return ResponseEntity.ok(AgencyLookupResponse.from(agencies));
     }
 
     // ─────────────────────────────────────────────

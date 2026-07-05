@@ -2,6 +2,7 @@ package com.careflow.appliance.service;
 
 import com.careflow.appliance.dto.ApplianceCreateRequest;
 import com.careflow.appliance.dto.ApplianceResponse;
+import com.careflow.appliance.dto.ApplianceUpdateRequest;
 import com.careflow.appliance.dto.HealthCertificateResponse;
 import com.careflow.appliance.entity.Appliance;
 import com.careflow.appliance.entity.HealthCertificate;
@@ -90,6 +91,30 @@ public class ApplianceService {
         if (!appliance.getUser().getId().equals(userId)) {
             throw new IllegalAccessException("본인 소유의 가전제품만 조회할 수 있습니다.");
         }
+
+        return ApplianceResponse.from(appliance);
+    }
+
+    /**
+     * 가전 정보 수정 (브랜드/모델명/시리얼넘버/구매일/보증만료일)
+     * 본인 소유 가전인지 확인 후 updateInfo() 호출 — null 필드는 기존 값 유지
+     */
+    @Transactional
+    public ApplianceResponse updateApplianceInfo(Long userId, Long applianceId, ApplianceUpdateRequest request) throws IllegalAccessException {
+        Appliance appliance = applianceRepository.findByIdAndDeletedAtIsNull(applianceId)
+                .orElseThrow(() -> new NoSuchElementException("존재하지 않는 가전제품입니다."));
+
+        if (!appliance.getUser().getId().equals(userId)) {
+            throw new IllegalAccessException("본인 소유의 가전제품만 수정할 수 있습니다.");
+        }
+
+        appliance.updateInfo(
+                request.getBrand(),
+                request.getModelName(),
+                request.getSerialNumber(),
+                request.getPurchaseDate(),
+                request.getWarrantyEndDate()
+        );
 
         return ApplianceResponse.from(appliance);
     }

@@ -9,6 +9,8 @@ import com.careflow.auth.dto.TokenResponse;
 import com.careflow.auth.security.JwtProvider;
 import com.careflow.common.enums.AgencyStatus;
 import com.careflow.common.enums.Role;
+import com.careflow.common.util.KoreanKeyboardUtils;
+import com.careflow.common.util.PhoneNumberUtils;
 import com.careflow.region.entity.Regions;
 import com.careflow.region.repository.RegionRepository;
 import com.careflow.user.entity.User;
@@ -48,15 +50,15 @@ public class AuthService {
         }
 
         // 비밀번호 생성 규칙 강화 — 형식(영문+숫자 8자 이상)은 SignUpRequest의 @Pattern/@Size로 검증되고,
-        // 여기서는 DTO 필드만으로는 검증 불가능한 교차 필드 규칙(아이디·휴대폰번호 포함 여부)을 검사
-        validatePasswordDoesNotContainSensitiveInfo(request.getPassword(), request.getEmail(), request.getPhone());
+        // 여기서는 DTO 필드만으로는 검증 불가능한 교차 필드 규칙(아이디·이름·휴대폰번호 포함 여부)을 검사
+        validatePasswordDoesNotContainSensitiveInfo(request.getPassword(), request.getEmail(), request.getName(), request.getPhone());
 
         Regions regions = regionRepository.findById(request.getRegionId()).orElseThrow(() -> new NoSuchElementException("입력받은 지역 정보가 존재하지 않습니다."));
         User user = User.builder()
                 .email(request.getEmail())
                 .passwordHash(passwordEncoder.encode(request.getPassword()))
                 .name(request.getName())
-                .phone(request.getPhone())
+                .phone(PhoneNumberUtils.stripHyphens(request.getPhone())) // 전화번호는 하이픈 없이 저장(사업자번호는 유지)
                 .role(Role.CUSTOMER)
                 .regionId(regions)
                 .addressDetail(request.getAddressDetail())
@@ -68,14 +70,26 @@ public class AuthService {
     /**
      * 비밀번호에 본인 식별정보가 포함되는 것을 방지 (회원가입/비밀번호 변경 공통 사용)
      * - 아이디(이메일 로컬파트, @ 앞부분)가 비밀번호에 포함된 경우 차단 (3자 미만이면 오탐 방지를 위해 검사 생략)
+     * - 이름(실명)이 비밀번호에 포함된 경우 차단 (2자 미만이면 오탐 방지를 위해 검사 생략)
      * - 휴대폰번호의 연속된 숫자 4자리 이상이 비밀번호에 포함된 경우 차단 (전화번호 미입력 시 검사 생략)
      */
-    private void validatePasswordDoesNotContainSensitiveInfo(String password, String email, String phone) {
+    private void validatePasswordDoesNotContainSensitiveInfo(String password, String email, String name, String phone) {
         String lowerPassword = password.toLowerCase();
 
         String emailLocalPart = email.split("@")[0].toLowerCase();
         if (emailLocalPart.length() >= 3 && lowerPassword.contains(emailLocalPart)) {
             throw new IllegalArgumentException("비밀번호에 아이디(이메일)를 포함할 수 없습니다.");
+        }
+
+        String normalizedName = name == null ? "" : name.replaceAll("\\s+", "").toLowerCase();
+        if (normalizedName.length() >= 2 && lowerPassword.contains(normalizedName)) {
+            throw new IllegalArgumentException("비밀번호에 이름을 포함할 수 없습니다.");
+        }
+
+        // 한/영 전환을 안 하고 이름을 그대로 입력한 경우(예: "이리나" -> "dlflsk")도 차단
+        String nameAsQwerty = KoreanKeyboardUtils.toQwerty(normalizedName).toLowerCase();
+        if (nameAsQwerty.length() >= 2 && !nameAsQwerty.equals(normalizedName) && lowerPassword.contains(nameAsQwerty)) {
+            throw new IllegalArgumentException("비밀번호에 이름을 포함할 수 없습니다.");
         }
 
         String phoneDigits = phone == null ? "" : phone.replaceAll("[^0-9]", "");
@@ -111,8 +125,8 @@ public class AuthService {
         }
 
         // 형식(영문+숫자 8자 이상 64자 이하)은 PasswordChangeRequest의 @Pattern/@Size로 검증되고,
-        // 여기서는 DTO만으로는 검증 불가능한 교차 필드 규칙(아이디·휴대폰번호 포함 여부)을 검사
-        validatePasswordDoesNotContainSensitiveInfo(request.newPassword(), user.getEmail(), user.getPhone());
+        // 여기서는 DTO만으로는 검증 불가능한 교차 필드 규칙(아이디·이름·휴대폰번호 포함 여부)을 검사
+        validatePasswordDoesNotContainSensitiveInfo(request.newPassword(), user.getEmail(), user.getName(), user.getPhone());
 
         user.updatePassword(passwordEncoder.encode(request.newPassword()));
     }

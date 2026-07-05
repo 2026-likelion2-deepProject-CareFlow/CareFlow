@@ -396,19 +396,34 @@ class AsRequestControllerIntegrationTest {
         }
 
         @Test
-        @DisplayName("실패: ASSIGNED 상태 취소 시도 → 403 Forbidden, DB 상태 변경 없음")
-        void cancel_assigned_403() throws Exception {
+        @DisplayName("성공: ASSIGNED 상태(예약 확정 전) 취소 → 200, DB에서 status = CANCELLED 확인")
+        void cancel_assigned_success() throws Exception {
             AsRequest req = saveAsRequest(AsStatus.ASSIGNED);
+
+            mockMvc.perform(patch("/api/as-requests/" + req.getId() + "/cancel")
+                            .header("Authorization", "Bearer " + customerToken)
+                            .param("cancelReason", "단순 변심"))
+                    .andExpect(status().isOk());
+
+            AsRequest updated = asRequestRepository.findById(req.getId()).orElseThrow();
+            assertThat(updated.getStatus()).isEqualTo(AsStatus.CANCELLED);
+            assertThat(updated.getCancelReason()).isEqualTo("단순 변심");
+        }
+
+        @Test
+        @DisplayName("실패: ACCEPTED(예약 확정) 상태 취소 시도 → 403 Forbidden, DB 상태 변경 없음")
+        void cancel_accepted_403() throws Exception {
+            AsRequest req = saveAsRequest(AsStatus.ACCEPTED);
 
             mockMvc.perform(patch("/api/as-requests/" + req.getId() + "/cancel")
                             .header("Authorization", "Bearer " + customerToken))
                     .andExpect(status().isForbidden())
                     .andExpect(jsonPath("$.success").value(false))
-                    .andExpect(jsonPath("$.message").value("기사 배정이 진행된 요청은 취소할 수 없습니다."));
+                    .andExpect(jsonPath("$.message").value("예약이 확정된 요청은 취소할 수 없습니다."));
 
             // DB 상태 변경 없음 확인
             assertThat(asRequestRepository.findById(req.getId()).orElseThrow().getStatus())
-                    .isEqualTo(AsStatus.ASSIGNED);
+                    .isEqualTo(AsStatus.ACCEPTED);
         }
 
         @Test
@@ -473,7 +488,7 @@ class AsRequestControllerIntegrationTest {
 
     /**
      * 특정 상태의 AsRequest 를 직접 저장하는 헬퍼
-     * ASSIGNED 상태가 필요하면 processAssignment() 로 전환 후 저장
+     * ASSIGNED/ACCEPTED 상태가 필요하면 processAssignment()/acceptAssignment() 로 전환 후 저장
      */
     private AsRequest saveAsRequest(AsStatus targetStatus) {
         AsRequest req = AsRequest.builder()
@@ -483,6 +498,9 @@ class AsRequestControllerIntegrationTest {
 
         if (targetStatus == AsStatus.ASSIGNED) {
             req.processAssignment(agency);
+        } else if (targetStatus == AsStatus.ACCEPTED) {
+            req.processAssignment(agency);
+            req.acceptAssignment();
         } else if (targetStatus == AsStatus.CANCELLED) {
             req.cancel("테스트 취소");
         }

@@ -3,6 +3,8 @@ package com.careflow.assignment.repository;
 import com.careflow.assignment.entity.AsAssignment;
 import com.careflow.assignment.dto.EngineerCompletedCount;
 import com.careflow.common.enums.DiagnosisResult;
+import com.careflow.user.entity.User;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
@@ -20,6 +22,10 @@ import java.util.Optional;
 public interface AsAssignmentRepository extends JpaRepository<AsAssignment, Long> {
     List<AsAssignment> findByAsRequest_Id(Long requestId);
     List<AsAssignment> findByEngineer_IdAndStatus(Long engineerId, String status);
+
+    // 고객 A/S 목록(GET /api/as-requests/me)에 배정 기사 정보를 붙이기 위한 배치 조회 — N+1 방지용 JOIN FETCH
+    @Query("SELECT a FROM AsAssignment a JOIN FETCH a.engineer WHERE a.asRequest.id IN :requestIds")
+    List<AsAssignment> findByAsRequest_IdInWithEngineer(@Param("requestIds") List<Long> requestIds);
 
     // 부하 반영 복합 점수(Option B) 산정을 위해 기기별 대기 중 배차 수 조회
     long countByEngineer_IdAndStatus(Long engineerId, String status);
@@ -258,4 +264,46 @@ public interface AsAssignmentRepository extends JpaRepository<AsAssignment, Long
                                                          @Param("reqStatus") com.careflow.common.enums.AsStatus reqStatus,
                                                          @Param("startDate") java.time.LocalDate startDate,
                                                          @Param("endDate") java.time.LocalDate endDate);
+
+    // 🌟 신규: 동적 필터링이 추가된 쿼리 작성
+    @Query(value = "SELECT DISTINCT c FROM AsAssignment a " +
+            "JOIN a.asRequest r " +
+            "JOIN r.customer c " +
+            "LEFT JOIN FETCH c.regionId " +
+            "LEFT JOIN Appliance app ON app.user.id = c.id " +
+            "WHERE a.engineer.id = :engineerId " +
+            "AND (:status IS NULL OR c.status = :status) " +
+            "AND (:regionId IS NULL OR c.regionId.id = :regionId) " +
+            "AND (:brand IS NULL OR app.brand = :brand) " +
+            "AND (:search IS NULL OR c.name LIKE CONCAT('%', :search, '%') " +
+            "      OR c.phone LIKE CONCAT('%', :search, '%') " +
+            "      OR c.email LIKE CONCAT('%', :search, '%')) " +
+            "ORDER BY c.createdAt DESC",
+            countQuery = "SELECT COUNT(DISTINCT c) FROM AsAssignment a " +
+                    "JOIN a.asRequest r " +
+                    "JOIN r.customer c " +
+                    "LEFT JOIN Appliance app ON app.user.id = c.id " +
+                    "WHERE a.engineer.id = :engineerId " +
+                    "AND (:status IS NULL OR c.status = :status) " +
+                    "AND (:regionId IS NULL OR c.regionId.id = :regionId) " +
+                    "AND (:brand IS NULL OR app.brand = :brand) " +
+                    "AND (:search IS NULL OR c.name LIKE CONCAT('%', :search, '%') " +
+                    "      OR c.phone LIKE CONCAT('%', :search, '%') " +
+                    "      OR c.email LIKE CONCAT('%', :search, '%'))")
+    Page<User> findCustomersByEngineerIdWithFilters(
+            @Param("engineerId") Long engineerId,
+            @Param("search") String search,
+            @Param("status") String status,
+            @Param("regionId") Integer regionId,
+            @Param("brand") String brand,
+            Pageable pageable);
+
+    // 🌟 신규 추가: 담당 고객들이 보유한 활성 가전의 브랜드 목록 중복 제거 조회
+    @Query("SELECT DISTINCT app.brand FROM Appliance app " +
+            "WHERE app.user.id IN (" +
+            "    SELECT DISTINCT r.customer.id " +
+            "    FROM AsAssignment a JOIN a.asRequest r " +
+            "    WHERE a.engineer.id = :engineerId" +
+            ") AND app.deletedAt IS NULL AND app.brand IS NOT NULL")
+    List<String> findCustomerApplianceBrandsByEngineerId(@Param("engineerId") Long engineerId);
 }

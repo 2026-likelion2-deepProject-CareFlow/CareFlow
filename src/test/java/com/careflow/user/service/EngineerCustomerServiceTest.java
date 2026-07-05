@@ -1,7 +1,10 @@
 package com.careflow.user.service;
 
 import com.careflow.appliance.entity.Appliance;
+import com.careflow.appliance.repository.ApplianceRepository;
 import com.careflow.as_request.entity.AsRequest;
+import com.careflow.as_request.repository.AsRequestRepository;
+import com.careflow.assignment.repository.AsAssignmentRepository;
 import com.careflow.region.entity.Regions;
 import com.careflow.report.domain.entity.WorkReport;
 import com.careflow.common.enums.DiagnosisResult;
@@ -33,6 +36,11 @@ class EngineerCustomerServiceTest {
     @InjectMocks private EngineerCustomerService engineerCustomerService;
     @Mock private UserRepository userRepository;
     @Mock private WorkReportRepository workReportRepository;
+    // 서비스 생성자에 있으나 이 테스트에서 실제로 스터빙하지 않는 의존성 —
+    // @Mock 없이 두면 null이 주입되어 getCustomerDetail() 내부에서 NPE 발생 (applianceRepository/asAssignmentRepository 호출부)
+    @Mock private AsAssignmentRepository asAssignmentRepository;
+    @Mock private ApplianceRepository applianceRepository;
+    @Mock private AsRequestRepository asRequestRepository;
 
     @Test
     @DisplayName("성공: 고객의 기본 정보와 해당 기사가 처리한 A/S 이력을 정상적으로 매핑하여 반환한다.")

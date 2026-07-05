@@ -16,6 +16,7 @@ import java.time.LocalDate;
 import java.util.List;
 
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
 import static org.mockito.Mockito.*;
@@ -51,6 +52,9 @@ class WarrantyAlertJobTest {
 
         given(applianceRepository.findByWarrantyEndDateWithUser(targetDate))
                 .willReturn(List.of(appliance1, appliance2));
+        // 7일 전 기준 조회는 대상 없음
+        given(applianceRepository.findByWarrantyEndDateWithUser(LocalDate.now().plusDays(7)))
+                .willReturn(List.of());
 
         // When
         warrantyAlertJob.execute(context);
@@ -58,6 +62,32 @@ class WarrantyAlertJobTest {
         // Then
         // 2건의 가전이 있으므로, send 메서드가 정확히 2번 호출되어야 함
         verify(notificationService, times(2)).send(any(User.class), eq("WARRANTY"), anyString(), anyString());
+    }
+
+    @Test
+    @DisplayName("성공: 7일 뒤 만료 가전이 있으면 30일 전과 별개로 알림을 발송한다")
+    void execute_SevenDaysBefore_Success() throws Exception {
+        // Given
+        LocalDate sevenDaysLater = LocalDate.now().plusDays(7);
+
+        Appliance appliance = mock(Appliance.class);
+        User user = mock(User.class);
+        given(appliance.getUser()).willReturn(user);
+        given(appliance.getBrand()).willReturn("삼성");
+        given(appliance.getModelName()).willReturn("냉장고");
+
+        given(applianceRepository.findByWarrantyEndDateWithUser(sevenDaysLater))
+                .willReturn(List.of(appliance));
+        // 30일 전 기준 조회는 대상 없음
+        given(applianceRepository.findByWarrantyEndDateWithUser(LocalDate.now().plusDays(30)))
+                .willReturn(List.of());
+
+        // When
+        warrantyAlertJob.execute(context);
+
+        // Then
+        verify(notificationService, times(1))
+                .send(eq(user), eq("WARRANTY"), anyString(), contains("7일 뒤"));
     }
 
     @Test

@@ -78,5 +78,14 @@ public interface PaymentRepository extends JpaRepository<Payment, Long> {
             @Param("to") LocalDateTime to);
 
     // 고객 결제 내역 전체 조회용 — 상태 필터 없이 최신순(생성일 기준) 전체 반환
-    List<Payment> findByCustomer_IdOrderByCreatedAtDesc(Long customerId);
+    // 제품명(appliance)/기사명(workReport.engineer) 표시를 위해 JOIN FETCH로 N+1 방지
+    // workReport는 결제 이전 시점 데이터 정합성 문제로 없을 수 있어 LEFT JOIN FETCH 처리
+    @Query("SELECT p FROM Payment p " +
+           "JOIN FETCH p.asRequest r " +
+           "JOIN FETCH r.appliance ap " +
+           "LEFT JOIN FETCH r.workReport wr " +
+           "LEFT JOIN FETCH wr.engineer e " +
+           "WHERE p.customer.id = :customerId " +
+           "ORDER BY p.createdAt DESC")
+    List<Payment> findByCustomer_IdOrderByCreatedAtDesc(@Param("customerId") Long customerId);
 }

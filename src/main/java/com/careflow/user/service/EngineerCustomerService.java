@@ -43,9 +43,12 @@ public class EngineerCustomerService {
     /**
      * 1. 내 고객 목록 페이징 조회 (가전 개수, A/S 건수, 최근 작업일 N+1 방지 집계 포함)
      */
-    public Page<EngineerCustomerListResponse> getMyCustomersList(Long engineerId, int page, int size) {
+    public Page<EngineerCustomerListResponse> getMyCustomersList(
+            Long engineerId, String search, String status, Integer regionId, String brand, int page, int size) {
+
         PageRequest pageRequest = PageRequest.of(page, size);
-        Page<User> customers = asAssignmentRepository.findCustomersByEngineerId(engineerId, pageRequest);
+        Page<User> customers = asAssignmentRepository.findCustomersByEngineerIdWithFilters(
+                engineerId, search, status, regionId, brand, pageRequest);
 
         if (customers.isEmpty()) return Page.empty();
 
@@ -171,4 +174,12 @@ public class EngineerCustomerService {
                 .asHistory(historyList)
                 .build();
     }
+
+    /**
+     * 3. 담당 고객들이 보유한 가전 브랜드 목록 조회 (중복 제거)
+     */
+    public List<String> getCustomerApplianceBrands(Long engineerId) {
+        return asAssignmentRepository.findCustomerApplianceBrandsByEngineerId(engineerId);
+    }
+
 }

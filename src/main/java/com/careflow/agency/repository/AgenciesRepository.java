@@ -19,6 +19,7 @@ public interface AgenciesRepository extends JpaRepository<Agencies, Long> {
     @Query("SELECT a FROM Agencies a WHERE a.representativeId.id = :userId")
     Optional<Agencies> findByRepresentativeById(Long userId);
 
-    // 상호명 + 승인 상태로 조회 — PENDING/REJECTED 대행사는 검색 결과에서 제외
-    Optional<Agencies> findByAgencyNameAndApprovalStatus(String agencyName, AgencyStatus approvalStatus);
+    // 상호명 일부 + 승인 상태로 조회 — "한솔"만 입력해도 "한솔전자서비스"가 검색되도록 부분 일치(LIKE) 처리
+    // PENDING/REJECTED 대행사는 검색 결과에서 제외. 여러 건이 일치할 수 있어 findFirst + 정렬로 단일 결과 확정
+    Optional<Agencies> findFirstByAgencyNameContainingAndApprovalStatusOrderById(String agencyName, AgencyStatus approvalStatus);
 }

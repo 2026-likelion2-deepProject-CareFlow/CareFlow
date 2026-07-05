@@ -99,6 +99,9 @@ public class PaymentService {
         return new PaymentResponse(
                 payment.getId(),
                 requestId,
+                asRequest.getAppliance().getBrand(),
+                asRequest.getAppliance().getModelName(),
+                workReport.getEngineer().getName(),
                 payment.getAmount(),
                 payment.getStatus().name(),
                 payment.getPgProvider().name(),
@@ -171,6 +174,11 @@ public class PaymentService {
                 .map(p -> new PaymentResponse(
                         p.getId(),
                         p.getAsRequest().getId(),
+                        p.getAsRequest().getAppliance().getBrand(),
+                        p.getAsRequest().getAppliance().getModelName(),
+                        p.getAsRequest().getWorkReport() != null
+                                ? p.getAsRequest().getWorkReport().getEngineer().getName()
+                                : null,
                         p.getAmount(),
                         p.getStatus().name(),
                         p.getPgProvider().name(),
