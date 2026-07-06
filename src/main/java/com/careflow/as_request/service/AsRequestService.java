@@ -19,6 +19,8 @@ import com.careflow.common.enums.Role;
 import com.careflow.engineer.domain.entity.EngineerProfile;
 import com.careflow.common.enums.ScheduleStatus;
 import com.careflow.engineer.repository.EngineerProfileRepository;
+import com.careflow.notification.entity.Notification;
+import com.careflow.notification.repository.NotificationRepository;
 import com.careflow.notification.service.NotificationService;
 import com.careflow.region.entity.Regions;
 import com.careflow.region.repository.RegionRepository;
@@ -55,8 +57,8 @@ public class AsRequestService {
     private final SymptomRepository symptomRepository;
     private final EngineerProfileRepository engineerProfileRepository;
     private final AsStatusLogRepository asStatusLogRepository;
-    private final NotificationService notificationService;
     private final ApplicationEventPublisher eventPublisher;
+    private final NotificationRepository notificationRepository;
 
     /**
      * 고객 A/S 접수 및 수리 기사 배정
@@ -96,6 +98,13 @@ public class AsRequestService {
 
         // save() 반환값을 사용해야 JPA 가 채워준 PK(id) 를 얻을 수 있음
         AsRequest persistedRequest = asRequestRepository.save(asRequest);
+
+        // A/S 요청 성공 후 고객에게 A/S 요청 성공 알림 발송
+        String title = "A/S 접수 반려 안내";
+        String body = "A/S 요청이 성공적으로 접수되었습니다. 수리 기사님이 요청을 수락하면 수리 과정이 시작됩니다.";
+
+        Notification notification = Notification.createAsStatusNotification(asRequest.getCustomer(), title, body);
+        notificationRepository.save(notification);
 
         // 3. assignType 에 따라 배정 로직 분기
         if (dto.getAssignType() == AssignType.AUTO) {
