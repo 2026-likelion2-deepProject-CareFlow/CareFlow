@@ -24,8 +24,7 @@ public class CreateWorkReportRequest {
     @PositiveOrZero(message = "작업 시간은 0 이상이어야 합니다.")
     private Integer workDurationMin;
 
-    @NotNull(message = "최종 청구 금액은 필수입니다.")
-    @PositiveOrZero(message = "최종 청구 금액은 0 이상이어야 합니다.")
+    // 최종 청구 금액은 서버에서 (부품 합계 + 출장비)로 계산·확정한다. 클라이언트 값은 무시되므로 선택값.
     private Integer finalAmount;
 
     private String memo;
