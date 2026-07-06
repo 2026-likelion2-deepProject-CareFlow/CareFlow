@@ -109,4 +109,21 @@ public class WorkReportController {
         workReportService.updateWorkReport(userDetails.getUserId(), reportId, request);
         return ResponseEntity.ok("작업 보고서가 성공적으로 수정되었습니다.");
     }
+
+    /**
+     * 🌟 신규: 작업 완료 보고서 '신규 작성' 화면 진입 시 초기 데이터 조회 API
+     * (기존 /work-reports/{reportId} 상세 조회와 라우팅 충돌 방지를 위해 /form-data 경로 사용)
+     * GET /api/engineer/work-reports/form-data?requestId=123
+     */
+    @GetMapping("/form-data")
+    @PreAuthorize("hasRole('ENGINEER')")
+    public ResponseEntity<WorkReportDetailResponse> getReportFormData(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @RequestParam Long requestId) throws IllegalAccessException {
+
+        WorkReportDetailResponse response = workReportService.getReportFormData(
+                userDetails.getUserId(), requestId
+        );
+        return ResponseEntity.ok(response);
+    }
 }
