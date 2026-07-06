@@ -18,6 +18,7 @@ import java.util.List;
 public class AgencyStatisticsService {
 
     private final AgencyStatisticsQueryRepository statsRepo;
+    private final AgencyStatisticsReportCsvGenerator csvGenerator;
 
     // ──────────────────────────────────────────────────────────────
     // 1. Summary
@@ -35,41 +36,86 @@ public class AgencyStatisticsService {
         LocalDateTime prevFrom = from.minusDays(periodDays);
         LocalDateTime prevTo   = from;
 
-        // 현재 기간 집계
-        long totalReceipts         = statsRepo.countReceipts(agencyId, from, to);
+        PeriodStats current = computePeriodStats(agencyId, from, to);
+        PeriodStats prev    = computePeriodStats(agencyId, prevFrom, prevTo);
+
+        return new AgencyStatisticsSummaryResponse(
+                current.receiptCount(),                                     // totalReceiptCount
+                current.completedCount(),                                   // completedCount
+                current.completionRate(),                                   // completionRate
+                current.avgProcessingHours(),                                // avgProcessingHours
+                current.avgRating(),                                        // avgRating
+                current.totalSettlementAmount(),                            // totalSettlementAmount
+                changeRate(current.receiptCount(), prev.receiptCount()),     // prevMonthReceiptDiff
+                changeRate(current.completedCount(), prev.completedCount()), // prevMonthCompletedDiff
+                round1(current.avgRating() - prev.avgRating()),             // prevMonthRatingDiff (절대 차이)
+                changeRate(current.totalSettlementAmount(), prev.totalSettlementAmount()) // prevMonthAmountDiff
+        );
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // 1-1. 최근 주요 지표 요약 (기간별 비교 테이블)
+    // 이번 달(1일~오늘) + 직전 2개월(각 1일~말일) 총 3개 구간을 비교
+    // ──────────────────────────────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public List<AgencyStatisticsPeriodSummaryResponse> getRecentPeriodsSummary(Long agencyId) {
+        LocalDate today = LocalDate.now();
+        DateTimeFormatter fmt = DateTimeFormatter.ofPattern("yyyy.MM.dd");
+
+        List<AgencyStatisticsPeriodSummaryResponse> result = new ArrayList<>();
+
+        // 이번 달 1일 ~ 오늘
+        LocalDate curStart = today.withDayOfMonth(1);
+        result.add(toPeriodResponse(agencyId, curStart, today, fmt));
+
+        // 직전 2개월 (각각 1일~말일 풀 개월)
+        for (int i = 1; i <= 2; i++) {
+            LocalDate monthStart = today.minusMonths(i).withDayOfMonth(1);
+            LocalDate monthEnd   = monthStart.withDayOfMonth(monthStart.lengthOfMonth());
+            result.add(toPeriodResponse(agencyId, monthStart, monthEnd, fmt));
+        }
+
+        return result;
+    }
+
+    private AgencyStatisticsPeriodSummaryResponse toPeriodResponse(
+            Long agencyId, LocalDate start, LocalDate end, DateTimeFormatter fmt) {
+        LocalDateTime from = start.atStartOfDay();
+        LocalDateTime to   = end.plusDays(1).atStartOfDay();
+        PeriodStats stats  = computePeriodStats(agencyId, from, to);
+        String label = start.format(fmt) + " ~ " + end.format(fmt);
+
+        return new AgencyStatisticsPeriodSummaryResponse(
+                label,
+                stats.receiptCount(),
+                stats.completedCount(),
+                stats.completionRate(),
+                stats.avgProcessingHours(),
+                stats.avgRating(),
+                stats.totalSettlementAmount()
+        );
+    }
+
+    /** 특정 기간의 핵심 지표 집계 — getSummary()의 현재/전 기간 계산과 getRecentPeriodsSummary()에서 공용으로 사용 */
+    private PeriodStats computePeriodStats(Long agencyId, LocalDateTime from, LocalDateTime to) {
+        long receiptCount          = statsRepo.countReceipts(agencyId, from, to);
         long completedCount        = statsRepo.countCompleted(agencyId, from, to);
         Double avgMinutes          = statsRepo.findAvgProcessingTimeMinutes(agencyId, from, to);
         Double avgRating           = statsRepo.findAvgRating(agencyId, from, to);
         long totalSettlementAmount = statsRepo.sumSettlementAmount(agencyId, from, to);
 
-        double completionRate         = totalReceipts == 0 ? 0.0 : round1((double) completedCount / totalReceipts * 100);
+        double completionRate         = receiptCount == 0 ? 0.0 : round1((double) completedCount / receiptCount * 100);
         double avgProcessingTimeHours = avgMinutes == null ? 0.0 : round1(avgMinutes / 60.0);
         double avgRatingVal           = avgRating == null  ? 0.0 : round1(avgRating);
 
-        // 전 기간 집계 (증감률 계산)
-        long prevReceipts         = statsRepo.countReceipts(agencyId, prevFrom, prevTo);
-        long prevCompleted        = statsRepo.countCompleted(agencyId, prevFrom, prevTo);
-        Double prevAvgMinutes     = statsRepo.findAvgProcessingTimeMinutes(agencyId, prevFrom, prevTo);
-        Double prevAvgRating      = statsRepo.findAvgRating(agencyId, prevFrom, prevTo);
-        long prevSettlement       = statsRepo.sumSettlementAmount(agencyId, prevFrom, prevTo);
-
-        double prevCompletionRate = prevReceipts == 0 ? 0.0 : round1((double) prevCompleted / prevReceipts * 100);
-        double prevAvgHours       = prevAvgMinutes == null ? 0.0 : round1(prevAvgMinutes / 60.0);
-        double prevRatingVal      = prevAvgRating == null  ? 0.0 : round1(prevAvgRating);
-
-        return new AgencyStatisticsSummaryResponse(
-                totalReceipts,                                  // totalReceiptCount
-                completedCount,                                 // completedCount
-                completionRate,                                 // completionRate
-                avgProcessingTimeHours,                         // avgProcessingHours
-                avgRatingVal,                                   // avgRating
-                totalSettlementAmount,                          // totalSettlementAmount
-                changeRate(totalReceipts, prevReceipts),        // prevMonthReceiptDiff
-                changeRate(completedCount, prevCompleted),      // prevMonthCompletedDiff
-                round1(avgRatingVal - prevRatingVal),           // prevMonthRatingDiff (절대 차이)
-                changeRate(totalSettlementAmount, prevSettlement) // prevMonthAmountDiff
-        );
+        return new PeriodStats(receiptCount, completedCount, completionRate, avgProcessingTimeHours,
+                avgRatingVal, totalSettlementAmount);
     }
+
+    private record PeriodStats(
+            long receiptCount, long completedCount, double completionRate,
+            double avgProcessingHours, double avgRating, long totalSettlementAmount) {}
 
     // ──────────────────────────────────────────────────────────────
     // 2. Daily Trend
@@ -240,6 +286,136 @@ public class AgencyStatisticsService {
                 topRatingEngineerName,
                 topRatingEngineerScore
         );
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // 8. 리포트 다운로드 4종 (CSV)
+    // ──────────────────────────────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public byte[] generateWorkStatusReportCsv(Long agencyId, AgencyStatisticsDateRangeRequest req) {
+        validateDateRange(req.dateFrom(), req.dateTo());
+        LocalDateTime from = req.dateFrom().atStartOfDay();
+        LocalDateTime to   = req.dateTo().plusDays(1).atStartOfDay();
+
+        List<Object[]> dailyRows = statsRepo.findDailyTrend(agencyId, from, to);
+        return csvGenerator.generateWorkStatus(dailyRows);
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] generateSettlementReportCsv(Long agencyId, AgencyStatisticsDateRangeRequest req) {
+        validateDateRange(req.dateFrom(), req.dateTo());
+        LocalDateTime from = req.dateFrom().atStartOfDay();
+        LocalDateTime to   = req.dateTo().plusDays(1).atStartOfDay();
+
+        List<Object[]> dailyRows = statsRepo.findDailySettlementBreakdown(agencyId, from, to);
+        return csvGenerator.generateSettlement(dailyRows);
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] generateEngineerPerformanceReportCsv(Long agencyId, AgencyStatisticsDateRangeRequest req) {
+        validateDateRange(req.dateFrom(), req.dateTo());
+        LocalDateTime from = req.dateFrom().atStartOfDay();
+        LocalDateTime to   = req.dateTo().plusDays(1).atStartOfDay();
+
+        List<Object[]> completedRows = statsRepo.findAllEngineerCompleted(agencyId, from, to);
+        List<Object[]> ratingRows    = statsRepo.findEngineerRatings(agencyId, from, to);
+
+        java.util.Map<Long, Double> ratingByEngineerId = new java.util.HashMap<>();
+        for (Object[] row : ratingRows) {
+            ratingByEngineerId.put(((Number) row[0]).longValue(), ((Number) row[1]).doubleValue());
+        }
+        return csvGenerator.generateEngineerPerformance(completedRows, ratingByEngineerId);
+    }
+
+    @Transactional(readOnly = true)
+    public byte[] generateCustomerStatusReportCsv(Long agencyId, AgencyStatisticsDateRangeRequest req) {
+        validateDateRange(req.dateFrom(), req.dateTo());
+        LocalDateTime from = req.dateFrom().atStartOfDay();
+        LocalDateTime to   = req.dateTo().plusDays(1).atStartOfDay();
+
+        List<Object[]> activityRows = statsRepo.findCustomerActivity(agencyId, from, to);
+        List<Object[]> ratingRows   = statsRepo.findCustomerRatings(agencyId, from, to);
+
+        java.util.Map<Long, Double> ratingByCustomerId = new java.util.HashMap<>();
+        for (Object[] row : ratingRows) {
+            ratingByCustomerId.put(((Number) row[0]).longValue(), ((Number) row[1]).doubleValue());
+        }
+        return csvGenerator.generateCustomerStatus(activityRows, ratingByCustomerId);
+    }
+
+    // ──────────────────────────────────────────────────────────────
+    // 9. 탭별 상세 통계 (기사 통계 / 정산 통계 / 고객 통계 탭)
+    // 리포트 다운로드(CSV)와 동일한 리포지토리 쿼리를 JSON으로도 노출
+    // ──────────────────────────────────────────────────────────────
+
+    @Transactional(readOnly = true)
+    public List<AgencyStatisticsEngineerStatResponse> getEngineerStats(Long agencyId, AgencyStatisticsDateRangeRequest req) {
+        validateDateRange(req.dateFrom(), req.dateTo());
+        LocalDateTime from = req.dateFrom().atStartOfDay();
+        LocalDateTime to   = req.dateTo().plusDays(1).atStartOfDay();
+
+        List<Object[]> completedRows = statsRepo.findAllEngineerCompleted(agencyId, from, to);
+        List<Object[]> ratingRows    = statsRepo.findEngineerRatings(agencyId, from, to);
+
+        java.util.Map<Long, Double> ratingByEngineerId = new java.util.HashMap<>();
+        for (Object[] row : ratingRows) {
+            ratingByEngineerId.put(((Number) row[0]).longValue(), ((Number) row[1]).doubleValue());
+        }
+
+        List<AgencyStatisticsEngineerStatResponse> result = new ArrayList<>();
+        for (int i = 0; i < completedRows.size(); i++) {
+            Object[] row = completedRows.get(i);
+            long engineerId = ((Number) row[0]).longValue();
+            result.add(new AgencyStatisticsEngineerStatResponse(
+                    i + 1, engineerId, (String) row[1], ((Number) row[2]).longValue(),
+                    ratingByEngineerId.get(engineerId)));
+        }
+        return result;
+    }
+
+    @Transactional(readOnly = true)
+    public List<AgencyStatisticsSettlementTrendResponse> getSettlementTrend(Long agencyId, AgencyStatisticsDateRangeRequest req) {
+        validateDateRange(req.dateFrom(), req.dateTo());
+        LocalDateTime from = req.dateFrom().atStartOfDay();
+        LocalDateTime to   = req.dateTo().plusDays(1).atStartOfDay();
+
+        List<Object[]> rows = statsRepo.findDailySettlementBreakdown(agencyId, from, to);
+        List<AgencyStatisticsSettlementTrendResponse> result = new ArrayList<>();
+        for (Object[] row : rows) {
+            result.add(new AgencyStatisticsSettlementTrendResponse(
+                    row[0].toString().substring(0, 10),
+                    ((Number) row[1]).longValue(),
+                    ((Number) row[2]).longValue(),
+                    ((Number) row[3]).longValue(),
+                    ((Number) row[4]).longValue(),
+                    ((Number) row[5]).longValue()));
+        }
+        return result;
+    }
+
+    @Transactional(readOnly = true)
+    public List<AgencyStatisticsCustomerStatResponse> getCustomerStats(Long agencyId, AgencyStatisticsDateRangeRequest req) {
+        validateDateRange(req.dateFrom(), req.dateTo());
+        LocalDateTime from = req.dateFrom().atStartOfDay();
+        LocalDateTime to   = req.dateTo().plusDays(1).atStartOfDay();
+
+        List<Object[]> activityRows = statsRepo.findCustomerActivity(agencyId, from, to);
+        List<Object[]> ratingRows   = statsRepo.findCustomerRatings(agencyId, from, to);
+
+        java.util.Map<Long, Double> ratingByCustomerId = new java.util.HashMap<>();
+        for (Object[] row : ratingRows) {
+            ratingByCustomerId.put(((Number) row[0]).longValue(), ((Number) row[1]).doubleValue());
+        }
+
+        List<AgencyStatisticsCustomerStatResponse> result = new ArrayList<>();
+        for (Object[] row : activityRows) {
+            long customerId = ((Number) row[0]).longValue();
+            result.add(new AgencyStatisticsCustomerStatResponse(
+                    customerId, (String) row[1], ((Number) row[2]).longValue(),
+                    ratingByCustomerId.get(customerId)));
+        }
+        return result;
     }
 
     // ──────────────────────────────────────────────────────────────

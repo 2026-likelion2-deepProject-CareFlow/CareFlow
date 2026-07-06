@@ -77,23 +77,27 @@ class AgencySettingsControllerTest {
         @DisplayName("성공: 대표 계정 — 200 OK")
         void getProfile_representative_200() throws Exception {
             AgencyProfileResponse resp = new AgencyProfileResponse(
-                    5L, "테스트대행사", "서울특별시 강남구 테헤란로 1", "신한은행", "110-123-456789");
-            given(agenciesService.getProfile(eq(5L))).willReturn(resp);
+                    5L, "테스트대행사", "서울특별시 강남구 테헤란로 1", "신한은행", "110-123-456789",
+                    "김대표", "agency@test.com", java.time.LocalDateTime.of(2026, 7, 1, 9, 0));
+            given(agenciesService.getProfile(eq(5L), eq(1L))).willReturn(resp);
 
             mockMvc.perform(get("/api/agency/me")
                             .with(user(agencyUser(1L, 5L))))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.agencyName").value("테스트대행사"))
                     .andExpect(jsonPath("$.bankName").value("신한은행"))
-                    .andExpect(jsonPath("$.accountNumber").value("110-123-456789"));
+                    .andExpect(jsonPath("$.accountNumber").value("110-123-456789"))
+                    .andExpect(jsonPath("$.name").value("김대표"))
+                    .andExpect(jsonPath("$.email").value("agency@test.com"));
         }
 
         @Test
         @DisplayName("성공: 계좌 미등록 시 bankName/accountNumber는 null — 200 OK")
         void getProfile_noBankAccount_nullFields_200() throws Exception {
             AgencyProfileResponse resp = new AgencyProfileResponse(
-                    5L, "테스트대행사", "서울특별시 강남구 테헤란로 1", null, null);
-            given(agenciesService.getProfile(eq(5L))).willReturn(resp);
+                    5L, "테스트대행사", "서울특별시 강남구 테헤란로 1", null, null,
+                    "김대표", "agency@test.com", null);
+            given(agenciesService.getProfile(eq(5L), eq(1L))).willReturn(resp);
 
             mockMvc.perform(get("/api/agency/me")
                             .with(user(agencyUser(1L, 5L))))
@@ -106,8 +110,9 @@ class AgencySettingsControllerTest {
         @DisplayName("성공: staff(비대표) 계정도 agencyId 기준으로 동일하게 조회 — 200 OK")
         void getProfile_staff_200() throws Exception {
             AgencyProfileResponse resp = new AgencyProfileResponse(
-                    5L, "테스트대행사", "서울특별시 강남구 테헤란로 1", "신한은행", "110-123-456789");
-            given(agenciesService.getProfile(eq(5L))).willReturn(resp);
+                    5L, "테스트대행사", "서울특별시 강남구 테헤란로 1", "신한은행", "110-123-456789",
+                    "박직원", "staff@test.com", java.time.LocalDateTime.of(2026, 7, 1, 9, 0));
+            given(agenciesService.getProfile(eq(5L), eq(2L))).willReturn(resp);
 
             // userId=2L(대표 아님)이라도 토큰의 agencyId=5L만 일치하면 조회 성공해야 함
             mockMvc.perform(get("/api/agency/me")
@@ -126,7 +131,7 @@ class AgencySettingsControllerTest {
         @Test
         @DisplayName("실패: 대행사 정보 없음(서비스 NoSuchElementException) — 404 Not Found")
         void getProfile_notFound_404() throws Exception {
-            given(agenciesService.getProfile(eq(5L)))
+            given(agenciesService.getProfile(eq(5L), eq(1L)))
                     .willThrow(new NoSuchElementException("해당 사용자의 대행사 정보를 찾을 수 없습니다."));
 
             mockMvc.perform(get("/api/agency/me")
@@ -149,7 +154,8 @@ class AgencySettingsControllerTest {
             AgencyProfileUpdateRequest req = new AgencyProfileUpdateRequest(
                     "수정된대행사", "서울특별시 서초구 서초대로 1", "신한은행", "110-123-456789");
             AgencyProfileResponse resp = new AgencyProfileResponse(
-                    1L, "수정된대행사", "서울특별시 서초구 서초대로 1", "신한은행", "110-123-456789");
+                    1L, "수정된대행사", "서울특별시 서초구 서초대로 1", "신한은행", "110-123-456789",
+                    "김대표", "agency@test.com", java.time.LocalDateTime.of(2026, 7, 1, 9, 0));
 
             given(agenciesService.updateProfile(eq(1L), any())).willReturn(resp);
 
@@ -170,7 +176,8 @@ class AgencySettingsControllerTest {
             AgencyProfileUpdateRequest req = new AgencyProfileUpdateRequest(
                     "수정된대행사", "서울특별시 서초구 서초대로 1", null, null);
             AgencyProfileResponse resp = new AgencyProfileResponse(
-                    1L, "수정된대행사", "서울특별시 서초구 서초대로 1", null, null);
+                    1L, "수정된대행사", "서울특별시 서초구 서초대로 1", null, null,
+                    "김대표", "agency@test.com", java.time.LocalDateTime.of(2026, 7, 1, 9, 0));
 
             given(agenciesService.updateProfile(eq(1L), any())).willReturn(resp);
 

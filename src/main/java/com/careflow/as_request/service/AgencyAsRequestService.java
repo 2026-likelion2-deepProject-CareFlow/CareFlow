@@ -6,8 +6,11 @@ import com.careflow.as_request.dto.AgencyDashboardSummaryResponse;
 import com.careflow.as_request.entity.AsRequest;
 import com.careflow.as_request.repository.AsRequestRepository;
 import com.careflow.auth.security.CustomUserDetails;
+import com.careflow.common.enums.AssignType;
 import com.careflow.common.enums.AsStatus;
 import com.careflow.common.enums.Role;
+import com.careflow.notification.entity.Notification;
+import com.careflow.notification.repository.NotificationRepository;
 import com.careflow.user.entity.User;
 import com.careflow.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -25,6 +28,7 @@ public class AgencyAsRequestService {
 
     private final AsRequestRepository asRequestRepository;
     private final UserRepository userRepository;
+    private final NotificationRepository notificationRepository;
 
     /**
      * 대행사 소속 A/S 요청 전체 목록 조회.
@@ -142,6 +146,44 @@ public class AgencyAsRequestService {
                 todayAcceptedCount,
                 todayCancelledCount
         );
+    }
+
+    /**
+     * 대행사용: A/S 접수 반려.
+     * - 배정 대기(AGENCY_RECEIVED) 상태뿐 아니라, 기사가 아직 수락하지 않은 ASSIGNED 상태
+     *   (자동 배정 후 30분 미수락 등)에서도 반려할 수 있어야 하므로 별도의 상태 사전 검증 없이
+     *   AsRequest.cancel()에 위임한다 — cancel()이 PENDING/AGENCY_RECEIVED/ASSIGNED만 허용하고
+     *   그 외(ACCEPTED 이후 확정 건)는 IllegalStateException을 던진다.
+     *   PENDING은 agency가 아직 null이라 아래 소속 검증에서 자연히 걸러진다.
+     * - AsRequest.cancel()을 재사용해 CANCELLED 상태로 전환 + cancel_reason 저장
+     *   (as_requests.status ENUM에는 별도의 REJECTED 값이 없어 CANCELLED로 통일)
+     * - 반려 후 고객에게 재신청 안내 알림 발송. 자동/수동 배정 여부에 따라 문구가 다름
+     *   (자동 배정: 30분 미수락/거절로 인한 반려, 수동 배정: 지정 기사가 수락하지 않아 반려)
+     */
+    @Transactional
+    public void rejectAsRequest(CustomUserDetails userDetails, Long requestId, String reason)
+            throws IllegalAccessException {
+
+        Long agencyId = extractAgencyId(userDetails);
+
+        AsRequest asRequest = asRequestRepository.findById(requestId)
+                .orElseThrow(() -> new NoSuchElementException("해당 A/S 요청을 찾을 수 없습니다. (requestId: " + requestId + ")"));
+
+        if (asRequest.getAgency() == null || !asRequest.getAgency().getId().equals(agencyId)) {
+            throw new IllegalAccessException("본인 소속 대행사의 A/S 요청만 반려할 수 있습니다.");
+        }
+
+        String cancelReason = (reason != null && !reason.isBlank()) ? reason : "대행사 반려";
+        asRequest.cancel(cancelReason);
+
+        // 고객 알림 — 자동 배정은 "30분 미수락/거절" 문구, 수동 배정은 "지정 기사 미수락" 문구로 구분
+        String title = "A/S 접수 반려 안내";
+        String body = (asRequest.getAssignType() == AssignType.AUTO)
+                ? "30분 동안 수리기사가 수락하지 않았거나 거부하여 요청이 반려되었습니다. 다시 요청을 시도해주세요."
+                : "선택하신 수리기사가 배정을 수락하지 않아 요청이 반려되었습니다. 다시 요청을 시도해주세요.";
+
+        Notification notification = Notification.createAsStatusNotification(asRequest.getCustomer(), title, body);
+        notificationRepository.save(notification);
     }
 
     /**

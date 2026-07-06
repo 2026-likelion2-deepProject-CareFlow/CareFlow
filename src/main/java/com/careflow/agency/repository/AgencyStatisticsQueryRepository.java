@@ -277,4 +277,105 @@ public class AgencyStatisticsQueryRepository {
                 .getResultList();
         return rows.isEmpty() ? null : rows.get(0);
     }
+
+    // ──────────────────────────────────────────────────────────────
+    // 리포트 다운로드용 집계 (통계 페이지 "리포트 다운로드" 4종)
+    // ──────────────────────────────────────────────────────────────
+
+    /**
+     * 일자별 정산 집계 (작업 현황/정산 리포트 공용)
+     * 반환: Object[] { String dateStr, Long count, Long grossAmount, Long platformFee, Long agencyFee, Long engineerNetAmount }
+     */
+    @SuppressWarnings("unchecked")
+    public List<Object[]> findDailySettlementBreakdown(Long agencyId, LocalDateTime from, LocalDateTime to) {
+        return em.createNativeQuery(
+                "SELECT DATE(created_at) AS date_str, COUNT(*) AS cnt, " +
+                "       SUM(gross_amount) AS gross, SUM(platform_fee) AS platform_fee, " +
+                "       SUM(agency_fee) AS agency_fee, SUM(engineer_net_amount) AS engineer_net " +
+                "FROM settlements " +
+                "WHERE agency_id = :agencyId AND created_at >= :from AND created_at < :to " +
+                "GROUP BY DATE(created_at) " +
+                "ORDER BY date_str")
+                .setParameter("agencyId", agencyId)
+                .setParameter("from", from)
+                .setParameter("to", to)
+                .getResultList();
+    }
+
+    /**
+     * 기간 내 전체 기사별 완료 배차 건수 (LIMIT 없는 findEngineerTop5)
+     * 반환: Object[] { Long engineerId, String engineerName, Long completedCount }
+     */
+    @SuppressWarnings("unchecked")
+    public List<Object[]> findAllEngineerCompleted(Long agencyId, LocalDateTime from, LocalDateTime to) {
+        return em.createNativeQuery(
+                "SELECT u.user_id AS engineer_id, u.name AS engineer_name, COUNT(aa.assignment_id) AS completed_count " +
+                "FROM as_assignments aa " +
+                "JOIN users u ON aa.engineer_id = u.user_id " +
+                "WHERE aa.agency_id = :agencyId AND aa.status = 'COMPLETED' " +
+                "AND aa.assigned_at >= :from AND aa.assigned_at < :to " +
+                "GROUP BY aa.engineer_id, u.name " +
+                "ORDER BY completed_count DESC")
+                .setParameter("agencyId", agencyId)
+                .setParameter("from", from)
+                .setParameter("to", to)
+                .getResultList();
+    }
+
+    /**
+     * 기간 내 기사별 평균 평점 (findAllEngineerCompleted와 engineerId로 병합해서 사용)
+     * 반환: Object[] { Long engineerId, Double avgRating }
+     */
+    @SuppressWarnings("unchecked")
+    public List<Object[]> findEngineerRatings(Long agencyId, LocalDateTime from, LocalDateTime to) {
+        return em.createNativeQuery(
+                "SELECT r.engineer_id AS engineer_id, AVG(r.rating) AS avg_rating " +
+                "FROM reviews r " +
+                "JOIN as_requests ar ON r.request_id = ar.request_id " +
+                "WHERE ar.agency_id = :agencyId AND r.is_visible = 1 " +
+                "AND r.created_at >= :from AND r.created_at < :to " +
+                "GROUP BY r.engineer_id")
+                .setParameter("agencyId", agencyId)
+                .setParameter("from", from)
+                .setParameter("to", to)
+                .getResultList();
+    }
+
+    /**
+     * 기간 내 고객별 접수 건수 (고객 현황 리포트)
+     * 반환: Object[] { Long customerId, String customerName, Long requestCount }
+     */
+    @SuppressWarnings("unchecked")
+    public List<Object[]> findCustomerActivity(Long agencyId, LocalDateTime from, LocalDateTime to) {
+        return em.createNativeQuery(
+                "SELECT u.user_id AS customer_id, u.name AS customer_name, COUNT(ar.request_id) AS request_count " +
+                "FROM as_requests ar " +
+                "JOIN users u ON ar.customer_id = u.user_id " +
+                "WHERE ar.agency_id = :agencyId AND ar.created_at >= :from AND ar.created_at < :to " +
+                "GROUP BY ar.customer_id, u.name " +
+                "ORDER BY request_count DESC")
+                .setParameter("agencyId", agencyId)
+                .setParameter("from", from)
+                .setParameter("to", to)
+                .getResultList();
+    }
+
+    /**
+     * 기간 내 고객별 평균 만족도(본인이 남긴 리뷰 평점) — findCustomerActivity와 customerId로 병합
+     * 반환: Object[] { Long customerId, Double avgRating }
+     */
+    @SuppressWarnings("unchecked")
+    public List<Object[]> findCustomerRatings(Long agencyId, LocalDateTime from, LocalDateTime to) {
+        return em.createNativeQuery(
+                "SELECT r.customer_id AS customer_id, AVG(r.rating) AS avg_rating " +
+                "FROM reviews r " +
+                "JOIN as_requests ar ON r.request_id = ar.request_id " +
+                "WHERE ar.agency_id = :agencyId AND r.is_visible = 1 " +
+                "AND r.created_at >= :from AND r.created_at < :to " +
+                "GROUP BY r.customer_id")
+                .setParameter("agencyId", agencyId)
+                .setParameter("from", from)
+                .setParameter("to", to)
+                .getResultList();
+    }
 }

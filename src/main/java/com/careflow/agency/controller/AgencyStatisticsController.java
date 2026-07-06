@@ -118,6 +118,109 @@ public class AgencyStatisticsController {
     }
 
     // ─────────────────────────────────────────────
+    // GET /api/agency/statistics/recent-periods
+    // "최근 주요 지표 요약" 테이블 — 이번 달 + 직전 2개월 비교
+    // ─────────────────────────────────────────────
+    @GetMapping("/recent-periods")
+    public ResponseEntity<List<AgencyStatisticsPeriodSummaryResponse>> getRecentPeriods(
+            @AuthenticationPrincipal CustomUserDetails userDetails) throws IllegalAccessException {
+
+        checkAgencyRole(userDetails);
+        return ResponseEntity.ok(statisticsService.getRecentPeriodsSummary(userDetails.getAgencyId()));
+    }
+
+    // ─────────────────────────────────────────────
+    // GET /api/agency/statistics/engineers
+    // "기사 통계" 탭 — 기간 내 전체 기사별 완료건수·평균평점
+    // ─────────────────────────────────────────────
+    @GetMapping("/engineers")
+    public ResponseEntity<List<AgencyStatisticsEngineerStatResponse>> getEngineerStats(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @Valid @ModelAttribute AgencyStatisticsDateRangeRequest request) throws IllegalAccessException {
+
+        checkAgencyRole(userDetails);
+        return ResponseEntity.ok(statisticsService.getEngineerStats(userDetails.getAgencyId(), request));
+    }
+
+    // ─────────────────────────────────────────────
+    // GET /api/agency/statistics/settlement-trend
+    // "정산 통계" 탭 — 기간 내 일자별 정산 추이
+    // ─────────────────────────────────────────────
+    @GetMapping("/settlement-trend")
+    public ResponseEntity<List<AgencyStatisticsSettlementTrendResponse>> getSettlementTrend(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @Valid @ModelAttribute AgencyStatisticsDateRangeRequest request) throws IllegalAccessException {
+
+        checkAgencyRole(userDetails);
+        return ResponseEntity.ok(statisticsService.getSettlementTrend(userDetails.getAgencyId(), request));
+    }
+
+    // ─────────────────────────────────────────────
+    // GET /api/agency/statistics/customers
+    // "고객 통계" 탭 — 기간 내 고객별 접수건수·평균만족도
+    // ─────────────────────────────────────────────
+    @GetMapping("/customers")
+    public ResponseEntity<List<AgencyStatisticsCustomerStatResponse>> getCustomerStats(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @Valid @ModelAttribute AgencyStatisticsDateRangeRequest request) throws IllegalAccessException {
+
+        checkAgencyRole(userDetails);
+        return ResponseEntity.ok(statisticsService.getCustomerStats(userDetails.getAgencyId(), request));
+    }
+
+    // ─────────────────────────────────────────────
+    // 리포트 다운로드 4종 (CSV, UTF-8 BOM 포함)
+    // ─────────────────────────────────────────────
+
+    @GetMapping("/reports/work-status/download")
+    public ResponseEntity<byte[]> downloadWorkStatusReport(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @Valid @ModelAttribute AgencyStatisticsDateRangeRequest request) throws IllegalAccessException {
+
+        checkAgencyRole(userDetails);
+        byte[] csv = statisticsService.generateWorkStatusReportCsv(userDetails.getAgencyId(), request);
+        return csvResponse(csv, "work_status_report_" + request.dateFrom() + "_" + request.dateTo() + ".csv");
+    }
+
+    @GetMapping("/reports/settlement/download")
+    public ResponseEntity<byte[]> downloadSettlementReport(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @Valid @ModelAttribute AgencyStatisticsDateRangeRequest request) throws IllegalAccessException {
+
+        checkAgencyRole(userDetails);
+        byte[] csv = statisticsService.generateSettlementReportCsv(userDetails.getAgencyId(), request);
+        return csvResponse(csv, "settlement_report_" + request.dateFrom() + "_" + request.dateTo() + ".csv");
+    }
+
+    @GetMapping("/reports/engineer-performance/download")
+    public ResponseEntity<byte[]> downloadEngineerPerformanceReport(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @Valid @ModelAttribute AgencyStatisticsDateRangeRequest request) throws IllegalAccessException {
+
+        checkAgencyRole(userDetails);
+        byte[] csv = statisticsService.generateEngineerPerformanceReportCsv(userDetails.getAgencyId(), request);
+        return csvResponse(csv, "engineer_performance_report_" + request.dateFrom() + "_" + request.dateTo() + ".csv");
+    }
+
+    @GetMapping("/reports/customer/download")
+    public ResponseEntity<byte[]> downloadCustomerReport(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @Valid @ModelAttribute AgencyStatisticsDateRangeRequest request) throws IllegalAccessException {
+
+        checkAgencyRole(userDetails);
+        byte[] csv = statisticsService.generateCustomerStatusReportCsv(userDetails.getAgencyId(), request);
+        return csvResponse(csv, "customer_status_report_" + request.dateFrom() + "_" + request.dateTo() + ".csv");
+    }
+
+    private ResponseEntity<byte[]> csvResponse(byte[] csv, String filename) {
+        return ResponseEntity.ok()
+                .header(org.springframework.http.HttpHeaders.CONTENT_DISPOSITION,
+                        "attachment; filename=\"" + filename + "\"")
+                .contentType(org.springframework.http.MediaType.parseMediaType("text/csv; charset=UTF-8"))
+                .body(csv);
+    }
+
+    // ─────────────────────────────────────────────
     // 공통: AGENCY 역할 검증
     // ─────────────────────────────────────────────
     private void checkAgencyRole(CustomUserDetails userDetails) throws IllegalAccessException {
