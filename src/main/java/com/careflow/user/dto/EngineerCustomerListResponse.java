@@ -13,5 +13,6 @@ public class EngineerCustomerListResponse {
     private String status;
     private Integer appliancesCount;
     private Integer totalAsCount;
+    private Integer inProgressCount;
     private String lastWorkDate;
 }

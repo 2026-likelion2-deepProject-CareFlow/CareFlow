@@ -372,4 +372,18 @@ public interface SettlementRepository extends JpaRepository<Settlement, Long> {
             countQuery = "SELECT COUNT(s) FROM Settlement s WHERE s.engineer.id = :engineerId"
     )
     org.springframework.data.domain.Page<Settlement> findPageByEngineerId(@org.springframework.data.repository.query.Param("engineerId") Long engineerId, org.springframework.data.domain.Pageable pageable);
+
+    /**
+     * 월별 정산 배치용 — 해당 기간 내에 발생했으며,
+     * 아직 '플랫폼 정산'이나 '기사 지급 배치'에 집계(바인딩)되지 않은 정산 건 조회
+     * N+1 방지를 위해 agency, engineer 를 JOIN FETCH
+     */
+    @Query("SELECT s FROM Settlement s " +
+            "JOIN FETCH s.agency " +
+            "JOIN FETCH s.engineer " +
+            "WHERE s.createdAt >= :from AND s.createdAt < :to " +
+            "AND (s.platformSettlement IS NULL OR s.engineerPayout IS NULL)")
+    List<Settlement> findUnaggregatedSettlements(
+            @Param("from") LocalDateTime from,
+            @Param("to") LocalDateTime to);
 }

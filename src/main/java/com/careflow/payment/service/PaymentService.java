@@ -2,6 +2,8 @@ package com.careflow.payment.service;
 
 import com.careflow.as_request.entity.AsRequest;
 import com.careflow.as_request.repository.AsRequestRepository;
+import com.careflow.assignment.entity.AsAssignment;
+import com.careflow.assignment.repository.AsAssignmentRepository;
 import com.careflow.common.enums.AsStatus;
 import com.careflow.payment.dto.CustomerMonthlyPaymentResponse;
 import com.careflow.payment.dto.CustomerPaymentSummaryResponse;
@@ -10,12 +12,16 @@ import com.careflow.payment.entity.Payment;
 import com.careflow.payment.repository.PaymentRepository;
 import com.careflow.report.domain.entity.WorkReport;
 import com.careflow.report.repository.WorkReportRepository;
+import com.careflow.settlement.entity.Settlement;
+import com.careflow.settlement.repository.SettlementRepository;
 import com.careflow.user.entity.User;
 import com.careflow.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
@@ -35,6 +41,11 @@ public class PaymentService {
     private final AsRequestRepository asRequestRepository;
     private final UserRepository userRepository;
     private final WorkReportRepository workReportRepository;
+    private final AsAssignmentRepository asAssignmentRepository;
+    private final SettlementRepository settlementRepository;
+
+    // 🌟 플랫폼 고정 수수료율 (10%)
+    private static final BigDecimal PLATFORM_FEE_RATE = BigDecimal.valueOf(0.10);
 
     /**
      * 고객 결제 처리 (Phase 1: MOCK — PG 호출 없이 즉시 SUCCESS)
@@ -95,6 +106,41 @@ public class PaymentService {
 
         // 7. A/S 요청 상태 COMPLETED → PAID
         asRequest.markPaid();
+
+        // 8. 결제 즉시 정산(Settlement) 데이터 PENDING 상태로 생성
+        List<AsAssignment> assignments = asAssignmentRepository.findByAsRequest_Id(requestId).stream()
+                .filter(a -> "COMPLETED".equals(a.getStatus()))
+                .sorted((a, b) -> b.getAssignedAt().compareTo(a.getAssignedAt()))
+                .toList();
+
+        if (assignments.isEmpty()) {
+            throw new IllegalStateException("해당 요청에 대해 완료된 배차 내역이 없어 정산을 생성할 수 없습니다.");
+        }
+        AsAssignment assignment = assignments.get(0);
+
+        BigDecimal agencyFeeRate = BigDecimal.valueOf(assignment.getAgency().getAgencyFeeRate());
+
+        int platformFee = PLATFORM_FEE_RATE.multiply(BigDecimal.valueOf(finalAmount))
+                .setScale(0, RoundingMode.HALF_UP).intValue();
+
+        int agencyFee = agencyFeeRate.multiply(BigDecimal.valueOf(finalAmount))
+                .setScale(0, RoundingMode.HALF_UP).intValue();
+
+        int engineerNetAmount = finalAmount - platformFee - agencyFee;
+
+        Settlement settlement = Settlement.create(
+                payment,
+                asRequest,
+                assignment.getEngineer(),
+                assignment.getAgency(),
+                finalAmount,
+                platformFee,
+                PLATFORM_FEE_RATE,
+                agencyFee,
+                agencyFeeRate,
+                engineerNetAmount
+        );
+        settlementRepository.save(settlement); // 정산 데이터 생성 끝
 
         return new PaymentResponse(
                 payment.getId(),
