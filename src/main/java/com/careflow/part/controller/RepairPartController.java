@@ -4,24 +4,29 @@ import com.careflow.part.dto.RepairPartResponse;
 import com.careflow.part.repository.RepairPartRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
 import java.util.stream.Collectors;
 
 @RestController
-@RequestMapping("/api/repair-parts")
+@RequestMapping("/api/engineer/repair-parts")
 @RequiredArgsConstructor
+@PreAuthorize("hasRole('ENGINEER')") //  기사 권한 보호 추가
 public class RepairPartController {
 
     private final RepairPartRepository repairPartRepository;
 
     @GetMapping
-    public ResponseEntity<List<RepairPartResponse>> searchParts(@RequestParam(required = false) String keyword) {
-        List<RepairPartResponse> parts = repairPartRepository.findAll().stream()
-                .filter(part -> keyword == null ||
-                        part.getPartName().contains(keyword) ||
-                        part.getPartCode().contains(keyword))
+    public ResponseEntity<List<RepairPartResponse>> searchParts(
+            @RequestParam(name = "search", required = false) String search) { // 파라미터명 'search'로 매핑
+
+        // 빈 문자열 방어 로직
+        String effectiveSearch = (search != null && !search.isBlank()) ? search.trim() : null;
+
+        // findAll() 인메모리 필터링 제거 및 최적화된 DB 쿼리 호출
+        List<RepairPartResponse> parts = repairPartRepository.searchByKeyword(effectiveSearch).stream()
                 .map(RepairPartResponse::new)
                 .collect(Collectors.toList());
 
