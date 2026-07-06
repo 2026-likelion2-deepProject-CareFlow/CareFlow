@@ -20,6 +20,7 @@ public class EngineerReportListResponse {
     private final String workTimeStart;
     private final String workTimeEnd;
     private final String status;         // DRAFT, SUBMITTED, APPROVED
+    private final String requestStatus;  // 실제 A/S 진행 상태 (WAITING, ACCEPTED, IN_PROGRESS, COMPLETED 등)
     private final String diagnosisResult;
     private final Integer finalAmount;
     private final String submittedAt;
@@ -60,6 +61,7 @@ public class EngineerReportListResponse {
                 .workTimeStart(req.getScheduledTime())
                 .workTimeEnd(endTime)
                 .status(mappedStatus)
+                .requestStatus(req.getStatus().name()) // 실제 A/S 상태 매핑
                 .diagnosisResult(report != null ? report.getDiagnosisResult().name() : null)
                 .finalAmount(report != null ? report.getFinalAmount() : null)
                 .submittedAt(report != null && report.getSubmittedAt() != null ? report.getSubmittedAt().format(timeFormatter) : null)
