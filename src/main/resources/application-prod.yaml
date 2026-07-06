@@ -52,3 +52,6 @@ jwt:
 app:
   oauth2:
     redirect-uri: http://localhost:5173/oauth2/redirect
+
+toss:
+  secret-key: ${TOSS_SECRET_KEY}

@@ -61,6 +61,10 @@ jwt:
   access-token-expiration: 1800000
   refresh-token-expiration: 604800000
 
+toss:
+  # 토스페이먼츠 개발자센터에서 발급받은 테스트 시크릿 키(test_sk_...)로 교체
+  secret-key: ${TOSS_SECRET_KEY:}
+
 # SQL 로그 레벨 상세 설정 (파라미터 값 로깅)
 logging:
   level:

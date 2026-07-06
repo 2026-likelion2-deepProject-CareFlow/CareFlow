@@ -92,7 +92,7 @@ class WorkReportControllerTest {
         @DisplayName("성공: 프론트엔드의 page=1 요청이 백엔드의 page=0으로 매핑되어 호출된다")
         void success_paginationTranslation() throws Exception {
             EngineerReportListResponse stubResponse = EngineerReportListResponse.builder()
-                    .reportId(1L).requestId("AS-20260701-0001").status("SUBMITTED").build();
+                    .reportId(1L).requestId(1L).status("SUBMITTED").build();
 
             PageRequest expectedPageRequest = PageRequest.of(0, 20);
             Page<EngineerReportListResponse> mockPage = new PageImpl<>(List.of(stubResponse), expectedPageRequest, 1);

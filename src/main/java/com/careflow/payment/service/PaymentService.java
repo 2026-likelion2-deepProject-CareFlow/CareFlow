@@ -5,9 +5,12 @@ import com.careflow.as_request.repository.AsRequestRepository;
 import com.careflow.assignment.entity.AsAssignment;
 import com.careflow.assignment.repository.AsAssignmentRepository;
 import com.careflow.common.enums.AsStatus;
+import com.careflow.common.enums.PgProvider;
+import com.careflow.payment.client.TossPaymentClient;
 import com.careflow.payment.dto.CustomerMonthlyPaymentResponse;
 import com.careflow.payment.dto.CustomerPaymentSummaryResponse;
 import com.careflow.payment.dto.PaymentResponse;
+import com.careflow.payment.dto.TossConfirmResponse;
 import com.careflow.payment.entity.Payment;
 import com.careflow.payment.repository.PaymentRepository;
 import com.careflow.report.domain.entity.WorkReport;
@@ -43,24 +46,27 @@ public class PaymentService {
     private final WorkReportRepository workReportRepository;
     private final AsAssignmentRepository asAssignmentRepository;
     private final SettlementRepository settlementRepository;
+    private final TossPaymentClient tossPaymentClient;
 
     // 🌟 플랫폼 고정 수수료율 (10%)
     private static final BigDecimal PLATFORM_FEE_RATE = BigDecimal.valueOf(0.10);
 
     /**
-     * 고객 결제 처리 (Phase 1: MOCK — PG 호출 없이 즉시 SUCCESS)
+     * 고객 결제 승인 처리 (토스페이먼츠 결제위젯 연동)
      *
      * 처리 순서:
      * 1. A/S 요청 조회 및 본인 소유 검증
      * 2. COMPLETED 상태 여부 확인 (결제 가능한 선행 상태)
      * 3. 작업 완료 보고서 조회 및 고객 승인 여부 확인 (C-21, C-22)
      * 4. 중복 결제 방지
-     * 5. Payment row 생성 (status=READY) — 금액은 work_reports.final_amount 사용
-     * 6. 즉시 SUCCESS 전환 (pg_provider=MOCK, paid_at=NOW())
-     * 7. as_requests.status → PAID
+     * 5. 클라이언트가 보낸 금액과 work_reports.final_amount 대조 (위변조 방지)
+     * 6. 토스페이먼츠 결제 승인 API 서버-to-서버 호출
+     * 7. Payment row 생성 및 SUCCESS 전환 (pg_provider=TOSS, pg_transaction_id=paymentKey)
+     * 8. as_requests.status → PAID
      */
     @Transactional
-    public PaymentResponse processPayment(Long customerId, Long requestId)
+    public PaymentResponse processPayment(Long customerId, Long requestId,
+                                           String paymentKey, String orderId, Integer clientAmount)
             throws IllegalAccessException {
 
         // 1. A/S 요청 조회
@@ -96,18 +102,25 @@ public class PaymentService {
         User customer = userRepository.findById(customerId)
                 .orElseThrow(() -> new NoSuchElementException("존재하지 않는 사용자입니다."));
 
-        // 결제 금액은 dto가 아닌 work_reports.final_amount 기준으로 확정 (C-22)
+        // 결제 금액은 클라이언트 값이 아닌 work_reports.final_amount 기준으로 확정 (C-22)
+        // — 클라이언트가 보낸 금액은 여기서 대조만 하고, 실제로 토스에 넘기는 금액은 서버 값을 쓴다.
         int finalAmount = workReport.getFinalAmount();
+        if (clientAmount == null || clientAmount != finalAmount) {
+            throw new IllegalStateException("결제 금액이 일치하지 않습니다.");
+        }
 
-        // 6. Payment row 생성 (READY) 및 즉시 SUCCESS 전환
+        // 6. 토스페이먼츠 결제 승인(confirm) API 서버-to-서버 호출
+        TossConfirmResponse tossResponse = tossPaymentClient.confirm(paymentKey, orderId, finalAmount);
+
+        // 7. Payment row 생성 및 SUCCESS 전환
         Payment payment = Payment.create(asRequest, customer, finalAmount);
         paymentRepository.save(payment);
-        payment.markSuccess();  // MOCK: PG 호출 없이 바로 SUCCESS
+        payment.markSuccess(PgProvider.TOSS, tossResponse.paymentKey());
 
-        // 7. A/S 요청 상태 COMPLETED → PAID
+        // 8. A/S 요청 상태 COMPLETED → PAID
         asRequest.markPaid();
 
-        // 8. 결제 즉시 정산(Settlement) 데이터 PENDING 상태로 생성
+        // 9. 결제 즉시 정산(Settlement) 데이터 PENDING 상태로 생성
         List<AsAssignment> allAssignments = asAssignmentRepository.findByAsRequest_Id(requestId);
 
         List<AsAssignment> assignments = allAssignments.stream()
