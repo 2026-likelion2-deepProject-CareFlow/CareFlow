@@ -46,6 +46,7 @@ public class EngineerCustomerDetailResponse {
         private Long asRequestId;      // API 통신용 실제 숫자 PK (예: 40)
         private String productName;    // 브랜드 + 모델명
         private String symptom;        // 증상명
+        private String createdAt;      // 접수일
         private String visitDate;      // 방문 예정일 (yyyy-MM-dd)
         private String progressStatus; // 세부 진행상태 (as_status_logs 최신 to_status)
         private String status;         // coarse 상태 (as_requests.status)
@@ -63,6 +64,8 @@ public class EngineerCustomerDetailResponse {
     public static class AsHistoryDto {
         private Long reportId;
         private String requestId;
+        private String createdAt;
+        private String visitDate;
         private String workDate;
         private String productName;
         private String symptom;
