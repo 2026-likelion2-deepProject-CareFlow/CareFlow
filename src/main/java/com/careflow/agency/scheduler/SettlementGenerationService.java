@@ -41,9 +41,7 @@ import java.util.stream.Collectors;
 @RequiredArgsConstructor
 public class SettlementGenerationService {
 
-    private final PaymentRepository paymentRepository;
     private final SettlementRepository settlementRepository;
-    private final AsAssignmentRepository asAssignmentRepository;
     private final PlatformSettlementRepository platformSettlementRepository;
     private final EngineerPayoutRepository engineerPayoutRepository;
 
@@ -65,41 +63,25 @@ public class SettlementGenerationService {
         log.info("[월별 정산] {}년 {}월 정산 생성 시작 (대상 기간: {} ~ {})",
                 targetMonth.getYear(), targetMonth.getMonthValue(), from, to);
 
-        // 정산 미생성 결제 건 조회 (payment.status=SUCCESS + NOT EXISTS settlement)
-        List<Payment> targets = paymentRepository.findSettlementTargets(from, to);
-        log.info("[월별 정산] 대상 결제 건 조회 완료: 총 {}건", targets.size());
+        // 1. 해당 월에 결제되어 생성된 Settlement 중 아직 통계에 집계(바인딩)되지 않은 건 조회
+        List<Settlement> unaggregatedSettlements = settlementRepository.findUnaggregatedSettlements(from, to);
 
-        int created = 0;
-        int skipped = 0;
-        int failed  = 0;
-        List<Settlement> createdSettlements = new ArrayList<>();
-
-        for (Payment payment : targets) {
-            try {
-                Settlement settlement = createSettlement(payment);
-                if (settlement != null) {
-                    created++;
-                    createdSettlements.add(settlement);
-                } else {
-                    skipped++;
-                }
-            } catch (Exception e) {
-                failed++;
-                log.error("[월별 정산] 정산 생성 실패 — payment_id={}, 원인: {}",
-                        payment.getId(), e.getMessage(), e);
-            }
+        if (unaggregatedSettlements.isEmpty()) {
+            log.info("[월별 정산 집계] 집계 대상 정산 내역이 없습니다.");
+            return new Result(0, 0, 0, 0, 0);
         }
 
-        log.info("[월별 정산] 정산 생성 완료: {}건 / 스킵(기사 없음): {}건 / 오류: {}건",
-                created, skipped, failed);
+        // 2. 대행사 단위로 그룹핑하여 PlatformSettlement 통계 묶기
+        int platformSettlementsCreated = generatePlatformSettlements(targetMonth, unaggregatedSettlements);
 
-        // 이어서 생성된 Settlement를 대행사·연·월 단위로 집계해 platform_settlements 생성
-        int platformSettlementsCreated = generatePlatformSettlements(targetMonth, createdSettlements);
+        // 3. 대행사+기사 단위로 그룹핑하여 EngineerPayout 통계 묶기
+        int engineerPayoutsCreated = generateEngineerPayouts(targetMonth, unaggregatedSettlements);
 
-        // 같은 배치에서 생성된 Settlement를 대행사+기사·연·월 단위로 집계해 engineer_payouts 생성
-        int engineerPayoutsCreated = generateEngineerPayouts(targetMonth, createdSettlements);
+        log.info("[월별 정산 집계] 집계 완료: 바인딩된 정산 건수 {}, 신규 대행사 정산 {}, 신규 기사 지급 {}",
+                unaggregatedSettlements.size(), platformSettlementsCreated, engineerPayoutsCreated);
 
-        return new Result(created, skipped, failed, platformSettlementsCreated, engineerPayoutsCreated);
+        // created 자리에 집계된 총 Settlement 개수를 반환하여 로그에서 추적 가능하게 함
+        return new Result(unaggregatedSettlements.size(), 0, 0, platformSettlementsCreated, engineerPayoutsCreated);
     }
 
     /**
@@ -240,74 +222,6 @@ public class SettlementGenerationService {
 
     /** (agency_id, engineer_id) 그룹핑 키 */
     private record AgencyEngineerKey(Long agencyId, Long engineerId) {}
-
-    /**
-     * Payment 1건에 대한 Settlement 생성
-     *
-     * 담당 기사 조회 전략:
-     *   as_assignments 테이블에서 request_id 일치 + status='COMPLETED' 중
-     *   assignedAt 최신 1건을 기사로 확정한다.
-     *   배정 내역이 없으면 스킵한다.
-     *
-     * @return 생성된 Settlement, 스킵된 경우 null
-     */
-    private Settlement createSettlement(Payment payment) {
-        Long requestId = payment.getAsRequest().getId();
-
-        // COMPLETED 상태 배정 중 가장 최신 1건으로 담당 기사 확정
-        List<AsAssignment> assignments = asAssignmentRepository
-                .findByAsRequest_Id(requestId)
-                .stream()
-                .filter(a -> "COMPLETED".equals(a.getStatus()))
-                .sorted((a, b) -> b.getAssignedAt().compareTo(a.getAssignedAt()))
-                .toList();
-
-        if (assignments.isEmpty()) {
-            // 완료 처리된 배정이 없으면 정산 생성 불가 — 경고 로그 후 스킵
-            log.warn("[월별 정산] 담당 기사 없음으로 스킵 — payment_id={}, request_id={}",
-                    payment.getId(), requestId);
-            return null;
-        }
-
-        AsAssignment assignment = assignments.get(0);
-
-        int gross = payment.getAmount();
-        // agencies.agency_fee_rate 는 대행사별 기사 수수료율(비율, 예: 0.46 = 46%) — 플랫폼 수수료율(고정 10%)과는 별개
-        BigDecimal agencyFeeRate = BigDecimal.valueOf(assignment.getAgency().getAgencyFeeRate());
-
-        // 수수료 계산 — 이미 비율(0~1)로 저장된 값이므로 100으로 나누지 않고 gross_amount에 바로 곱함
-        int platformFee = PLATFORM_FEE_RATE
-                .multiply(BigDecimal.valueOf(gross))
-                .setScale(0, RoundingMode.HALF_UP)
-                .intValue();
-
-        int agencyFee = agencyFeeRate
-                .multiply(BigDecimal.valueOf(gross))
-                .setScale(0, RoundingMode.HALF_UP)
-                .intValue();
-
-        int engineerNetAmount = gross - platformFee - agencyFee;
-
-        Settlement settlement = Settlement.create(
-                payment,
-                payment.getAsRequest(),
-                assignment.getEngineer(),
-                assignment.getAgency(),
-                gross,
-                platformFee,
-                PLATFORM_FEE_RATE,   // feeRate — 플랫폼 고정 수수료율(10%) 스냅샷
-                agencyFee,
-                agencyFeeRate,
-                engineerNetAmount
-        );
-
-        Settlement saved = settlementRepository.save(settlement);
-
-        log.debug("[월별 정산] Settlement 생성 — payment_id={}, engineer={}, gross={}원, net={}원",
-                payment.getId(), assignment.getEngineer().getName(), gross, engineerNetAmount);
-
-        return saved;
-    }
 
     /** 처리 결과 요약 레코드 */
     public record Result(int created, int skipped, int failed, int platformSettlementsCreated, int engineerPayoutsCreated) {}
