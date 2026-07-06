@@ -116,4 +116,20 @@ public class AsAssignment {
         this.rejectReason = reason;
         this.rejectedAt = LocalDateTime.now();
     }
+
+    // 작업 완료 보고서 제출 시 배정 완료 처리 (ACCEPTED 상태일 때만 가능)
+    public void complete() {
+        if (!"ACCEPTED".equals(this.status)) {
+            throw new IllegalStateException("수락(ACCEPTED) 상태인 배정만 완료 처리할 수 있습니다. (현재 상태: " + this.status + ")");
+        }
+        this.status = "COMPLETED";
+    }
+
+    // 보고서 제출 취소 시 배정을 다시 수락 상태로 되돌림
+    public void revertToAccepted() {
+        if (!"COMPLETED".equals(this.status)) {
+            throw new IllegalStateException("완료(COMPLETED) 상태인 배정만 수락 상태로 되돌릴 수 있습니다.");
+        }
+        this.status = "ACCEPTED";
+    }
 }

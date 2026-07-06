@@ -67,13 +67,11 @@ public class WorkReportService {
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 A/S 신청 건입니다."));
 
         List<AsAssignment> assignments = asAssignmentRepository.findByAsRequest_Id(asRequest.getId());
-        boolean isAssignedToMe = assignments.stream()
-                .anyMatch(a -> a.getEngineer().getId().equals(engineerId)
-                        && ("ACCEPTED".equals(a.getStatus()) || "COMPLETED".equals(a.getStatus())));
-
-        if (!isAssignedToMe) {
-            throw new IllegalStateException("본인에게 배정된 A/S 건만 보고서를 작성할 수 있습니다.");
-        }
+        AsAssignment myAssignment = assignments.stream()
+                .filter(a -> a.getEngineer().getId().equals(engineerId)
+                        && ("ACCEPTED".equals(a.getStatus()) || "COMPLETED".equals(a.getStatus())))
+                .findFirst()
+                .orElseThrow(() -> new IllegalStateException("본인에게 배정된 A/S 건만 보고서를 작성할 수 있습니다."));
 
         if (workReportRepository.existsByAsRequest_Id(asRequest.getId())) {
             throw new IllegalStateException("해당 A/S 건에 대해 이미 제출된 보고서가 존재합니다.");
@@ -82,6 +80,12 @@ public class WorkReportService {
         String oldStatusStr = asRequest.getStatus().name();
 
         asRequest.completeWork();
+        // 배정도 함께 완료 처리 — 결제 단계(PaymentService)에서 정산 대상 배정을
+        // status='COMPLETED' 기준으로 조회하므로, 여기서 전이해두지 않으면
+        // 결제 시 "완료된 배차 내역 없음" 오류가 발생한다.
+        if ("ACCEPTED".equals(myAssignment.getStatus())) {
+            myAssignment.complete();
+        }
 
         WorkReport report = WorkReport.builder()
                 .asRequest(asRequest)
@@ -236,6 +240,14 @@ public class WorkReportService {
         String oldStatusStr = request.getStatus().name();
 
         request.revertToInProgress();
+
+        // submitWorkReport에서 COMPLETED로 전이했던 배정을 다시 ACCEPTED로 되돌려
+        // 재제출 시 정상적으로 다시 완료 처리될 수 있도록 한다.
+        asAssignmentRepository.findByAsRequest_Id(request.getId()).stream()
+                .filter(a -> a.getEngineer().getId().equals(engineerId)
+                        && "COMPLETED".equals(a.getStatus()))
+                .findFirst()
+                .ifPresent(AsAssignment::revertToAccepted);
 
         AsStatusLog statusLog = AsStatusLog.builder()
                 .asRequest(request)

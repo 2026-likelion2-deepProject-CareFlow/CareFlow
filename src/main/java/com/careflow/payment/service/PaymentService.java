@@ -108,13 +108,25 @@ public class PaymentService {
         asRequest.markPaid();
 
         // 8. 결제 즉시 정산(Settlement) 데이터 PENDING 상태로 생성
-        List<AsAssignment> assignments = asAssignmentRepository.findByAsRequest_Id(requestId).stream()
+        List<AsAssignment> allAssignments = asAssignmentRepository.findByAsRequest_Id(requestId);
+
+        List<AsAssignment> assignments = allAssignments.stream()
                 .filter(a -> "COMPLETED".equals(a.getStatus()))
                 .sorted((a, b) -> b.getAssignedAt().compareTo(a.getAssignedAt()))
                 .toList();
 
         if (assignments.isEmpty()) {
-            throw new IllegalStateException("해당 요청에 대해 완료된 배차 내역이 없어 정산을 생성할 수 없습니다.");
+            // 배정을 COMPLETED로 전이하는 로직이 없던 구버전에서 이미 보고서가
+            // 제출된 레거시 건은 배정이 ACCEPTED 상태로 남아있을 수 있다.
+            // as_requests.status가 이미 COMPLETED까지 온 시점이므로, 가장 최근
+            // ACCEPTED 배정을 여기서 완료 처리해 자연스럽게 복구한다.
+            AsAssignment legacyAssignment = allAssignments.stream()
+                    .filter(a -> "ACCEPTED".equals(a.getStatus()))
+                    .sorted((a, b) -> b.getAssignedAt().compareTo(a.getAssignedAt()))
+                    .findFirst()
+                    .orElseThrow(() -> new IllegalStateException("해당 요청에 대해 완료된 배차 내역이 없어 정산을 생성할 수 없습니다."));
+            legacyAssignment.complete();
+            assignments = List.of(legacyAssignment);
         }
         AsAssignment assignment = assignments.get(0);
 
