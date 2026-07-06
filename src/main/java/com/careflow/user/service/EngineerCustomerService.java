@@ -144,8 +144,13 @@ public class EngineerCustomerService {
             String productName = inProgressRequest.getAppliance().getBrand()
                     + " " + inProgressRequest.getAppliance().getModelName();
 
+            // 접수번호 포맷팅 로직 추가 (asHistory와 동일한 방식)
+            String dateStr = inProgressRequest.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+            String formattedRequestId = String.format("AS-%s-%04d", dateStr, inProgressRequest.getId());
+
             inProgressWork = EngineerCustomerDetailResponse.InProgressWorkDto.builder()
-                    .requestId(inProgressRequest.getId())
+                    .requestId(formattedRequestId)          // 포맷팅된 문자열 주입
+                    .asRequestId(inProgressRequest.getId()) // 실제 숫자 PK 주입
                     .productName(productName)
                     .symptom(inProgressRequest.getSymptom().getSymptomName())
                     .visitDate(inProgressRequest.getScheduledDate() != null
