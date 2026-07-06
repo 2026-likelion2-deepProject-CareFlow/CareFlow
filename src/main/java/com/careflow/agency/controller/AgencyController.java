@@ -1,8 +1,14 @@
 package com.careflow.agency.controller;
 
 import com.careflow.agency.dto.request.AgencyProfileUpdateRequest;
+import com.careflow.agency.dto.request.AgencyWithdrawRequest;
+import com.careflow.agency.dto.request.SecurityToggleRequest;
+import com.careflow.agency.dto.response.AgencyDataImportResponse;
 import com.careflow.agency.dto.response.AgencyProfileResponse;
+import com.careflow.agency.dto.response.AgencySecuritySettingsResponse;
+import com.careflow.agency.dto.response.TrustedDeviceResponse;
 import com.careflow.agency.service.AgenciesService;
+import com.careflow.agency.service.AgencyDataTransferService;
 import com.careflow.as_request.dto.AgencyAsRequestDetailResponse;
 import com.careflow.as_request.dto.AgencyAsRequestListResponse;
 import com.careflow.as_request.dto.AgencyDashboardSummaryResponse;
@@ -13,12 +19,16 @@ import com.careflow.auth.security.CustomUserDetails;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.format.annotation.DateTimeFormat;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.*;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 
 /**
@@ -36,6 +46,7 @@ public class AgencyController {
     private final AgenciesService agenciesService;
     private final AgencyAsRequestService agencyAsRequestService;
     private final AgencyAsStatusLogService agencyAsStatusLogService;
+    private final AgencyDataTransferService agencyDataTransferService;
 
     // ─────────────────────────────────────────────
     //  대행사 설정 API
@@ -58,6 +69,90 @@ public class AgencyController {
             @Valid @RequestBody AgencyProfileUpdateRequest request) {
 
         AgencyProfileResponse response = agenciesService.updateProfile(userDetails.getUserId(), request);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * 대행사 관리자(본인) 계정 탈퇴
+     * - 대표 담당자(슈퍼 계정)는 탈퇴 불가(403), 비밀번호 불일치 시 400
+     */
+    @DeleteMapping("/me/withdraw")
+    public ResponseEntity<Void> withdrawAccount(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @Valid @RequestBody AgencyWithdrawRequest request) {
+
+        agenciesService.withdrawAccount(userDetails.getUserId(), request);
+        return ResponseEntity.noContent().build();
+    }
+
+    // 로그인 보안 설정 조회 (2단계 인증/로그인 알림 상태 + 신뢰 기기 개수)
+    @GetMapping("/me/security")
+    public ResponseEntity<AgencySecuritySettingsResponse> getSecuritySettings(
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+
+        return ResponseEntity.ok(agenciesService.getSecuritySettings(userDetails.getUserId()));
+    }
+
+    // 2단계 인증 토글
+    @PatchMapping("/me/security/two-factor")
+    public ResponseEntity<Void> toggleTwoFactor(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @Valid @RequestBody SecurityToggleRequest request) {
+
+        agenciesService.toggleTwoFactor(userDetails.getUserId(), request.enabled());
+        return ResponseEntity.noContent().build();
+    }
+
+    // 로그인 알림 토글
+    @PatchMapping("/me/security/login-alert")
+    public ResponseEntity<Void> toggleLoginAlert(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @Valid @RequestBody SecurityToggleRequest request) {
+
+        agenciesService.toggleLoginAlert(userDetails.getUserId(), request.enabled());
+        return ResponseEntity.noContent().build();
+    }
+
+    // 신뢰 기기 목록 조회
+    @GetMapping("/me/trusted-devices")
+    public ResponseEntity<List<TrustedDeviceResponse>> getTrustedDevices(
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+
+        return ResponseEntity.ok(agenciesService.getTrustedDevices(userDetails.getUserId()));
+    }
+
+    // 신뢰 기기 삭제(신뢰 해제)
+    @DeleteMapping("/me/trusted-devices/{deviceId}")
+    public ResponseEntity<Void> deleteTrustedDevice(
+            @PathVariable Long deviceId,
+            @AuthenticationPrincipal CustomUserDetails userDetails) throws IllegalAccessException {
+
+        agenciesService.deleteTrustedDevice(userDetails.getUserId(), deviceId);
+        return ResponseEntity.noContent().build();
+    }
+
+    // 데이터 내보내기 — 소속 기사 로스터 CSV 다운로드
+    @GetMapping("/me/data-export")
+    public ResponseEntity<byte[]> exportData(
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+
+        byte[] csv = agencyDataTransferService.exportEngineerRoster(userDetails.getAgencyId());
+        String filename = "engineers_" + userDetails.getAgencyId() + "_"
+                + LocalDate.now().format(DateTimeFormatter.BASIC_ISO_DATE) + ".csv";
+
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + filename + "\"")
+                .contentType(MediaType.parseMediaType("text/csv; charset=UTF-8"))
+                .body(csv);
+    }
+
+    // 데이터 가져오기 — CSV로 기사 가입 신청 일괄 등록(PENDING, 대표 담당자 전용)
+    @PostMapping(value = "/me/data-import", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
+    public ResponseEntity<AgencyDataImportResponse> importData(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @RequestParam("file") MultipartFile file) throws IllegalAccessException {
+
+        AgencyDataImportResponse response = agencyDataTransferService.importEngineerRoster(userDetails, file);
         return ResponseEntity.ok(response);
     }
 

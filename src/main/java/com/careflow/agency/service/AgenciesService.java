@@ -5,12 +5,17 @@ import com.careflow.account_requests.repository.AccountRequestsRepository;
 import com.careflow.agency.dto.request.AgencyCreateRequest;
 import com.careflow.agency.dto.request.AgencyFeeRateUpdateRequest;
 import com.careflow.agency.dto.request.AgencyProfileUpdateRequest;
+import com.careflow.agency.dto.request.AgencyWithdrawRequest;
 import com.careflow.agency.dto.response.AgencyFeeRateResponse;
 import com.careflow.agency.dto.response.AgencyProfileResponse;
+import com.careflow.agency.dto.response.AgencySecuritySettingsResponse;
+import com.careflow.agency.dto.response.TrustedDeviceResponse;
 import com.careflow.agency.entity.Agencies;
 import com.careflow.agency.repository.AgenciesRepository;
 import com.careflow.agency_bank_account.entity.AgencyBankAccount;
 import com.careflow.agency_bank_account.repository.AgencyBankAccountRepository;
+import com.careflow.auth.entity.TrustedDevice;
+import com.careflow.auth.repository.TrustedDeviceRepository;
 import com.careflow.common.enums.AccountRequestsRole;
 import com.careflow.common.enums.AgencyStatus;
 import com.careflow.region.entity.Regions;
@@ -18,21 +23,27 @@ import com.careflow.region.repository.RegionRepository;
 import com.careflow.user.entity.User;
 import com.careflow.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.List;
 import java.util.NoSuchElementException;
 
 @Service
 @RequiredArgsConstructor
 public class AgenciesService {
 
+    private static final String REFRESH_KEY_PREFIX = "refresh:token:";
+
     private final AgenciesRepository agenciesRepository;
     private final AccountRequestsRepository accountRequestsRepository;
     private final UserRepository userRepository;
     private final RegionRepository regionRepository;
     private final AgencyBankAccountRepository agencyBankAccountRepository;
+    private final StringRedisTemplate redisTemplate;
+    private final TrustedDeviceRepository trustedDeviceRepository;
 
     private final PasswordEncoder passwordEncoder;
 
@@ -193,5 +204,80 @@ public class AgenciesService {
 
         agencies.updateFeeRate(request.agencyFeeRate());
         return AgencyFeeRateResponse.from(agencies);
+    }
+
+    /**
+     * 대행사 관리자(본인) 계정 탈퇴
+     * - 대표 담당자(슈퍼 계정)는 탈퇴 불가 — 대행사 자체의 대표자가 사라지는 상태를 방지
+     * - 현재 비밀번호 확인 후 User 엔티티의 기존 @SQLDelete 관례로 소프트 삭제
+     * - refresh token을 Redis에서 즉시 삭제해 재발급을 차단
+     */
+    @Transactional
+    public void withdrawAccount(Long userId, AgencyWithdrawRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new NoSuchElementException("해당 사용자를 찾을 수 없습니다."));
+
+        if (!passwordEncoder.matches(request.password(), user.getPasswordHash())) {
+            throw new IllegalArgumentException("현재 비밀번호가 일치하지 않습니다.");
+        }
+
+        if (agenciesRepository.findByRepresentativeById(userId).isPresent()) {
+            throw new IllegalStateException("대표 담당자는 탈퇴할 수 없습니다. 먼저 대표를 위임하거나 대행사 해지를 문의해주세요.");
+        }
+
+        userRepository.delete(user);
+        redisTemplate.delete(REFRESH_KEY_PREFIX + userId);
+    }
+
+    /**
+     * 로그인 보안 설정 조회 (2단계 인증 / 로그인 알림 상태 + 신뢰 기기 개수)
+     */
+    @Transactional(readOnly = true)
+    public AgencySecuritySettingsResponse getSecuritySettings(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new NoSuchElementException("해당 사용자를 찾을 수 없습니다."));
+
+        long trustedDeviceCount = trustedDeviceRepository.countByUser_Id(userId);
+        return new AgencySecuritySettingsResponse(
+                user.isTwoFactorEnabled(), user.isLoginAlertEnabled(), trustedDeviceCount);
+    }
+
+    @Transactional
+    public void toggleTwoFactor(Long userId, boolean enabled) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new NoSuchElementException("해당 사용자를 찾을 수 없습니다."));
+        user.updateTwoFactorEnabled(enabled);
+    }
+
+    @Transactional
+    public void toggleLoginAlert(Long userId, boolean enabled) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new NoSuchElementException("해당 사용자를 찾을 수 없습니다."));
+        user.updateLoginAlertEnabled(enabled);
+    }
+
+    /**
+     * 신뢰 기기 목록 조회 (최근 사용 순)
+     */
+    @Transactional(readOnly = true)
+    public List<TrustedDeviceResponse> getTrustedDevices(Long userId) {
+        return trustedDeviceRepository.findByUser_IdOrderByLastUsedAtDesc(userId).stream()
+                .map(TrustedDeviceResponse::from)
+                .toList();
+    }
+
+    /**
+     * 신뢰 기기 삭제(신뢰 해제) — 본인 소유 기기가 아니면 접근 차단
+     */
+    @Transactional
+    public void deleteTrustedDevice(Long userId, Long deviceId) throws IllegalAccessException {
+        TrustedDevice device = trustedDeviceRepository.findById(deviceId)
+                .orElseThrow(() -> new NoSuchElementException("해당 기기 정보를 찾을 수 없습니다."));
+
+        if (!device.getUser().getId().equals(userId)) {
+            throw new IllegalAccessException("본인 소유의 기기만 삭제할 수 있습니다.");
+        }
+
+        trustedDeviceRepository.delete(device);
     }
 }

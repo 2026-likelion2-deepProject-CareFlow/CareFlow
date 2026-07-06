@@ -23,7 +23,6 @@ import com.careflow.common.enums.ScheduleStatus;
 import com.careflow.engineer.repository.EngineerProfileRepository;
 import com.careflow.notification.entity.Notification;
 import com.careflow.notification.repository.NotificationRepository;
-import com.careflow.notification.service.NotificationService;
 import com.careflow.region.entity.Regions;
 import com.careflow.region.repository.RegionRepository;
 import com.careflow.symptom.entity.Symptom;
@@ -103,7 +102,7 @@ public class AsRequestService {
         AsRequest persistedRequest = asRequestRepository.save(asRequest);
 
         // A/S 요청 성공 후 고객에게 A/S 요청 성공 알림 발송
-        String title = "A/S 접수 반려 안내";
+        String title = "A/S 접수 완료 안내";
         String body = "A/S 요청이 성공적으로 접수되었습니다. 수리 기사님이 요청을 수락하면 수리 과정이 시작됩니다.";
 
         Notification notification = Notification.createAsStatusNotification(asRequest.getCustomer(), title, body);

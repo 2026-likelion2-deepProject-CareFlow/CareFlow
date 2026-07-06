@@ -52,6 +52,7 @@ class AgencyAsRequestControllerTest {
     @MockitoBean private AgencyAsRequestService agencyAsRequestService;
     @MockitoBean private AsRequestService asRequestService;
     @MockitoBean private AgencyAsStatusLogService agencyAsStatusLogService;
+    @MockitoBean private com.careflow.agency.service.AgencyDataTransferService agencyDataTransferService;
     @MockitoBean private JwtProvider jwtProvider;
     @MockitoBean private JpaMetamodelMappingContext jpaMetamodelMappingContext;
     @MockitoBean private CustomOAuth2UserService customOAuth2UserService;

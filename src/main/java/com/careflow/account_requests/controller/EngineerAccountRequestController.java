@@ -1,5 +1,6 @@
 package com.careflow.account_requests.controller;
 
+import com.careflow.account_requests.dto.AccountRequestListResponse;
 import com.careflow.account_requests.dto.AccountRequestReject;
 import com.careflow.account_requests.entity.AccountRequests;
 import com.careflow.account_requests.service.AccountRequestsService;
@@ -26,15 +27,17 @@ public class EngineerAccountRequestController {
     private final EngineerAccountRequestService engineerAccountRequestService;
 
     // 수리기사 계정 요청 목록 조회
+    // ※ 엔티티를 그대로 반환하면 Agencies.representativeId ↔ User.agency 양방향 연관관계로 인해
+    //   Jackson 직렬화 시 무한 재귀가 발생하므로, agencylist 와 동일하게 DTO 로 변환해서 반환한다.
     @GetMapping("/engineerlist")
-    public ResponseEntity<List<AccountRequests>> engineerlist(
+    public ResponseEntity<AccountRequestListResponse> engineerlist(
             @AuthenticationPrincipal CustomUserDetails userDetails
     ) {
         // 슈퍼 계정으로 로그인 했을 경우
         if (userDetails.getRole().equals("AGENCY")) {
             Agencies agencies = agenciesService.findRepresentativeIdById(userDetails.getUserId());
             List<AccountRequests> engineerAccountRequest = accountRequestsService.findRequestByRoleAndStatus(agencies.getId());
-            return ResponseEntity.ok(engineerAccountRequest);
+            return ResponseEntity.ok(AccountRequestListResponse.of(engineerAccountRequest));
         } else {
             return ResponseEntity.status(HttpStatus.UNAUTHORIZED).build();
         }

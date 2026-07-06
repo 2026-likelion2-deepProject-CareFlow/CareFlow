@@ -2,8 +2,12 @@ package com.careflow.agency.controller;
 
 import com.careflow.agency.dto.request.AgencyFeeRateUpdateRequest;
 import com.careflow.agency.dto.request.AgencyProfileUpdateRequest;
+import com.careflow.agency.dto.request.AgencyWithdrawRequest;
+import com.careflow.agency.dto.request.SecurityToggleRequest;
 import com.careflow.agency.dto.response.AgencyFeeRateResponse;
 import com.careflow.agency.dto.response.AgencyProfileResponse;
+import com.careflow.agency.dto.response.AgencySecuritySettingsResponse;
+import com.careflow.agency.dto.response.TrustedDeviceResponse;
 import com.careflow.agency.service.AgenciesService;
 import com.careflow.as_request.service.AgencyAsRequestService;
 import com.careflow.as_status_log.service.AgencyAsStatusLogService;
@@ -32,6 +36,8 @@ import java.util.NoSuchElementException;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willDoNothing;
+import static org.mockito.BDDMockito.willThrow;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
@@ -47,6 +53,7 @@ class AgencySettingsControllerTest {
     @MockitoBean private AgenciesService agenciesService;
     @MockitoBean private AgencyAsRequestService agencyAsRequestService;
     @MockitoBean private AgencyAsStatusLogService agencyAsStatusLogService;
+    @MockitoBean private com.careflow.agency.service.AgencyDataTransferService agencyDataTransferService;
     @MockitoBean private JwtProvider jwtProvider;
     @MockitoBean private JpaMetamodelMappingContext jpaMetamodelMappingContext;
     @MockitoBean private CustomOAuth2UserService customOAuth2UserService;
@@ -404,6 +411,257 @@ class AgencySettingsControllerTest {
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(req)))
                     .andExpect(status().isBadRequest());
+        }
+    }
+
+    // ─────────────────────────────────────────────
+    //  DELETE /api/agency/me/withdraw
+    // ─────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("DELETE /api/agency/me/withdraw — 대행사 관리자 계정 탈퇴")
+    class WithdrawAccount {
+
+        @Test
+        @DisplayName("성공: 일반 관리자, 올바른 비밀번호 — 204 No Content")
+        void withdraw_success_204() throws Exception {
+            AgencyWithdrawRequest req = new AgencyWithdrawRequest("현재비밀번호");
+            willDoNothing().given(agenciesService).withdrawAccount(eq(1L), any());
+
+            mockMvc.perform(delete("/api/agency/me/withdraw")
+                            .with(user(agencyUser()))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(req)))
+                    .andExpect(status().isNoContent());
+        }
+
+        @Test
+        @DisplayName("실패: 비밀번호 불일치 — 400 Bad Request")
+        void withdraw_wrongPassword_400() throws Exception {
+            AgencyWithdrawRequest req = new AgencyWithdrawRequest("틀린비밀번호");
+            willThrow(new IllegalArgumentException("현재 비밀번호가 일치하지 않습니다."))
+                    .given(agenciesService).withdrawAccount(eq(1L), any());
+
+            mockMvc.perform(delete("/api/agency/me/withdraw")
+                            .with(user(agencyUser()))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(req)))
+                    .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        @DisplayName("실패: 대표 담당자 탈퇴 시도 — 403 Forbidden")
+        void withdraw_representative_403() throws Exception {
+            AgencyWithdrawRequest req = new AgencyWithdrawRequest("현재비밀번호");
+            willThrow(new IllegalStateException("대표 담당자는 탈퇴할 수 없습니다. 먼저 대표를 위임하거나 대행사 해지를 문의해주세요."))
+                    .given(agenciesService).withdrawAccount(eq(1L), any());
+
+            mockMvc.perform(delete("/api/agency/me/withdraw")
+                            .with(user(agencyUser()))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(req)))
+                    .andExpect(status().isForbidden());
+        }
+
+        @Test
+        @DisplayName("유효성 실패: password 공백 — 400 Bad Request")
+        void withdraw_blankPassword_400() throws Exception {
+            AgencyWithdrawRequest req = new AgencyWithdrawRequest("");
+
+            mockMvc.perform(delete("/api/agency/me/withdraw")
+                            .with(user(agencyUser()))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(req)))
+                    .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        @DisplayName("실패: 인증 토큰 없음 — 401 Unauthorized")
+        void withdraw_noAuth_401() throws Exception {
+            AgencyWithdrawRequest req = new AgencyWithdrawRequest("현재비밀번호");
+
+            mockMvc.perform(delete("/api/agency/me/withdraw")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(req)))
+                    .andExpect(status().isUnauthorized());
+        }
+    }
+
+    // ─────────────────────────────────────────────
+    //  GET /api/agency/me/security, PATCH .../two-factor, .../login-alert
+    // ─────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("로그인 보안 설정 조회/토글")
+    class SecuritySettings {
+
+        @Test
+        @DisplayName("GET /api/agency/me/security — 성공 200 OK")
+        void getSecuritySettings_success_200() throws Exception {
+            given(agenciesService.getSecuritySettings(1L))
+                    .willReturn(new AgencySecuritySettingsResponse(true, false, 2L));
+
+            mockMvc.perform(get("/api/agency/me/security").with(user(agencyUser())))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.twoFactorEnabled").value(true))
+                    .andExpect(jsonPath("$.loginAlertEnabled").value(false))
+                    .andExpect(jsonPath("$.trustedDeviceCount").value(2));
+        }
+
+        @Test
+        @DisplayName("GET /api/agency/me/security — 인증 없음 401")
+        void getSecuritySettings_noAuth_401() throws Exception {
+            mockMvc.perform(get("/api/agency/me/security"))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        @Test
+        @DisplayName("PATCH .../two-factor — 성공 204")
+        void toggleTwoFactor_success_204() throws Exception {
+            willDoNothing().given(agenciesService).toggleTwoFactor(eq(1L), eq(true));
+
+            mockMvc.perform(patch("/api/agency/me/security/two-factor")
+                            .with(user(agencyUser()))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(new SecurityToggleRequest(true))))
+                    .andExpect(status().isNoContent());
+        }
+
+        @Test
+        @DisplayName("PATCH .../two-factor — enabled 누락 400")
+        void toggleTwoFactor_missingEnabled_400() throws Exception {
+            mockMvc.perform(patch("/api/agency/me/security/two-factor")
+                            .with(user(agencyUser()))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{}"))
+                    .andExpect(status().isBadRequest());
+        }
+
+        @Test
+        @DisplayName("PATCH .../login-alert — 성공 204")
+        void toggleLoginAlert_success_204() throws Exception {
+            willDoNothing().given(agenciesService).toggleLoginAlert(eq(1L), eq(true));
+
+            mockMvc.perform(patch("/api/agency/me/security/login-alert")
+                            .with(user(agencyUser()))
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(new SecurityToggleRequest(true))))
+                    .andExpect(status().isNoContent());
+        }
+    }
+
+    // ─────────────────────────────────────────────
+    //  GET/DELETE /api/agency/me/trusted-devices
+    // ─────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("신뢰 기기 목록 조회/삭제")
+    class TrustedDevices {
+
+        @Test
+        @DisplayName("GET /api/agency/me/trusted-devices — 성공 200 OK")
+        void getTrustedDevices_success_200() throws Exception {
+            given(agenciesService.getTrustedDevices(1L)).willReturn(java.util.List.of(
+                    new TrustedDeviceResponse(1L, "Mozilla/5.0 Chrome/126",
+                            java.time.LocalDateTime.of(2026, 7, 6, 10, 0),
+                            java.time.LocalDateTime.of(2026, 6, 1, 9, 0))));
+
+            mockMvc.perform(get("/api/agency/me/trusted-devices").with(user(agencyUser())))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$[0].deviceId").value(1))
+                    .andExpect(jsonPath("$[0].deviceName").value("Mozilla/5.0 Chrome/126"));
+        }
+
+        @Test
+        @DisplayName("DELETE .../trusted-devices/{id} — 성공 204")
+        void deleteTrustedDevice_success_204() throws Exception {
+            willDoNothing().given(agenciesService).deleteTrustedDevice(eq(1L), eq(10L));
+
+            mockMvc.perform(delete("/api/agency/me/trusted-devices/{deviceId}", 10L)
+                            .with(user(agencyUser())))
+                    .andExpect(status().isNoContent());
+        }
+
+        @Test
+        @DisplayName("DELETE .../trusted-devices/{id} — 타인 기기 401")
+        void deleteTrustedDevice_notOwner_401() throws Exception {
+            willThrow(new IllegalAccessException("본인 소유의 기기만 삭제할 수 있습니다."))
+                    .given(agenciesService).deleteTrustedDevice(eq(1L), eq(10L));
+
+            mockMvc.perform(delete("/api/agency/me/trusted-devices/{deviceId}", 10L)
+                            .with(user(agencyUser())))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        @Test
+        @DisplayName("DELETE .../trusted-devices/{id} — 존재하지 않는 기기 404")
+        void deleteTrustedDevice_notFound_404() throws Exception {
+            willThrow(new NoSuchElementException("해당 기기 정보를 찾을 수 없습니다."))
+                    .given(agenciesService).deleteTrustedDevice(eq(1L), eq(999L));
+
+            mockMvc.perform(delete("/api/agency/me/trusted-devices/{deviceId}", 999L)
+                            .with(user(agencyUser())))
+                    .andExpect(status().isNotFound());
+        }
+    }
+
+    // ─────────────────────────────────────────────
+    //  GET /api/agency/me/data-export, POST /api/agency/me/data-import
+    // ─────────────────────────────────────────────
+
+    @Nested
+    @DisplayName("데이터 내보내기/가져오기")
+    class DataTransfer {
+
+        @Test
+        @DisplayName("GET /api/agency/me/data-export — 성공 200 OK + text/csv")
+        void exportData_success_200() throws Exception {
+            given(agencyDataTransferService.exportEngineerRoster(any()))
+                    .willReturn("engineerUserId,name\n1,김철수\n".getBytes());
+
+            mockMvc.perform(get("/api/agency/me/data-export").with(user(agencyUser(1L, 5L))))
+                    .andExpect(status().isOk())
+                    .andExpect(header().string("Content-Type", org.hamcrest.Matchers.containsString("text/csv")))
+                    .andExpect(header().string("Content-Disposition", org.hamcrest.Matchers.containsString("attachment")));
+        }
+
+        @Test
+        @DisplayName("GET /api/agency/me/data-export — 인증 없음 401")
+        void exportData_noAuth_401() throws Exception {
+            mockMvc.perform(get("/api/agency/me/data-export"))
+                    .andExpect(status().isUnauthorized());
+        }
+
+        @Test
+        @DisplayName("POST /api/agency/me/data-import — 성공 200 OK")
+        void importData_success_200() throws Exception {
+            given(agencyDataTransferService.importEngineerRoster(any(), any()))
+                    .willReturn(new com.careflow.agency.dto.response.AgencyDataImportResponse(2, 0, java.util.List.of()));
+
+            org.springframework.mock.web.MockMultipartFile file = new org.springframework.mock.web.MockMultipartFile(
+                    "file", "roster.csv", "text/csv", "name,email,phone\n홍길동,hong@test.com,01011112222\n".getBytes());
+
+            mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart("/api/agency/me/data-import")
+                            .file(file)
+                            .with(user(agencyUser())))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.successCount").value(2))
+                    .andExpect(jsonPath("$.failCount").value(0));
+        }
+
+        @Test
+        @DisplayName("POST /api/agency/me/data-import — 대표 담당자 아님 401")
+        void importData_notRepresentative_401() throws Exception {
+            willThrow(new IllegalAccessException("대표 담당자만 기사 로스터를 일괄 등록할 수 있습니다."))
+                    .given(agencyDataTransferService).importEngineerRoster(any(), any());
+
+            org.springframework.mock.web.MockMultipartFile file = new org.springframework.mock.web.MockMultipartFile(
+                    "file", "roster.csv", "text/csv", "name,email,phone\n".getBytes());
+
+            mockMvc.perform(org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart("/api/agency/me/data-import")
+                            .file(file)
+                            .with(user(agencyUser())))
+                    .andExpect(status().isUnauthorized());
         }
     }
 }

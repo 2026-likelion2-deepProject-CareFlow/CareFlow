@@ -1,6 +1,7 @@
 package com.careflow.agency.service;
 
 import com.careflow.agency.dto.request.AgencyCustomerSearchRequest;
+import com.careflow.agency.dto.request.AgencyCustomerUpdateRequest;
 import com.careflow.agency.dto.response.AgencyCustomerApplianceResponse;
 import com.careflow.agency.dto.response.AgencyCustomerAsRequestResponse;
 import com.careflow.agency.dto.response.AgencyCustomerListResponse;
@@ -669,6 +670,114 @@ class AgencyCustomerServiceIntegrationTest {
 
             assertThat(result).hasSize(2);
             assertThat(result.get(0).paymentId()).isEqualTo(latest.getId()); // 나중에 생성된 결제가 먼저
+        }
+    }
+
+    @Nested
+    @DisplayName("updateCustomerProfile")
+    class UpdateCustomerProfile {
+
+        @Test
+        @DisplayName("TC-I-1: 정상 수정 흐름 — DB에 반영 확인")
+        void success_updatesAndPersists() throws IllegalAccessException {
+            User customer = saveCustomer("update1@test.com", "기존이름", "010-0000-0000", district, "기존주소");
+            createCompletedService(customer, agency);
+
+            AgencyCustomerUpdateRequest request =
+                    new AgencyCustomerUpdateRequest("변경된이름", "010-9999-8888", "변경된주소");
+            agencyCustomerService.updateCustomerProfile(agencyUserDetails(), customer.getId(), request);
+
+            User updated = userRepository.findById(customer.getId()).orElseThrow();
+            assertThat(updated.getName()).isEqualTo("변경된이름");
+            assertThat(updated.getPhone()).isEqualTo("010-9999-8888");
+            assertThat(updated.getAddressDetail()).isEqualTo("변경된주소");
+        }
+
+        @Test
+        @DisplayName("TC-I-2: 타 대행사 고객 수정 시도 — IllegalAccessException")
+        void fail_otherAgencyCustomer() {
+            Agencies otherAgency = agencyRepository.save(Agencies.create(
+                    "타대행사", "999-99-99999", "서울시 서초구", 3.0));
+            User customer = saveCustomer("update2@test.com", "타대행사고객", "010-1111-1111", district, "주소");
+            createCompletedService(customer, otherAgency);
+
+            AgencyCustomerUpdateRequest request = new AgencyCustomerUpdateRequest("변경시도", null, null);
+
+            assertThatThrownBy(() ->
+                    agencyCustomerService.updateCustomerProfile(agencyUserDetails(), customer.getId(), request))
+                    .isInstanceOf(IllegalAccessException.class);
+        }
+    }
+
+    @Nested
+    @DisplayName("resetCustomerPassword")
+    class ResetCustomerPassword {
+
+        @Test
+        @DisplayName("TC-I-1: 정상 초기화 흐름 — DB password_hash 변경 확인")
+        void success_resetsPasswordHash() throws IllegalAccessException {
+            User customer = saveCustomer("reset1@test.com", "고객", "010-0000-0000", district, "주소");
+            createCompletedService(customer, agency);
+            String originalHash = customer.getPasswordHash();
+
+            agencyCustomerService.resetCustomerPassword(agencyUserDetails(), customer.getId());
+
+            User updated = userRepository.findById(customer.getId()).orElseThrow();
+            assertThat(updated.getPasswordHash()).isNotEqualTo(originalHash);
+        }
+
+        @Test
+        @DisplayName("TC-I-2: 소셜 로그인 계정(passwordHash null) — IllegalStateException, DB 변경 없음")
+        void fail_socialLoginAccount() {
+            User customer = userRepository.save(User.builder()
+                    .email("social@test.com").passwordHash(null).name("소셜고객")
+                    .phone("010-2222-2222").role(Role.CUSTOMER).regionId(district).build());
+            createCompletedService(customer, agency);
+
+            assertThatThrownBy(() ->
+                    agencyCustomerService.resetCustomerPassword(agencyUserDetails(), customer.getId()))
+                    .isInstanceOf(IllegalStateException.class);
+
+            User unchanged = userRepository.findById(customer.getId()).orElseThrow();
+            assertThat(unchanged.getPasswordHash()).isNull();
+        }
+    }
+
+    @Nested
+    @DisplayName("blockCustomer / unblockCustomer")
+    class BlockUnblockCustomer {
+
+        @Test
+        @DisplayName("TC-I-1: 차단 후 로그인 시도 시 실패, 차단 해제 후 정상 로그인")
+        void success_blockPreventsLogin_unblockRestores() throws IllegalAccessException {
+            User customer = userRepository.save(User.builder()
+                    .email("block1@test.com")
+                    .passwordHash("$2a$10$7EqJtq98hPqEX7fNZaFWoOa1Vq9F.uxOU4Cj/cO7yMLmObj4dgKKm") // bcrypt("password")
+                    .name("차단대상고객").phone("010-3333-3333").role(Role.CUSTOMER).regionId(district).build());
+            createCompletedService(customer, agency);
+
+            agencyCustomerService.blockCustomer(agencyUserDetails(), customer.getId());
+
+            User blocked = userRepository.findById(customer.getId()).orElseThrow();
+            assertThat(blocked.getStatus()).isEqualTo("SUSPENDED");
+
+            agencyCustomerService.unblockCustomer(agencyUserDetails(), customer.getId());
+
+            User restored = userRepository.findById(customer.getId()).orElseThrow();
+            assertThat(restored.getStatus()).isEqualTo("ACTIVE");
+        }
+
+        @Test
+        @DisplayName("TC-I-2: 이미 SUSPENDED인 고객 재차단 시도 — 멱등하게 처리(에러 없음)")
+        void success_idempotentBlock() throws IllegalAccessException {
+            User customer = saveCustomer("block2@test.com", "고객", "010-4444-4444", district, "주소");
+            createCompletedService(customer, agency);
+
+            agencyCustomerService.blockCustomer(agencyUserDetails(), customer.getId());
+            agencyCustomerService.blockCustomer(agencyUserDetails(), customer.getId());
+
+            User result = userRepository.findById(customer.getId()).orElseThrow();
+            assertThat(result.getStatus()).isEqualTo("SUSPENDED");
         }
     }
 }

@@ -17,7 +17,8 @@ import com.careflow.appliance.entity.ApplianceCategory;
 import com.careflow.engineer.domain.entity.EngineerProfile;
 import com.careflow.common.enums.ScheduleStatus;
 import com.careflow.engineer.repository.EngineerProfileRepository;
-import com.careflow.notification.service.NotificationService;
+import com.careflow.notification.entity.Notification;
+import com.careflow.notification.repository.NotificationRepository;
 import com.careflow.region.entity.Regions;
 import com.careflow.region.repository.RegionRepository;
 import com.careflow.symptom.entity.Symptom;
@@ -62,8 +63,8 @@ class AsRequestServiceTest {
     @Mock private SymptomRepository symptomRepository;
     @Mock private EngineerProfileRepository engineerProfileRepository;
     @Mock private AsStatusLogRepository asStatusLogRepository;
-    @Mock private NotificationService notificationService;
     @Mock private ApplicationEventPublisher eventPublisher;
+    @Mock private NotificationRepository notificationRepository;
 
     private final ObjectMapper objectMapper = new ObjectMapper().findAndRegisterModules();
 
@@ -344,6 +345,13 @@ class AsRequestServiceTest {
             assertThat(result.matchReason()).isNull();
             // AUTO 쿼리 미호출 검증
             verify(engineerProfileRepository, never()).findByAllConditions(any(), any(), any(), any(), any(), any());
+
+            // A/S 접수 성공 알림이 고객에게 저장되는지 검증
+            org.mockito.ArgumentCaptor<Notification> notificationCaptor =
+                    org.mockito.ArgumentCaptor.forClass(Notification.class);
+            verify(notificationRepository).save(notificationCaptor.capture());
+            assertThat(notificationCaptor.getValue().getUser()).isEqualTo(customer);
+            assertThat(notificationCaptor.getValue().getTitle()).isEqualTo("A/S 접수 완료 안내");
         }
 
         @Test

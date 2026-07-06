@@ -68,6 +68,13 @@ public class User {
     @Column(name = "deleted_at")
     private LocalDateTime deletedAt;
 
+    // 로그인 보안 설정 — 대행사/기사/고객 등 역할 공통. 기본값 false로 기존 계정에 영향 없음
+    @Column(name = "two_factor_enabled", nullable = false)
+    private boolean twoFactorEnabled;
+
+    @Column(name = "login_alert_enabled", nullable = false)
+    private boolean loginAlertEnabled;
+
     @Builder
     public User(String email, String passwordHash, String name, String phone,
                 Role role, Regions regionId, String addressDetail, Agencies agency) {
@@ -121,6 +128,16 @@ public class User {
 
     public void updatePassword(String encodedPassword) {
         this.passwordHash = encodedPassword;
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    public void updateTwoFactorEnabled(boolean enabled) {
+        this.twoFactorEnabled = enabled;
+        this.updatedAt = LocalDateTime.now();
+    }
+
+    public void updateLoginAlertEnabled(boolean enabled) {
+        this.loginAlertEnabled = enabled;
         this.updatedAt = LocalDateTime.now();
     }
 }

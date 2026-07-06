@@ -236,6 +236,8 @@ CREATE TABLE `users` (
     `created_at`     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT '가입일',
     `updated_at`     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '수정일',
     `deleted_at`     DATETIME        NULL     DEFAULT NULL               COMMENT '논리 삭제일',
+    `two_factor_enabled`  BOOLEAN   NOT NULL DEFAULT FALSE              COMMENT '2단계 인증 사용 여부',
+    `login_alert_enabled` BOOLEAN   NOT NULL DEFAULT FALSE              COMMENT '로그인 알림 사용 여부',
 
     CONSTRAINT FK_agencies_TO_users
         FOREIGN KEY (`agency_id`) REFERENCES `agencies` (`agency_id`),
@@ -1063,3 +1065,23 @@ ALTER TABLE `agencies`
         FOREIGN KEY (`representative_user_id`) REFERENCES `users` (`user_id`),
     ADD CONSTRAINT FK_users_TO_agencies_approved_by
         FOREIGN KEY (`approved_by`) REFERENCES `users` (`user_id`);
+
+-- ============================================================
+-- trusted_devices — 로그인 시 자동 등록되는 신뢰 기기
+-- device_token: 프론트가 localStorage에 발급/보관하는 UUID(X-Device-Id 헤더로 전달) — 실제 매칭 키
+-- device_name: User-Agent 기반 표시용 라벨 — 같은 device_token으로 재로그인 시 최신 값으로 갱신됨
+-- ============================================================
+CREATE TABLE `trusted_devices` (
+    `device_id`    BIGINT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT '기기 고유 ID',
+    `user_id`      BIGINT UNSIGNED NOT NULL                            COMMENT '소유 사용자 ID',
+    `device_name`  VARCHAR(255)    NOT NULL                            COMMENT 'User-Agent 기반 표시용 기기 이름(최신값으로 갱신됨)',
+    `device_token` VARCHAR(64)     NOT NULL DEFAULT ''                 COMMENT '클라이언트 발급 기기 식별 토큰(UUID). 미전달 시 User-Agent 기반 대체값 사용',
+    `last_used_at` DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '최근 사용 일시',
+    `created_at`   DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT '최초 등록일',
+
+    CONSTRAINT FK_users_TO_trusted_devices
+        FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`),
+
+    UNIQUE uk_trusted_device_user_token (user_id, device_token),
+    INDEX  idx_trusted_devices_user (user_id)
+);

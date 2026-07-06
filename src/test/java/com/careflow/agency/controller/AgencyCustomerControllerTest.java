@@ -1,6 +1,7 @@
 package com.careflow.agency.controller;
 
 import com.careflow.agency.dto.request.AgencyCustomerSearchRequest;
+import com.careflow.agency.dto.request.AgencyCustomerUpdateRequest;
 import com.careflow.agency.dto.response.AgencyCustomerApplianceResponse;
 import com.careflow.agency.dto.response.AgencyCustomerAsRequestResponse;
 import com.careflow.agency.dto.response.AgencyCustomerListResponse;
@@ -12,6 +13,7 @@ import com.careflow.auth.security.JwtProvider;
 import com.careflow.auth.security.OAuth2LoginSuccessHandler;
 import com.careflow.common.config.PasswordEncoderConfig;
 import com.careflow.common.config.SecurityConfig;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
@@ -21,6 +23,7 @@ import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
 import org.springframework.context.annotation.Import;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.jpa.mapping.JpaMetamodelMappingContext;
+import org.springframework.http.MediaType;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
@@ -37,9 +40,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.BDDMockito.given;
+import static org.mockito.BDDMockito.willDoNothing;
+import static org.mockito.BDDMockito.willThrow;
 import static org.mockito.Mockito.verify;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.anonymous;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
 
 @WebMvcTest(AgencyCustomerController.class)
@@ -48,6 +54,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class AgencyCustomerControllerTest {
 
     @Autowired private MockMvc mockMvc;
+    @Autowired private ObjectMapper objectMapper;
 
     @MockitoBean private AgencyCustomerService agencyCustomerService;
     @MockitoBean private JwtProvider jwtProvider;
@@ -308,6 +315,102 @@ class AgencyCustomerControllerTest {
                     .willThrow(new IllegalAccessException("본인 대행사로부터 서비스를 받은 고객만 조회할 수 있습니다."));
 
             mockMvc.perform(get("/api/agency/customers/{userId}/payments", CUSTOMER_ID))
+                    .andExpect(status().isUnauthorized());
+        }
+    }
+
+    @Nested
+    @DisplayName("PATCH /api/agency/customers/{userId} — 고객 정보 수정")
+    class UpdateCustomer {
+
+        private static final Long CUSTOMER_ID = 1L;
+
+        @Test
+        @DisplayName("TC-U-1: 정상 수정 — 204")
+        void success_204() throws Exception {
+            willDoNothing().given(agencyCustomerService)
+                    .updateCustomerProfile(any(), eq(CUSTOMER_ID), any());
+
+            AgencyCustomerUpdateRequest request = new AgencyCustomerUpdateRequest("새이름", null, null);
+
+            mockMvc.perform(patch("/api/agency/customers/{userId}", CUSTOMER_ID)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isNoContent());
+        }
+
+        @Test
+        @DisplayName("TC-U-2: 존재하지 않는 userId — 404")
+        void fail_notFound_404() throws Exception {
+            willThrow(new NoSuchElementException("해당 고객 정보를 찾을 수 없습니다."))
+                    .given(agencyCustomerService).updateCustomerProfile(any(), eq(999L), any());
+
+            AgencyCustomerUpdateRequest request = new AgencyCustomerUpdateRequest("새이름", null, null);
+
+            mockMvc.perform(patch("/api/agency/customers/{userId}", 999L)
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(objectMapper.writeValueAsString(request)))
+                    .andExpect(status().isNotFound());
+        }
+    }
+
+    @Nested
+    @DisplayName("PATCH /api/agency/customers/{userId}/reset-password — 비밀번호 초기화")
+    class ResetPassword {
+
+        private static final Long CUSTOMER_ID = 1L;
+
+        @Test
+        @DisplayName("TC-R-1: 정상 초기화 — 204")
+        void success_204() throws Exception {
+            willDoNothing().given(agencyCustomerService).resetCustomerPassword(any(), eq(CUSTOMER_ID));
+
+            mockMvc.perform(patch("/api/agency/customers/{userId}/reset-password", CUSTOMER_ID))
+                    .andExpect(status().isNoContent());
+        }
+
+        @Test
+        @DisplayName("TC-R-2: 소셜 로그인 계정 — 403 (IllegalStateException)")
+        void fail_socialLogin_403() throws Exception {
+            willThrow(new IllegalStateException("소셜 로그인 계정은 비밀번호를 초기화할 수 없습니다."))
+                    .given(agencyCustomerService).resetCustomerPassword(any(), eq(CUSTOMER_ID));
+
+            mockMvc.perform(patch("/api/agency/customers/{userId}/reset-password", CUSTOMER_ID))
+                    .andExpect(status().isForbidden());
+        }
+    }
+
+    @Nested
+    @DisplayName("PATCH /api/agency/customers/{userId}/block, /unblock — 고객 차단/차단해제")
+    class BlockUnblock {
+
+        private static final Long CUSTOMER_ID = 1L;
+
+        @Test
+        @DisplayName("TC-B-1: 차단 성공 — 204")
+        void success_block_204() throws Exception {
+            willDoNothing().given(agencyCustomerService).blockCustomer(any(), eq(CUSTOMER_ID));
+
+            mockMvc.perform(patch("/api/agency/customers/{userId}/block", CUSTOMER_ID))
+                    .andExpect(status().isNoContent());
+        }
+
+        @Test
+        @DisplayName("TC-B-2: 차단 해제 성공 — 204")
+        void success_unblock_204() throws Exception {
+            willDoNothing().given(agencyCustomerService).unblockCustomer(any(), eq(CUSTOMER_ID));
+
+            mockMvc.perform(patch("/api/agency/customers/{userId}/unblock", CUSTOMER_ID))
+                    .andExpect(status().isNoContent());
+        }
+
+        @Test
+        @DisplayName("TC-B-3: 타 대행사 고객 차단 시도 — 401")
+        void fail_noAccess_401() throws Exception {
+            willThrow(new IllegalAccessException("본인 대행사로부터 서비스를 받은 고객만 조회할 수 있습니다."))
+                    .given(agencyCustomerService).blockCustomer(any(), eq(CUSTOMER_ID));
+
+            mockMvc.perform(patch("/api/agency/customers/{userId}/block", CUSTOMER_ID))
                     .andExpect(status().isUnauthorized());
         }
     }
