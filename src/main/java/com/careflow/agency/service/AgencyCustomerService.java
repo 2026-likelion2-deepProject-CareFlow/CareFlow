@@ -1,6 +1,7 @@
 package com.careflow.agency.service;
 
 import com.careflow.agency.dto.request.AgencyCustomerSearchRequest;
+import com.careflow.agency.dto.request.AgencyCustomerUpdateRequest;
 import com.careflow.agency.dto.response.AgencyCustomerApplianceResponse;
 import com.careflow.agency.dto.response.AgencyCustomerAsRequestResponse;
 import com.careflow.agency.dto.response.AgencyCustomerListResponse;
@@ -15,11 +16,16 @@ import com.careflow.payment.repository.PaymentRepository;
 import com.careflow.user.entity.User;
 import com.careflow.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.mail.SimpleMailMessage;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.security.SecureRandom;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
@@ -30,6 +36,7 @@ import java.util.Map;
 import java.util.NoSuchElementException;
 import java.util.stream.Collectors;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AgencyCustomerService {
@@ -39,8 +46,12 @@ public class AgencyCustomerService {
     private final ApplianceRepository applianceRepository;
     private final AsRequestRepository asRequestRepository;
     private final PaymentRepository paymentRepository;
+    private final PasswordEncoder passwordEncoder;
+    private final JavaMailSender mailSender;
 
     private static final DateTimeFormatter JOINED_DATE_FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE;
+    private static final String TEMP_PASSWORD_CHARS =
+            "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
 
     /**
      * 대행사 소속 기사에게 COMPLETED 서비스를 1회 이상 받은 고객 목록 조회 (페이징)
@@ -122,6 +133,99 @@ public class AgencyCustomerService {
 
         return paymentRepository.findByCustomerIdAndAgencyId(userId, userDetails.getAgencyId())
                 .stream().map(AgencyCustomerPaymentResponse::from).toList();
+    }
+
+    /**
+     * 대행사 관리자가 소속 고객의 이름/연락처/상세주소를 대신 수정
+     * - User.updateProfile() 기존 도메인 메서드 재사용 (region은 이 화면 수정 대상이 아니므로 항상 null 전달)
+     */
+    @Transactional
+    public void updateCustomerProfile(CustomUserDetails userDetails, Long userId, AgencyCustomerUpdateRequest request)
+            throws IllegalAccessException {
+
+        verifyAgencyAccessToCustomer(userDetails, userId);
+
+        User customer = userRepository.findById(userId)
+                .orElseThrow(() -> new NoSuchElementException("해당 고객 정보를 찾을 수 없습니다."));
+
+        customer.updateProfile(request.name(), request.phone(), null, request.addressDetail());
+    }
+
+    /**
+     * 대행사 관리자가 소속 고객의 비밀번호를 임시 비밀번호로 초기화하고 이메일로 안내
+     * - 평문 임시 비밀번호를 DB(알림 테이블 등)에 남기지 않기 위해 이메일로만 발송한다
+     * - 이메일 발송 실패는 비밀번호 초기화 자체를 롤백하지 않고 로그만 남긴다(이미 커밋된 상태 변경과 별개의 부수 효과)
+     */
+    @Transactional
+    public void resetCustomerPassword(CustomUserDetails userDetails, Long userId) throws IllegalAccessException {
+        verifyAgencyAccessToCustomer(userDetails, userId);
+
+        User customer = userRepository.findById(userId)
+                .orElseThrow(() -> new NoSuchElementException("해당 고객 정보를 찾을 수 없습니다."));
+
+        if (customer.getPasswordHash() == null) {
+            throw new IllegalStateException("소셜 로그인 계정은 비밀번호를 초기화할 수 없습니다.");
+        }
+
+        String tempPassword = generateTempPassword();
+        customer.updatePassword(passwordEncoder.encode(tempPassword));
+
+        try {
+            sendTempPasswordEmail(customer.getEmail(), tempPassword);
+        } catch (Exception e) {
+            log.error("임시 비밀번호 이메일 발송 실패 (고객 ID: {})", userId, e);
+        }
+    }
+
+    /**
+     * 고객 차단 — status를 SUSPENDED로 전환. 로그인 시점에 AuthService.login()이 이미
+     * "ACTIVE가 아니면 로그인 거부"를 검증하고 있으므로 이 전환만으로 즉시 차단이 적용된다.
+     * 이미 SUSPENDED인 경우도 멱등하게 처리(중복 클릭 방어).
+     */
+    @Transactional
+    public void blockCustomer(CustomUserDetails userDetails, Long userId) throws IllegalAccessException {
+        verifyAgencyAccessToCustomer(userDetails, userId);
+
+        User customer = userRepository.findById(userId)
+                .orElseThrow(() -> new NoSuchElementException("해당 고객 정보를 찾을 수 없습니다."));
+
+        customer.updateStatus("SUSPENDED");
+    }
+
+    /**
+     * 고객 차단 해제 — status를 ACTIVE로 복원
+     */
+    @Transactional
+    public void unblockCustomer(CustomUserDetails userDetails, Long userId) throws IllegalAccessException {
+        verifyAgencyAccessToCustomer(userDetails, userId);
+
+        User customer = userRepository.findById(userId)
+                .orElseThrow(() -> new NoSuchElementException("해당 고객 정보를 찾을 수 없습니다."));
+
+        customer.updateStatus("ACTIVE");
+    }
+
+    // 영문 대/소문자 + 숫자(혼동되는 0/O/1/I/l 제외) 조합 10자리 임시 비밀번호 생성
+    private String generateTempPassword() {
+        SecureRandom random = new SecureRandom();
+        StringBuilder sb = new StringBuilder(10);
+        for (int i = 0; i < 10; i++) {
+            sb.append(TEMP_PASSWORD_CHARS.charAt(random.nextInt(TEMP_PASSWORD_CHARS.length())));
+        }
+        return sb.toString();
+    }
+
+    private void sendTempPasswordEmail(String to, String tempPassword) {
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setTo(to);
+        message.setSubject("[CareFlow] 비밀번호가 초기화되었습니다");
+        message.setText(
+                "안녕하세요, CareFlow입니다.\n\n" +
+                "소속 대행사 관리자에 의해 비밀번호가 초기화되었습니다.\n\n" +
+                "임시 비밀번호: " + tempPassword + "\n\n" +
+                "로그인 후 반드시 비밀번호를 변경해주세요."
+        );
+        mailSender.send(message);
     }
 
     // 고객 상세 화면(가전/A·S이력 등) 공통 인가 검증 — role=AGENCY, 유저 존재, 본인 대행사 COMPLETED 서비스 이력 보유

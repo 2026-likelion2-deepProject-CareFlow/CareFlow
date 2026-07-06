@@ -1,6 +1,7 @@
 package com.careflow.agency.controller;
 
 import com.careflow.agency.dto.request.AgencyCustomerSearchRequest;
+import com.careflow.agency.dto.request.AgencyCustomerUpdateRequest;
 import com.careflow.agency.dto.response.AgencyCustomerApplianceResponse;
 import com.careflow.agency.dto.response.AgencyCustomerAsRequestResponse;
 import com.careflow.agency.dto.response.AgencyCustomerListResponse;
@@ -14,7 +15,9 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -100,5 +103,58 @@ public class AgencyCustomerController {
         List<AgencyCustomerPaymentResponse> response =
                 agencyCustomerService.getCustomerPayments(userDetails, userId);
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * [PATCH] /api/agency/customers/{userId}
+     * 소속 고객의 이름/연락처/상세주소를 대신 수정한다. null 필드는 기존 값 유지(PATCH 의미론).
+     */
+    @PatchMapping("/{userId}")
+    public ResponseEntity<Void> updateCustomer(
+            @PathVariable Long userId,
+            @RequestBody AgencyCustomerUpdateRequest request,
+            @AuthenticationPrincipal CustomUserDetails userDetails) throws IllegalAccessException {
+
+        agencyCustomerService.updateCustomerProfile(userDetails, userId, request);
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * [PATCH] /api/agency/customers/{userId}/reset-password
+     * 소속 고객의 비밀번호를 임시 비밀번호로 초기화하고 이메일로 안내한다.
+     */
+    @PatchMapping("/{userId}/reset-password")
+    public ResponseEntity<Void> resetCustomerPassword(
+            @PathVariable Long userId,
+            @AuthenticationPrincipal CustomUserDetails userDetails) throws IllegalAccessException {
+
+        agencyCustomerService.resetCustomerPassword(userDetails, userId);
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * [PATCH] /api/agency/customers/{userId}/block
+     * 소속 고객을 차단한다(status=SUSPENDED). 로그인 시점에 즉시 강제 적용됨.
+     */
+    @PatchMapping("/{userId}/block")
+    public ResponseEntity<Void> blockCustomer(
+            @PathVariable Long userId,
+            @AuthenticationPrincipal CustomUserDetails userDetails) throws IllegalAccessException {
+
+        agencyCustomerService.blockCustomer(userDetails, userId);
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * [PATCH] /api/agency/customers/{userId}/unblock
+     * 소속 고객의 차단을 해제한다(status=ACTIVE).
+     */
+    @PatchMapping("/{userId}/unblock")
+    public ResponseEntity<Void> unblockCustomer(
+            @PathVariable Long userId,
+            @AuthenticationPrincipal CustomUserDetails userDetails) throws IllegalAccessException {
+
+        agencyCustomerService.unblockCustomer(userDetails, userId);
+        return ResponseEntity.noContent().build();
     }
 }

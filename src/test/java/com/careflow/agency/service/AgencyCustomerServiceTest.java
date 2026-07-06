@@ -1,6 +1,7 @@
 package com.careflow.agency.service;
 
 import com.careflow.agency.dto.request.AgencyCustomerSearchRequest;
+import com.careflow.agency.dto.request.AgencyCustomerUpdateRequest;
 import com.careflow.agency.dto.response.AgencyCustomerApplianceResponse;
 import com.careflow.agency.dto.response.AgencyCustomerAsRequestResponse;
 import com.careflow.agency.dto.response.AgencyCustomerListResponse;
@@ -36,6 +37,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
 import java.time.LocalDate;
@@ -43,6 +46,7 @@ import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -64,6 +68,8 @@ class AgencyCustomerServiceTest {
     @Mock private ApplianceRepository applianceRepository;
     @Mock private AsRequestRepository asRequestRepository;
     @Mock private PaymentRepository paymentRepository;
+    @Mock private PasswordEncoder passwordEncoder;
+    @Mock private JavaMailSender mailSender;
 
     private static final Long AGENCY_ID = 100L;
     private static final Pageable PAGEABLE = PageRequest.of(0, 10);
@@ -600,6 +606,148 @@ class AgencyCustomerServiceTest {
                     agencyCustomerService.getCustomerPayments(engineerDetails, CUSTOMER_ID))
                     .isInstanceOf(IllegalAccessException.class)
                     .hasMessage("대행사 관리자만 접근할 수 있습니다.");
+        }
+    }
+
+    @Nested
+    @DisplayName("updateCustomerProfile")
+    class UpdateCustomerProfile {
+
+        private static final Long CUSTOMER_ID = 1L;
+
+        @Test
+        @DisplayName("TC-1: 정상 수정 — name/phone/addressDetail 모두 전달")
+        void success_updatesAllFields() throws IllegalAccessException {
+            given(userRepository.existsById(CUSTOMER_ID)).willReturn(true);
+            given(asAssignmentRepository.findDistinctCompletedCustomerIdsByAgencyId(AGENCY_ID))
+                    .willReturn(List.of(CUSTOMER_ID));
+            User customer = buildUser(CUSTOMER_ID, "기존이름", "010-0000-0000", "a@test.com", "기존주소", null, "ACTIVE");
+            given(userRepository.findById(CUSTOMER_ID)).willReturn(Optional.of(customer));
+
+            AgencyCustomerUpdateRequest request =
+                    new AgencyCustomerUpdateRequest("새이름", "010-1111-2222", "새주소");
+            agencyCustomerService.updateCustomerProfile(agencyUserDetails(), CUSTOMER_ID, request);
+
+            assertThat(customer.getName()).isEqualTo("새이름");
+            assertThat(customer.getPhone()).isEqualTo("010-1111-2222");
+            assertThat(customer.getAddressDetail()).isEqualTo("새주소");
+        }
+
+        @Test
+        @DisplayName("TC-2: 일부 필드만 전달 — 나머지는 기존 값 유지")
+        void success_partialUpdateKeepsRest() throws IllegalAccessException {
+            given(userRepository.existsById(CUSTOMER_ID)).willReturn(true);
+            given(asAssignmentRepository.findDistinctCompletedCustomerIdsByAgencyId(AGENCY_ID))
+                    .willReturn(List.of(CUSTOMER_ID));
+            User customer = buildUser(CUSTOMER_ID, "기존이름", "010-0000-0000", "a@test.com", "기존주소", null, "ACTIVE");
+            given(userRepository.findById(CUSTOMER_ID)).willReturn(Optional.of(customer));
+
+            AgencyCustomerUpdateRequest request = new AgencyCustomerUpdateRequest("새이름", null, null);
+            agencyCustomerService.updateCustomerProfile(agencyUserDetails(), CUSTOMER_ID, request);
+
+            assertThat(customer.getName()).isEqualTo("새이름");
+            assertThat(customer.getPhone()).isEqualTo("010-0000-0000");
+            assertThat(customer.getAddressDetail()).isEqualTo("기존주소");
+        }
+
+        @Test
+        @DisplayName("TC-3: 타 대행사 고객 접근 — IllegalAccessException")
+        void fail_noCompletedServiceHistory() {
+            given(userRepository.existsById(CUSTOMER_ID)).willReturn(true);
+            given(asAssignmentRepository.findDistinctCompletedCustomerIdsByAgencyId(AGENCY_ID))
+                    .willReturn(List.of(999L));
+
+            AgencyCustomerUpdateRequest request = new AgencyCustomerUpdateRequest("새이름", null, null);
+
+            assertThatThrownBy(() ->
+                    agencyCustomerService.updateCustomerProfile(agencyUserDetails(), CUSTOMER_ID, request))
+                    .isInstanceOf(IllegalAccessException.class);
+        }
+    }
+
+    @Nested
+    @DisplayName("resetCustomerPassword")
+    class ResetCustomerPassword {
+
+        private static final Long CUSTOMER_ID = 1L;
+
+        @Test
+        @DisplayName("TC-1: 정상 초기화 — updatePassword + 메일 발송 호출")
+        void success_resetsPasswordAndSendsEmail() throws IllegalAccessException {
+            given(userRepository.existsById(CUSTOMER_ID)).willReturn(true);
+            given(asAssignmentRepository.findDistinctCompletedCustomerIdsByAgencyId(AGENCY_ID))
+                    .willReturn(List.of(CUSTOMER_ID));
+            User customer = buildUser(CUSTOMER_ID, "고객", "010-0000-0000", "a@test.com", "주소", null, "ACTIVE");
+            given(userRepository.findById(CUSTOMER_ID)).willReturn(Optional.of(customer));
+            given(passwordEncoder.encode(anyString())).willReturn("encoded-temp-password");
+
+            String originalHash = customer.getPasswordHash();
+            agencyCustomerService.resetCustomerPassword(agencyUserDetails(), CUSTOMER_ID);
+
+            assertThat(customer.getPasswordHash()).isNotEqualTo(originalHash);
+            assertThat(customer.getPasswordHash()).isEqualTo("encoded-temp-password");
+            verify(mailSender).send(any(org.springframework.mail.SimpleMailMessage.class));
+        }
+
+        @Test
+        @DisplayName("TC-2: 소셜 로그인 계정(passwordHash null) — IllegalStateException")
+        void fail_socialLoginAccount() {
+            given(userRepository.existsById(CUSTOMER_ID)).willReturn(true);
+            given(asAssignmentRepository.findDistinctCompletedCustomerIdsByAgencyId(AGENCY_ID))
+                    .willReturn(List.of(CUSTOMER_ID));
+            User customer = User.builder()
+                    .email("social@test.com").passwordHash(null).name("소셜고객").role(Role.CUSTOMER).build();
+            ReflectionTestUtils.setField(customer, "id", CUSTOMER_ID);
+            given(userRepository.findById(CUSTOMER_ID)).willReturn(Optional.of(customer));
+
+            assertThatThrownBy(() ->
+                    agencyCustomerService.resetCustomerPassword(agencyUserDetails(), CUSTOMER_ID))
+                    .isInstanceOf(IllegalStateException.class)
+                    .hasMessage("소셜 로그인 계정은 비밀번호를 초기화할 수 없습니다.");
+        }
+    }
+
+    @Nested
+    @DisplayName("blockCustomer / unblockCustomer")
+    class BlockUnblockCustomer {
+
+        private static final Long CUSTOMER_ID = 1L;
+
+        @Test
+        @DisplayName("TC-1: 차단 성공 — status SUSPENDED로 전환")
+        void success_blocksCustomer() throws IllegalAccessException {
+            given(userRepository.existsById(CUSTOMER_ID)).willReturn(true);
+            given(asAssignmentRepository.findDistinctCompletedCustomerIdsByAgencyId(AGENCY_ID))
+                    .willReturn(List.of(CUSTOMER_ID));
+            User customer = buildUser(CUSTOMER_ID, "고객", "010-0000-0000", "a@test.com", "주소", null, "ACTIVE");
+            given(userRepository.findById(CUSTOMER_ID)).willReturn(Optional.of(customer));
+
+            agencyCustomerService.blockCustomer(agencyUserDetails(), CUSTOMER_ID);
+
+            assertThat(customer.getStatus()).isEqualTo("SUSPENDED");
+        }
+
+        @Test
+        @DisplayName("TC-2: 차단 해제 성공 — status ACTIVE로 전환")
+        void success_unblocksCustomer() throws IllegalAccessException {
+            given(userRepository.existsById(CUSTOMER_ID)).willReturn(true);
+            given(asAssignmentRepository.findDistinctCompletedCustomerIdsByAgencyId(AGENCY_ID))
+                    .willReturn(List.of(CUSTOMER_ID));
+            User customer = buildUser(CUSTOMER_ID, "고객", "010-0000-0000", "a@test.com", "주소", null, "SUSPENDED");
+            given(userRepository.findById(CUSTOMER_ID)).willReturn(Optional.of(customer));
+
+            agencyCustomerService.unblockCustomer(agencyUserDetails(), CUSTOMER_ID);
+
+            assertThat(customer.getStatus()).isEqualTo("ACTIVE");
+        }
+
+        @Test
+        @DisplayName("TC-3: 존재하지 않는 userId 차단 시도 — NoSuchElementException")
+        void fail_userNotFound() {
+            given(userRepository.existsById(999L)).willReturn(false);
+
+            assertThatThrownBy(() -> agencyCustomerService.blockCustomer(agencyUserDetails(), 999L))
+                    .isInstanceOf(NoSuchElementException.class);
         }
     }
 }

@@ -4,6 +4,7 @@ import com.careflow.engineer.domain.entity.EngineerProfile;
 import lombok.Builder;
 import lombok.Getter;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 /**
@@ -22,6 +23,7 @@ public class AgencyEngineerSummaryResponse {
     private List<Integer> serviceRegionIds;
     private boolean isLmsCompleted;
     private String currentWorkStatus;
+    private BigDecimal avgRating;
 
     public static AgencyEngineerSummaryResponse from(
             EngineerProfile profile,
@@ -37,6 +39,7 @@ public class AgencyEngineerSummaryResponse {
                 .serviceRegionIds(serviceRegionIds)
                 .isLmsCompleted(profile.isLmsCompleted())
                 .currentWorkStatus(currentWorkStatus)
+                .avgRating(profile.getAvgRating())
                 .build();
     }
 }
