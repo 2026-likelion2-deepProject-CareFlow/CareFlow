@@ -15,6 +15,7 @@ import com.careflow.common.enums.AccountRequestsRole;
 import com.careflow.common.enums.AgencyStatus;
 import com.careflow.region.entity.Regions;
 import com.careflow.region.repository.RegionRepository;
+import com.careflow.user.entity.User;
 import com.careflow.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -124,12 +125,15 @@ public class AgenciesService {
 
     // 대행사 내 정보 조회 (설정 페이지용)
     // JWT의 agencyId 기준으로 조회 — 대표 계정뿐 아니라 소속 staff 계정도 자기 대행사 정보를 조회할 수 있어야 함
+    // name/email/lastLoginAt은 대행사가 아닌 "현재 로그인한 계정(userId)" 기준으로 채워짐(설정 페이지 "계정 정보" 카드용)
     @Transactional(readOnly = true)
-    public AgencyProfileResponse getProfile(Long agencyId) {
+    public AgencyProfileResponse getProfile(Long agencyId, Long userId) {
         Agencies agencies = agenciesRepository.findById(agencyId)
                 .orElseThrow(() -> new NoSuchElementException("해당 사용자의 대행사 정보를 찾을 수 없습니다."));
         AgencyBankAccount bankAccount = agencyBankAccountRepository.findByAgencyId(agencyId).orElse(null);
-        return AgencyProfileResponse.from(agencies, bankAccount);
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new NoSuchElementException("해당 사용자를 찾을 수 없습니다."));
+        return AgencyProfileResponse.from(agencies, bankAccount, user);
     }
 
     // 대행사 프로필(상호명, 주소, 정산금 수취 계좌) 수정
@@ -138,10 +142,12 @@ public class AgenciesService {
         // JWT userId 로 대행사 조회 — 존재하지 않으면 404
         Agencies agencies = agenciesRepository.findByRepresentativeById(userId)
                 .orElseThrow(() -> new NoSuchElementException("해당 사용자의 대행사 정보를 찾을 수 없습니다."));
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new NoSuchElementException("해당 사용자를 찾을 수 없습니다."));
 
         agencies.updateProfile(request.agencyName(), request.agencyAddress());
         AgencyBankAccount bankAccount = upsertBankAccount(agencies, request);
-        return AgencyProfileResponse.from(agencies, bankAccount);
+        return AgencyProfileResponse.from(agencies, bankAccount, user);
     }
 
     // 정산금 수취 계좌 등록/수정 — bankName·accountNumber 둘 다 제공된 경우에만 반영(선택 입력)

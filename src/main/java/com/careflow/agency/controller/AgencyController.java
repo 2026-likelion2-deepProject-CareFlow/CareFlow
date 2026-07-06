@@ -47,7 +47,7 @@ public class AgencyController {
     public ResponseEntity<AgencyProfileResponse> getAgencyProfile(
             @AuthenticationPrincipal CustomUserDetails userDetails) {
 
-        AgencyProfileResponse response = agenciesService.getProfile(userDetails.getAgencyId());
+        AgencyProfileResponse response = agenciesService.getProfile(userDetails.getAgencyId(), userDetails.getUserId());
         return ResponseEntity.ok(response);
     }
 
@@ -134,5 +134,21 @@ public class AgencyController {
 
         AsStatusLogSummaryResponse response = agencyAsStatusLogService.getStatusSummary(userDetails);
         return ResponseEntity.ok(response);
+    }
+
+    /**
+     * 대행사 A/S 접수 반려
+     * - 배정 대기(AGENCY_RECEIVED) 상태의 요청만 반려 가능 (그 외 상태는 400)
+     * - 본인 소속 대행사의 요청이 아니면 401, 존재하지 않는 requestId는 404
+     * - 반려 시 고객에게 재신청 안내 알림 자동 발송(자동/수동 배정에 따라 문구 다름)
+     */
+    @PatchMapping("/work-requests/{requestId}/reject")
+    public ResponseEntity<Void> rejectWorkRequest(
+            @PathVariable Long requestId,
+            @RequestParam(required = false) String reason,
+            @AuthenticationPrincipal CustomUserDetails userDetails) throws IllegalAccessException {
+
+        agencyAsRequestService.rejectAsRequest(userDetails, requestId, reason);
+        return ResponseEntity.noContent().build();
     }
 }
