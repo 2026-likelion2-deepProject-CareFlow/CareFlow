@@ -78,4 +78,9 @@ public class EngineerSchedule { // 기사 근무표
         this.timeSlots.add(slot);
         slot.assignSchedule(this);
     }
+
+    /** 기존 슬롯 전체 제거 (orphanRemoval=true 로 DB에서도 삭제) — 근무표 수정(PUT upsert)에서 슬롯 교체용 */
+    public void clearTimeSlots(){
+        this.timeSlots.clear();
+    }
 }
