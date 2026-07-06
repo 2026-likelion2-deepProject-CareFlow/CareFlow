@@ -44,6 +44,7 @@ public class WorkReportDetailResponse {
         private final String partCode; // 🌟 추가
         private final Integer quantity;
         private final Integer appliedUnitPrice;
+        private final String importance; // 🌟 추가 — 부품 중요도(MINOR/NORMAL/MAJOR/CRITICAL)
     }
 
     public static WorkReportDetailResponse of(WorkReport report, Map<String, LocalDateTime> statusTimeMap) {
@@ -53,6 +54,7 @@ public class WorkReportDetailResponse {
                         .partCode(part.getRepairPart().getPartCode()) // 🌟 추가
                         .quantity(part.getQuantity())
                         .appliedUnitPrice(part.getAppliedUnitPrice())
+                        .importance(part.getRepairPart().getImportance().name()) // 🌟 추가
                         .build())
                 .collect(Collectors.toList());
 
