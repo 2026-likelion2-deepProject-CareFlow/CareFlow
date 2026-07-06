@@ -42,7 +42,8 @@ public class EngineerCustomerDetailResponse {
     /** 🌟 진행 중인 작업 카드용 상세 객체 (제품명/증상/방문일/진행상태/상태) */
     @Getter @Builder
     public static class InProgressWorkDto {
-        private Long requestId;
+        private String requestId;      // 화면 표시용 포맷팅 문자열 (예: AS-20260620-0040)
+        private Long asRequestId;      // API 통신용 실제 숫자 PK (예: 40)
         private String productName;    // 브랜드 + 모델명
         private String symptom;        // 증상명
         private String visitDate;      // 방문 예정일 (yyyy-MM-dd)
