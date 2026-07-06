@@ -12,7 +12,8 @@ import java.time.format.DateTimeFormatter;
 @Builder
 public class EngineerReportListResponse {
     private final Long reportId;
-    private final String requestId;      // 포맷팅 됨 (예: AS-20240618-0001)
+    private final Long requestId;        // API 통신용 숫자 PK (as_requests.id)
+    private final String requestCode;    // 화면 표시용 포맷팅 문자열 (예: AS-20240618-0001)
     private final String customerName;
     private final String productName;
     private final String modelNo;
@@ -33,7 +34,7 @@ public class EngineerReportListResponse {
 
         // 1. 요청 번호 포맷팅 (예: AS-20240618-0001)
         String dateStr = req.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
-        String formattedRequestId = String.format("AS-%s-%04d", dateStr, req.getId());
+        String formattedRequestCode = String.format("AS-%s-%04d", dateStr, req.getId());
 
         // 2. 날짜 및 요일 포맷팅 (예: 2024.06.02 (일))
         String[] days = {"", "월", "화", "수", "목", "금", "토", "일"};
@@ -53,7 +54,8 @@ public class EngineerReportListResponse {
 
         return EngineerReportListResponse.builder()
                 .reportId(report != null ? report.getReportId() : null)
-                .requestId(formattedRequestId)
+                .requestId(req.getId())                   // 🌟 통신용 숫자 PK
+                .requestCode(formattedRequestCode)        // 🌟 전시용 포맷 문자열
                 .customerName(req.getCustomer().getName())
                 .productName(app.getBrand() + " " + app.getModelName())
                 .modelNo(app.getModelName())

@@ -36,6 +36,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import com.careflow.notification.event.AsStatusNotificationEvent;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -344,5 +345,58 @@ public class WorkReportService {
             log.error("Redis에서 인증 뱃지 기준을 읽어오지 못했습니다. 기본값을 사용합니다.", e);
         }
 
-        certificate.recalculate(totalRepairCount, totalCriticalParts, worstImportance, lastRepaired, appliance.getPurchaseDate(), minGrade, minScore);    }
+        certificate.recalculate(totalRepairCount, totalCriticalParts, worstImportance, lastRepaired, appliance.getPurchaseDate(), minGrade, minScore);
+    }
+
+    // src/main/java/com/careflow/report/service/WorkReportService.java 맨 아래에 추가
+
+    /**
+     * 🌟 신규: 보고서 신규 작성용 폼 초기 데이터 세팅
+     */
+    @Transactional(readOnly = true)
+    public WorkReportDetailResponse getReportFormData(Long engineerId, Long requestId) throws IllegalAccessException {
+
+        // 1. 해당 A/S 요청 조회
+        AsRequest asRequest = asRequestRepository.findById(requestId)
+                .orElseThrow(() -> new NoSuchElementException("존재하지 않는 A/S 요청입니다."));
+
+        // 2. 기사 본인에게 배정된 건인지 권한 검증
+        boolean isMyTask = asAssignmentRepository.findByAsRequest_Id(requestId).stream()
+                .anyMatch(a -> a.getEngineer().getId().equals(engineerId));
+        if (!isMyTask) {
+            throw new IllegalAccessException("본인에게 배정된 작업에 대해서만 보고서를 작성할 수 있습니다.");
+        }
+
+        // 3. 이미 제출된 보고서가 있는지 확인
+        if (workReportRepository.existsByAsRequest_Id(requestId)) {
+            throw new IllegalStateException("이미 제출된 보고서가 있습니다. 수정 기능을 이용해 주세요.");
+        }
+
+        // 4. 화면 전시용 접수번호 포맷팅
+        String dateStr = asRequest.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+        String formattedRequestCode = String.format("AS-%s-%04d", dateStr, asRequest.getId());
+
+        // 5. 프론트엔드가 렌더링하기 편하도록, 아직 빈 값이지만 DTO 규격에 맞춰서 반환
+        return WorkReportDetailResponse.builder()
+                .reportId(null) // 신규이므로 null
+                .requestId(asRequest.getId())
+                .requestCode(formattedRequestCode)
+                .engineerName(null)
+                .diagnosisResult(null)
+                .workDurationMin(null)
+                .finalAmount(null)
+                .memo("")
+                .imageUrls(null)
+                .customerApproved(false)
+                .modelNo(asRequest.getAppliance().getModelName())
+                .serialNo(asRequest.getAppliance().getSerialNumber())
+                .customerPhone(asRequest.getCustomer().getPhone())
+                // 주소 조립
+                .customerAddress((asRequest.getCustomer().getRegionId() != null
+                        ? asRequest.getCustomer().getRegionId().getName() + " " : "")
+                        + (asRequest.getCustomer().getAddressDetail() != null
+                        ? asRequest.getCustomer().getAddressDetail() : ""))
+                .parts(List.of()) // 부품 없음
+                .build();
+    }
 }
