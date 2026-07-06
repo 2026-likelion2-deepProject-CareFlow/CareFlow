@@ -5,6 +5,7 @@ import com.careflow.as_request.dto.AsRequestCreateDto;
 import com.careflow.as_request.dto.AsRequestCreateResponseDto;
 import com.careflow.as_request.dto.AsRequestResponseDto;
 import com.careflow.as_request.dto.CustomerAsRequestDetailResponse;
+import com.careflow.as_request.dto.ExpectedRepairCostResponse;
 import com.careflow.as_request.service.AgencyAsRequestService;
 import com.careflow.as_request.service.AsRequestService;
 import com.careflow.auth.security.CustomUserDetails;
@@ -53,6 +54,20 @@ public class AsRequestController {
 
         CustomerAsRequestDetailResponse response =
                 asRequestService.getMyAsRequestDetail(userDetails.getUserId(), requestId);
+        return ResponseEntity.ok(response);
+    }
+
+    /**
+     * 고객용: 증상별 예상 수리 비용 조회 API
+     * - A/S 접수 마지막 확인 단계에서 사용
+     * - Quartz 배치 집계 전(avgCost=null)이면 프론트에서 "데이터 수집 중"으로 표시
+     */
+    @GetMapping("/expected-cost/{symptomId}")
+    public ResponseEntity<ExpectedRepairCostResponse> getExpectedRepairCost(
+            @PathVariable Long symptomId) {
+
+        ExpectedRepairCostResponse response =
+                asRequestService.getExpectedRepairCost(symptomId);
         return ResponseEntity.ok(response);
     }
 

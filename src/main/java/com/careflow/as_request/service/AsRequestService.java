@@ -6,6 +6,7 @@ import com.careflow.as_request.dto.AsRequestCreateDto;
 import com.careflow.as_request.dto.AsRequestCreateResponseDto;
 import com.careflow.as_request.dto.AsRequestResponseDto;
 import com.careflow.as_request.dto.CustomerAsRequestDetailResponse;
+import com.careflow.as_request.dto.ExpectedRepairCostResponse;
 import com.careflow.as_status_log.entity.AsStatusLog;
 import com.careflow.as_status_log.repository.AsStatusLogRepository;
 import com.careflow.assignment.dto.MatchReason;
@@ -13,6 +14,7 @@ import com.careflow.as_request.entity.AsRequest;
 import com.careflow.as_request.repository.AsRequestRepository;
 import com.careflow.assignment.entity.AsAssignment;
 import com.careflow.assignment.repository.AsAssignmentRepository;
+import com.careflow.assignment.repository.ExpectedRepairCostRepository;
 import com.careflow.common.enums.AsStatus;
 import com.careflow.common.enums.AssignType;
 import com.careflow.common.enums.Role;
@@ -59,6 +61,7 @@ public class AsRequestService {
     private final AsStatusLogRepository asStatusLogRepository;
     private final ApplicationEventPublisher eventPublisher;
     private final NotificationRepository notificationRepository;
+    private final ExpectedRepairCostRepository expectedRepairCostRepository;
 
     /**
      * 고객 A/S 접수 및 수리 기사 배정
@@ -284,6 +287,22 @@ public class AsRequestService {
                     return new AsRequestResponseDto(r, engineerName, engineerRating);
                 })
                 .collect(Collectors.toList());
+    }
+
+    /**
+     * 고객용: 증상별 예상 수리 비용 조회 (A/S 접수 화면 마지막 확인 단계에서 사용)
+     * - expected_repair_costs는 Quartz 배치로 집계되므로, 아직 집계 전이면 avgCost=null 반환
+     *   (프론트에서 "데이터 수집 중"으로 표시)
+     */
+    public ExpectedRepairCostResponse getExpectedRepairCost(Long symptomId) {
+        if (!symptomRepository.existsById(symptomId)) {
+            throw new NoSuchElementException("존재하지 않는 증상입니다.");
+        }
+
+        return expectedRepairCostRepository.findBySymptom_Id(symptomId)
+                .map(cost -> new ExpectedRepairCostResponse(
+                        symptomId, cost.getAvgCost(), cost.getSampleCount()))
+                .orElse(new ExpectedRepairCostResponse(symptomId, null, 0));
     }
 
     @Transactional
