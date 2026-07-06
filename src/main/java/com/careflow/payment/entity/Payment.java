@@ -81,10 +81,18 @@ public class Payment {
                 .build();
     }
 
-    /** 모의(MOCK) 결제 즉시 SUCCESS 처리 — PG 호출 없이 바로 성공으로 전환 */
+    /** 모의(MOCK) 결제 즉시 SUCCESS 처리 — PG 호출 없이 바로 성공으로 전환 (테스트 픽스처용) */
     public void markSuccess() {
         this.status = PaymentStatus.SUCCESS;
         this.pgProvider = PgProvider.MOCK;
+        this.paidAt = LocalDateTime.now();
+    }
+
+    /** 실제 PG(토스페이먼츠 등) 승인 응답을 받은 후 SUCCESS 처리 */
+    public void markSuccess(PgProvider provider, String pgTransactionId) {
+        this.status = PaymentStatus.SUCCESS;
+        this.pgProvider = provider;
+        this.pgTransactionId = pgTransactionId;
         this.paidAt = LocalDateTime.now();
     }
 }

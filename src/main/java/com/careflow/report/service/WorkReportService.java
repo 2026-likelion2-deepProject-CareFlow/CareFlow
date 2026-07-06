@@ -36,6 +36,7 @@ import org.springframework.context.ApplicationEventPublisher;
 import com.careflow.notification.event.AsStatusNotificationEvent;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
@@ -57,6 +58,10 @@ public class WorkReportService {
     private final ApplicationEventPublisher eventPublisher;
     private final StringRedisTemplate redisTemplate;
     private final ObjectMapper objectMapper;
+
+    // 출장비(기본) — 할증(평일 18시 이후·주말·공휴일)·성수기 구분 미적용, 단일 고정값.
+    // final_amount = 부품 합계 + VISIT_FEE 로 서버가 확정한다. 추후 정책 확장 시 이 상수를 정책 객체로 승격.
+    private static final int VISIT_FEE = 28_000;
 
     @Transactional
     public Long submitWorkReport(Long engineerId, CreateWorkReportRequest request) {
@@ -87,16 +92,10 @@ public class WorkReportService {
             myAssignment.complete();
         }
 
-        WorkReport report = WorkReport.builder()
-                .asRequest(asRequest)
-                .engineer(engineer)
-                .diagnosisResult(DiagnosisResult.valueOf(request.getDiagnosisResult()))
-                .workDurationMin(request.getWorkDurationMin())
-                .finalAmount(request.getFinalAmount())
-                .memo(request.getMemo())
-                .imageUrls(request.getImageUrls())
-                .build();
-
+        // 최종 금액은 클라이언트 입력값을 신뢰하지 않고 서버에서 확정한다.
+        // final_amount = 부품 합계 + 출장비 (결제/정산의 단일 기준값이므로 정합성 보장 목적)
+        int partsTotal = 0;
+        List<WorkReportPart> reportParts = new java.util.ArrayList<>();
         if (request.getParts() != null && !request.getParts().isEmpty()) {
             for (CreateWorkReportRequest.PartDto partDto : request.getParts()) {
                 RepairPart repairPart = repairPartRepository.findById(partDto.getRepairPartId())
@@ -105,14 +104,29 @@ public class WorkReportService {
                 int appliedPrice = partDto.getAppliedUnitPrice() != null ?
                         partDto.getAppliedUnitPrice() : repairPart.getBaseUnitPrice();
 
-                WorkReportPart reportPart = WorkReportPart.builder()
+                partsTotal += appliedPrice * partDto.getQuantity();
+
+                reportParts.add(WorkReportPart.builder()
                         .repairPart(repairPart)
                         .quantity(partDto.getQuantity())
                         .appliedUnitPrice(appliedPrice)
-                        .build();
-
-                report.addPart(reportPart);
+                        .build());
             }
+        }
+        int finalAmount = partsTotal + VISIT_FEE;
+
+        WorkReport report = WorkReport.builder()
+                .asRequest(asRequest)
+                .engineer(engineer)
+                .diagnosisResult(DiagnosisResult.valueOf(request.getDiagnosisResult()))
+                .workDurationMin(request.getWorkDurationMin())
+                .finalAmount(finalAmount)
+                .memo(request.getMemo())
+                .imageUrls(request.getImageUrls())
+                .build();
+
+        for (WorkReportPart reportPart : reportParts) {
+            report.addPart(reportPart);
         }
 
         WorkReport savedReport = workReportRepository.save(report);
@@ -278,24 +292,33 @@ public class WorkReportService {
             throw new IllegalStateException("고객이 이미 승인한 보고서는 수정할 수 없습니다."); // 403
         }
 
-        // 1. 기본 정보 갱신 (이제 엔티티에 메서드가 있으므로 에러 안 남!)
+        // 부품 먼저 해석하여 합계 계산 → final_amount = 부품 합계 + 출장비 (서버 확정, 클라이언트 값 무시)
+        int partsTotal = 0;
+        List<WorkReportPart> newParts = new java.util.ArrayList<>();
+        if (request.getParts() != null && !request.getParts().isEmpty()) {
+            for (CreateWorkReportRequest.PartDto partDto : request.getParts()) {
+                RepairPart repairPart = repairPartRepository.findById(partDto.getRepairPartId()).orElseThrow();
+                int appliedPrice = partDto.getAppliedUnitPrice() != null ? partDto.getAppliedUnitPrice() : repairPart.getBaseUnitPrice();
+                partsTotal += appliedPrice * partDto.getQuantity();
+                newParts.add(WorkReportPart.builder()
+                        .repairPart(repairPart).quantity(partDto.getQuantity()).appliedUnitPrice(appliedPrice).build());
+            }
+        }
+        int finalAmount = partsTotal + VISIT_FEE;
+
+        // 1. 기본 정보 갱신 (최종 금액은 서버 계산값 사용)
         report.updateReport(
                 DiagnosisResult.valueOf(request.getDiagnosisResult()),
                 request.getWorkDurationMin(),
-                request.getFinalAmount(),
+                finalAmount,
                 request.getMemo(),
                 request.getImageUrls()
         );
 
         // 2. 부품 리스트 갈아끼우기
         report.clearParts();
-        if (request.getParts() != null && !request.getParts().isEmpty()) {
-            for (CreateWorkReportRequest.PartDto partDto : request.getParts()) {
-                RepairPart repairPart = repairPartRepository.findById(partDto.getRepairPartId()).orElseThrow();
-                int appliedPrice = partDto.getAppliedUnitPrice() != null ? partDto.getAppliedUnitPrice() : repairPart.getBaseUnitPrice();
-                report.addPart(WorkReportPart.builder()
-                        .repairPart(repairPart).quantity(partDto.getQuantity()).appliedUnitPrice(appliedPrice).build());
-            }
+        for (WorkReportPart p : newParts) {
+            report.addPart(p);
         }
 
         workReportRepository.flush();
@@ -344,5 +367,58 @@ public class WorkReportService {
             log.error("Redis에서 인증 뱃지 기준을 읽어오지 못했습니다. 기본값을 사용합니다.", e);
         }
 
-        certificate.recalculate(totalRepairCount, totalCriticalParts, worstImportance, lastRepaired, appliance.getPurchaseDate(), minGrade, minScore);    }
+        certificate.recalculate(totalRepairCount, totalCriticalParts, worstImportance, lastRepaired, appliance.getPurchaseDate(), minGrade, minScore);
+    }
+
+    // src/main/java/com/careflow/report/service/WorkReportService.java 맨 아래에 추가
+
+    /**
+     * 🌟 신규: 보고서 신규 작성용 폼 초기 데이터 세팅
+     */
+    @Transactional(readOnly = true)
+    public WorkReportDetailResponse getReportFormData(Long engineerId, Long requestId) throws IllegalAccessException {
+
+        // 1. 해당 A/S 요청 조회
+        AsRequest asRequest = asRequestRepository.findById(requestId)
+                .orElseThrow(() -> new NoSuchElementException("존재하지 않는 A/S 요청입니다."));
+
+        // 2. 기사 본인에게 배정된 건인지 권한 검증
+        boolean isMyTask = asAssignmentRepository.findByAsRequest_Id(requestId).stream()
+                .anyMatch(a -> a.getEngineer().getId().equals(engineerId));
+        if (!isMyTask) {
+            throw new IllegalAccessException("본인에게 배정된 작업에 대해서만 보고서를 작성할 수 있습니다.");
+        }
+
+        // 3. 이미 제출된 보고서가 있는지 확인
+        if (workReportRepository.existsByAsRequest_Id(requestId)) {
+            throw new IllegalStateException("이미 제출된 보고서가 있습니다. 수정 기능을 이용해 주세요.");
+        }
+
+        // 4. 화면 전시용 접수번호 포맷팅
+        String dateStr = asRequest.getCreatedAt().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+        String formattedRequestCode = String.format("AS-%s-%04d", dateStr, asRequest.getId());
+
+        // 5. 프론트엔드가 렌더링하기 편하도록, 아직 빈 값이지만 DTO 규격에 맞춰서 반환
+        return WorkReportDetailResponse.builder()
+                .reportId(null) // 신규이므로 null
+                .requestId(asRequest.getId())
+                .requestCode(formattedRequestCode)
+                .engineerName(null)
+                .diagnosisResult(null)
+                .workDurationMin(null)
+                .finalAmount(null)
+                .memo("")
+                .imageUrls(null)
+                .customerApproved(false)
+                .modelNo(asRequest.getAppliance().getModelName())
+                .serialNo(asRequest.getAppliance().getSerialNumber())
+                .customerPhone(asRequest.getCustomer().getPhone())
+                // 주소 조립
+                .customerAddress((asRequest.getCustomer().getRegionId() != null
+                        ? asRequest.getCustomer().getRegionId().getName() + " " : "")
+                        + (asRequest.getCustomer().getAddressDetail() != null
+                        ? asRequest.getCustomer().getAddressDetail() : ""))
+                .parts(List.of()) // 부품 없음
+                .build();
+    }
 }
