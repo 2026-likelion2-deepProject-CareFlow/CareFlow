@@ -5,6 +5,7 @@ import lombok.Builder;
 import lombok.Getter;
 
 import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -14,6 +15,7 @@ import java.util.stream.Collectors;
 public class WorkReportDetailResponse {
     private final Long reportId;
     private final Long requestId;
+    private final String requestCode; // 화면 전시용 포맷팅 접수번호 (예: AS-20260620-0040)
     private final String engineerName;
     private final String diagnosisResult;
     private final Integer workDurationMin;
@@ -41,20 +43,20 @@ public class WorkReportDetailResponse {
     @Builder
     public static class PartDetailDto {
         private final String partName;
-        private final String partCode; // 🌟 추가
+        private final String partCode;
         private final Integer quantity;
         private final Integer appliedUnitPrice;
-        private final String importance; // 🌟 추가 — 부품 중요도(MINOR/NORMAL/MAJOR/CRITICAL)
+        private final String importance; // 부품 중요도(MINOR/NORMAL/MAJOR/CRITICAL)
     }
 
     public static WorkReportDetailResponse of(WorkReport report, Map<String, LocalDateTime> statusTimeMap) {
         List<PartDetailDto> partDtos = report.getParts().stream()
                 .map(part -> PartDetailDto.builder()
                         .partName(part.getRepairPart().getPartName())
-                        .partCode(part.getRepairPart().getPartCode()) // 🌟 추가
+                        .partCode(part.getRepairPart().getPartCode())
                         .quantity(part.getQuantity())
                         .appliedUnitPrice(part.getAppliedUnitPrice())
-                        .importance(part.getRepairPart().getImportance().name()) // 🌟 추가
+                        .importance(part.getRepairPart().getImportance().name())
                         .build())
                 .collect(Collectors.toList());
 
@@ -64,9 +66,14 @@ public class WorkReportDetailResponse {
                 + (report.getAsRequest().getCustomer().getAddressDetail() != null
                 ? report.getAsRequest().getCustomer().getAddressDetail() : "");
 
+        // 접수번호 포맷팅 (AS-YYYYMMDD-0000)
+        String dateStr = report.getAsRequest().getCreatedAt().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+        String formattedRequestCode = String.format("AS-%s-%04d", dateStr, report.getAsRequest().getId());
+
         return WorkReportDetailResponse.builder()
                 .reportId(report.getReportId())
                 .requestId(report.getAsRequest().getId())
+                .requestCode(formattedRequestCode) // 🌟 추가된 필드 매핑
                 .engineerName(report.getEngineer().getName())
                 .diagnosisResult(report.getDiagnosisResult().name())
                 .workDurationMin(report.getWorkDurationMin())
@@ -76,7 +83,6 @@ public class WorkReportDetailResponse {
                 .customerApproved(report.isCustomerApproved())
                 .approvedAt(report.getApprovedAt())
                 .submittedAt(report.getSubmittedAt())
-                // 🌟 추가된 필드 매핑
                 .modelNo(report.getAsRequest().getAppliance().getModelName())
                 .serialNo(report.getAsRequest().getAppliance().getSerialNumber())
                 .customerPhone(report.getAsRequest().getCustomer().getPhone())
