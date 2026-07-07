@@ -19,7 +19,6 @@ import com.careflow.common.enums.AsStatus;
 import com.careflow.common.enums.AssignType;
 import com.careflow.common.enums.Role;
 import com.careflow.engineer.domain.entity.EngineerProfile;
-import com.careflow.common.enums.ScheduleStatus;
 import com.careflow.engineer.repository.EngineerProfileRepository;
 import com.careflow.notification.entity.Notification;
 import com.careflow.notification.repository.NotificationRepository;
@@ -128,20 +127,21 @@ public class AsRequestService {
     private AutoResult processAutoAssignment(AsRequest asRequest, Appliance appliance,
                                              AsRequestCreateDto dto) {
         LocalTime workTime = parseScheduledTime(dto.getScheduledTime());
+        String workTimeStr = dto.getScheduledTime();
         Integer categoryId = appliance.getCategory().getCategoryId();
         String brand = appliance.getBrand();
         Integer regionId = dto.getVisitRegionId();
 
         // Fallback 0: 스케줄 + 브랜드 + 카테고리 + 서비스 지역
         List<EngineerProfile> candidates = engineerProfileRepository.findByAllConditions(
-                dto.getScheduledDate(), workTime, ScheduleStatus.AVAILABLE,
+                dto.getScheduledDate(), workTime, workTimeStr,
                 brand, categoryId, regionId);
         String matchReason = MatchReason.FALLBACK_0;
 
         // Fallback 1: 브랜드 조건 완화
         if (candidates.isEmpty()) {
             candidates = engineerProfileRepository.findWithoutBrand(
-                    dto.getScheduledDate(), workTime, ScheduleStatus.AVAILABLE,
+                    dto.getScheduledDate(), workTime, workTimeStr,
                     categoryId, regionId);
             matchReason = MatchReason.FALLBACK_1;
         }
@@ -149,14 +149,14 @@ public class AsRequestService {
         // Fallback 2: 브랜드 + 서비스 지역 조건 완화
         if (candidates.isEmpty()) {
             candidates = engineerProfileRepository.findWithoutBrandAndRegion(
-                    dto.getScheduledDate(), workTime, ScheduleStatus.AVAILABLE, categoryId);
+                    dto.getScheduledDate(), workTime, workTimeStr, categoryId);
             matchReason = MatchReason.FALLBACK_2;
         }
 
         // Fallback 3: 브랜드 + 지역 + 카테고리 조건 완화 (스케줄 조건만)
         if (candidates.isEmpty()) {
             candidates = engineerProfileRepository.findByScheduleOnly(
-                    dto.getScheduledDate(), workTime, ScheduleStatus.AVAILABLE);
+                    dto.getScheduledDate(), workTime, workTimeStr);
             matchReason = MatchReason.FALLBACK_3;
         }
 

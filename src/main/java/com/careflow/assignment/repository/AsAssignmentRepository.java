@@ -66,6 +66,20 @@ public interface AsAssignmentRepository extends JpaRepository<AsAssignment, Long
     @Query("UPDATE AsAssignment a SET a.status = :status WHERE a.id = :id")
     void updateStatus(@Param("id") Long id, @Param("status") String status);
 
+    /**
+     * 기사의 특정 기간 내 이미 활성 배정(REJECTED 제외)이 잡혀 있는 (날짜, 예약시각) 쌍 조회.
+     * 고객용 "기사 예약 가능 일정" 조회에서, 근무표에 등록된 슬롯 중 이미 배정이 찬 시각만
+     * 골라서 빼기 위해 사용 — 근무표 status(하루 단위)로는 슬롯 4개 중 하나만 찼는지 구분이 안 됨.
+     */
+    @Query("SELECT r.scheduledDate, r.scheduledTime FROM AsAssignment a JOIN a.asRequest r " +
+           "WHERE a.engineer.id = :engineerId " +
+           "AND a.status <> 'REJECTED' " +
+           "AND r.scheduledDate BETWEEN :start AND :end")
+    List<Object[]> findBookedDateTimesByEngineerIdAndDateRange(
+            @Param("engineerId") Long engineerId,
+            @Param("start") LocalDate start,
+            @Param("end") LocalDate end);
+
     // 기사의 특정 날짜 작업 일정 조회 — REJECTED 건 제외, N+1 방지용 JOIN FETCH
     @Query("SELECT a FROM AsAssignment a " +
            "JOIN FETCH a.asRequest r " +

@@ -15,7 +15,6 @@ import com.careflow.common.enums.AsStatus;
 import com.careflow.common.enums.Role;
 import com.careflow.appliance.entity.ApplianceCategory;
 import com.careflow.engineer.domain.entity.EngineerProfile;
-import com.careflow.common.enums.ScheduleStatus;
 import com.careflow.engineer.repository.EngineerProfileRepository;
 import com.careflow.notification.entity.Notification;
 import com.careflow.notification.repository.NotificationRepository;
@@ -162,7 +161,7 @@ class AsRequestServiceTest {
         void auto_fullCondition_success() {
             stubCommonLookups();
             given(engineerProfileRepository.findByAllConditions(
-                    any(), any(), eq(ScheduleStatus.AVAILABLE), any(), any(), any()))
+                    any(), any(), eq("10:00"), any(), any(), any()))
                     .willReturn(List.of(engineerProfile));
 
             AsRequestCreateResponseDto result = asRequestService.createAsRequest(1L, autoDto);
@@ -180,7 +179,7 @@ class AsRequestServiceTest {
             stubCommonLookups();
             given(engineerProfileRepository.findByAllConditions(any(), any(), any(), any(), any(), any()))
                     .willReturn(List.of());
-            given(engineerProfileRepository.findWithoutBrand(any(), any(), eq(ScheduleStatus.AVAILABLE), any(), any()))
+            given(engineerProfileRepository.findWithoutBrand(any(), any(), eq("10:00"), any(), any()))
                     .willReturn(List.of(engineerProfile));
 
             AsRequestCreateResponseDto result = asRequestService.createAsRequest(1L, autoDto);
@@ -198,7 +197,7 @@ class AsRequestServiceTest {
                     .willReturn(List.of());
             given(engineerProfileRepository.findWithoutBrand(any(), any(), any(), any(), any()))
                     .willReturn(List.of());
-            given(engineerProfileRepository.findWithoutBrandAndRegion(any(), any(), eq(ScheduleStatus.AVAILABLE), any()))
+            given(engineerProfileRepository.findWithoutBrandAndRegion(any(), any(), eq("10:00"), any()))
                     .willReturn(List.of(engineerProfile));
 
             AsRequestCreateResponseDto result = asRequestService.createAsRequest(1L, autoDto);
@@ -235,7 +234,7 @@ class AsRequestServiceTest {
                     .willReturn(List.of());
             given(engineerProfileRepository.findWithoutBrandAndRegion(any(), any(), any(), any()))
                     .willReturn(List.of());
-            given(engineerProfileRepository.findByScheduleOnly(any(), any(), eq(ScheduleStatus.AVAILABLE)))
+            given(engineerProfileRepository.findByScheduleOnly(any(), any(), eq("10:00")))
                     .willReturn(List.of(engineerProfile));
 
             AsRequestCreateResponseDto result = asRequestService.createAsRequest(1L, autoDto);

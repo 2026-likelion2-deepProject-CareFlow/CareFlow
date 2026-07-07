@@ -217,6 +217,54 @@ class AsRequestControllerIntegrationTest {
         }
 
         @Test
+        @DisplayName("AUTO 성공: 같은 기사·같은 날짜라도 시간대(슬롯)가 다르면 각각 정상 배정된다 (근무표 하루 단위 status로 전체 슬롯을 막지 않음)")
+        void auto_sameEngineerSameDate_differentSlot_bothAssigned() throws Exception {
+            String firstBody = requestBody(appliance.getId(), symptom.getId(), region.getId(),
+                    SCHEDULED_DATE.toString(), "10:00", "AUTO", null);
+            mockMvc.perform(post("/api/as-requests")
+                            .header("Authorization", "Bearer " + customerToken)
+                            .contentType(MediaType.APPLICATION_JSON).content(firstBody))
+                    .andExpect(status().isCreated());
+
+            // 같은 기사·같은 날짜, 시간대만 다름(14:00) — 09:00~17:00 근무표 범위 안이므로 여전히 배정 가능해야 함
+            String secondBody = requestBody(appliance.getId(), symptom.getId(), region.getId(),
+                    SCHEDULED_DATE.toString(), "14:00", "AUTO", null);
+            mockMvc.perform(post("/api/as-requests")
+                            .header("Authorization", "Bearer " + customerToken)
+                            .contentType(MediaType.APPLICATION_JSON).content(secondBody))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.assignmentId").isNumber());
+
+            // 같은 기사에게 배차 2건이 모두 생성되어야 함
+            assertThat(asAssignmentRepository.findAll()).hasSize(2);
+            assertThat(asAssignmentRepository.findAll())
+                    .allMatch(a -> a.getEngineer().getId().equals(engineer.getId()));
+        }
+
+        @Test
+        @DisplayName("AUTO 실패: 같은 기사·같은 날짜·같은 시간대에 이미 활성 배정이 있으면 그 기사는 후보에서 제외되어 403")
+        void auto_sameEngineerSameDateSameSlot_conflict_403() throws Exception {
+            String firstBody = requestBody(appliance.getId(), symptom.getId(), region.getId(),
+                    SCHEDULED_DATE.toString(), "10:00", "AUTO", null);
+            mockMvc.perform(post("/api/as-requests")
+                            .header("Authorization", "Bearer " + customerToken)
+                            .contentType(MediaType.APPLICATION_JSON).content(firstBody))
+                    .andExpect(status().isCreated());
+
+            // 유일한 후보 기사가 이미 같은 시각에 배정돼 있으므로 두 번째 요청은 배정 실패해야 함
+            String secondBody = requestBody(appliance.getId(), symptom.getId(), region.getId(),
+                    SCHEDULED_DATE.toString(), "10:00", "AUTO", null);
+            mockMvc.perform(post("/api/as-requests")
+                            .header("Authorization", "Bearer " + customerToken)
+                            .contentType(MediaType.APPLICATION_JSON).content(secondBody))
+                    .andExpect(status().isForbidden())
+                    .andExpect(jsonPath("$.message").value(org.hamcrest.Matchers.containsString("가용한 수리 기사가 없습니다")));
+
+            // 첫 번째 배차만 존재, 두 번째는 생성되지 않음
+            assertThat(asAssignmentRepository.findAll()).hasSize(1);
+        }
+
+        @Test
         @DisplayName("MANUAL 성공: 유효한 ENGINEER 지정 → 201, 지정 기사로 배정 확인")
         void manual_success() throws Exception {
             String body = requestBody(appliance.getId(), symptom.getId(), region.getId(),

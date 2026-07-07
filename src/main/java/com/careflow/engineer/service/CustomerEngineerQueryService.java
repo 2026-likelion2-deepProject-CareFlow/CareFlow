@@ -1,9 +1,9 @@
 package com.careflow.engineer.service;
 
+import com.careflow.assignment.repository.AsAssignmentRepository;
 import com.careflow.engineer.domain.entity.EngineerExpertBrand;
 import com.careflow.engineer.domain.entity.EngineerProfile;
 import com.careflow.engineer.domain.entity.EngineerSchedule;
-import com.careflow.common.enums.ScheduleStatus;
 import com.careflow.engineer.dto.CustomerEngineerAvailabilityResponse;
 import com.careflow.engineer.dto.CustomerEngineerSummaryResponse;
 import com.careflow.engineer.repository.EngineerExpertBrandRepository;
@@ -15,10 +15,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDate;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.NoSuchElementException;
+import java.util.Set;
 
 /**
  * 고객용 수동 배정 - 기사 조회 서비스
@@ -32,6 +34,7 @@ public class CustomerEngineerQueryService {
     private final EngineerProfileRepository engineerProfileRepository;
     private final EngineerExpertBrandRepository expertBrandRepository;
     private final EngineerScheduleRepository engineerScheduleRepository;
+    private final AsAssignmentRepository asAssignmentRepository;
     private final RegionRepository regionRepository;
 
     /**
@@ -72,15 +75,21 @@ public class CustomerEngineerQueryService {
         List<EngineerSchedule> schedules = engineerScheduleRepository
                 .findByUser_IdAndWorkDateBetweenOrderByWorkDateAsc(engineerId, start, end);
 
+        // 근무표 status(하루 단위)는 슬롯 4개 중 하나만 찼는지 구분하지 못하므로 게이트로 쓰지 않고,
+        // 실제로 이미 배정이 찬 (날짜, 시각) 조합만 골라서 슬롯 목록에서 제외한다.
+        Set<String> bookedDateTimes = new HashSet<>();
+        for (Object[] row : asAssignmentRepository.findBookedDateTimesByEngineerIdAndDateRange(engineerId, start, end)) {
+            bookedDateTimes.add(row[0] + "|" + row[1]);
+        }
+
         Map<String, List<String>> availableDates = new LinkedHashMap<>();
         for (EngineerSchedule schedule : schedules) {
-            if (schedule.getStatus() != ScheduleStatus.AVAILABLE) {
-                continue;
-            }
+            String workDate = schedule.getWorkDate().toString();
             List<String> times = schedule.getTimeSlots().stream()
                     .map(slot -> slot.getStartTime().toString().substring(0, 5))
+                    .filter(time -> !bookedDateTimes.contains(workDate + "|" + time))
                     .toList();
-            availableDates.put(schedule.getWorkDate().toString(), times);
+            availableDates.put(workDate, times);
         }
 
         return CustomerEngineerAvailabilityResponse.builder()

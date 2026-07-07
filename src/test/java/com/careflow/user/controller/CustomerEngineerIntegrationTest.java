@@ -2,10 +2,18 @@ package com.careflow.user.controller;
 
 import com.careflow.agency.entity.Agencies;
 import com.careflow.agency.repository.AgenciesRepository;
+import com.careflow.appliance.entity.Appliance;
 import com.careflow.appliance.entity.ApplianceCategory;
 import com.careflow.appliance.repository.ApplianceCategoryRepository;
+import com.careflow.appliance.repository.ApplianceRepository;
+import com.careflow.as_request.entity.AsRequest;
+import com.careflow.as_request.repository.AsRequestRepository;
+import com.careflow.assignment.entity.AsAssignment;
+import com.careflow.assignment.repository.AsAssignmentRepository;
 import com.careflow.auth.security.JwtProvider;
 import com.careflow.common.enums.AgencyStatus;
+import com.careflow.common.enums.AssignType;
+import com.careflow.common.enums.RegisterMethod;
 import com.careflow.common.enums.Role;
 import com.careflow.engineer.domain.entity.*;
 import com.careflow.common.enums.ScheduleStatus;
@@ -13,6 +21,8 @@ import com.careflow.common.enums.SkillLevel;
 import com.careflow.engineer.repository.*;
 import com.careflow.region.entity.Regions;
 import com.careflow.region.repository.RegionRepository;
+import com.careflow.symptom.entity.Symptom;
+import com.careflow.symptom.repository.SymptomRepository;
 import com.careflow.user.entity.User;
 import com.careflow.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
@@ -50,6 +60,10 @@ class CustomerEngineerIntegrationTest {
     @Autowired private EngineerScheduleRepository scheduleRepository;
     @Autowired private EngineerExpertBrandRepository expertBrandRepository;
     @Autowired private EngineerServiceRegionRepository serviceRegionRepository;
+    @Autowired private ApplianceRepository applianceRepository;
+    @Autowired private SymptomRepository symptomRepository;
+    @Autowired private AsRequestRepository asRequestRepository;
+    @Autowired private AsAssignmentRepository asAssignmentRepository;
 
     private User customer;
     private User engineer;
@@ -199,6 +213,44 @@ class CustomerEngineerIntegrationTest {
                             .param("to", "2026-08-07"))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.availableDates.length()").value(0));
+        }
+
+        @Test
+        @DisplayName("성공: 슬롯 중 하나에 이미 배정이 있어도 같은 날 다른 슬롯은 그대로 노출된다 (근무표 하루 단위 status로 전체를 막지 않음)")
+        void success_bookedSlotExcluded_otherSlotsStillShown() throws Exception {
+            LocalDate conflictDate = WORK_DATE.plusDays(1);
+
+            // 이 날짜에 09~11, 11~13 두 개 슬롯을 가진 근무표 등록
+            EngineerSchedule schedule = EngineerSchedule.builder()
+                    .user(engineer).workDate(conflictDate).status(ScheduleStatus.AVAILABLE).build();
+            schedule.addTimeSlot(EngineerScheduleSlot.builder()
+                    .startTime(LocalTime.of(9, 0)).endTime(LocalTime.of(11, 0)).build());
+            schedule.addTimeSlot(EngineerScheduleSlot.builder()
+                    .startTime(LocalTime.of(11, 0)).endTime(LocalTime.of(13, 0)).build());
+            scheduleRepository.save(schedule);
+
+            // 09:00 슬롯에는 이미 활성 배정이 있는 상태로 픽스처 구성
+            ApplianceCategory rootCat = categoryRepository.save(ApplianceCategory.createRoot("세탁기", 1));
+            ApplianceCategory bookedCategory = categoryRepository.save(ApplianceCategory.createChild("세탁기 소분류", rootCat, 1));
+            Appliance appliance = applianceRepository.save(Appliance.create(
+                    customer, bookedCategory, "LG", "세탁기 T100",
+                    null, null, null, RegisterMethod.MANUAL));
+            Symptom symptom = symptomRepository.save(Symptom.builder()
+                    .category(bookedCategory).symptomCode("SPIN_FAIL").symptomName("탈수 불량").build());
+            AsRequest bookedRequest = asRequestRepository.save(AsRequest.builder()
+                    .customer(customer).appliance(appliance).symptom(symptom)
+                    .visitRegion(region).visitAddressDetail("강남구 테헤란로 123")
+                    .scheduledDate(conflictDate).scheduledTime("09:00").build());
+            asAssignmentRepository.save(AsAssignment.create(bookedRequest, engineer, agency, AssignType.AUTO));
+
+            mockMvc.perform(get("/api/customers/{customerId}/engineers/{engineerId}/availability",
+                            customer.getId(), engineer.getId())
+                            .header("Authorization", "Bearer " + customerToken)
+                            .param("from", conflictDate.toString())
+                            .param("to", conflictDate.toString()))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.availableDates['" + conflictDate + "'].length()").value(1))
+                    .andExpect(jsonPath("$.availableDates['" + conflictDate + "'][0]").value("11:00"));
         }
 
         @Test

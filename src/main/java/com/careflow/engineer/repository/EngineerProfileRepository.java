@@ -1,7 +1,6 @@
 package com.careflow.engineer.repository;
 
 import com.careflow.engineer.domain.entity.EngineerProfile;
-import com.careflow.common.enums.ScheduleStatus;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -23,9 +22,23 @@ public interface EngineerProfileRepository extends JpaRepository<EngineerProfile
     // 배정 목록 조회 N+1 방지 — 기사 user_id 복수 배치 조회
     List<EngineerProfile> findByUser_IdIn(List<Long> userIds);
 
+    // 슬롯 단위 중복 배정 방지 공통 서브쿼리 — 해당 기사가 같은 날짜·같은 예약 시각에
+    // 이미 활성 상태(WAITING/ACCEPTED/COMPLETED) 배정을 갖고 있으면 후보에서 제외한다.
+    // (근무표 status 컬럼은 하루 단위라 슬롯 4개 중 하나만 찼는지 구분 못 하므로 게이트로 쓰지 않는다 — 대신 실제 배정 내역을 직접 확인)
+    String NO_CONFLICTING_ASSIGNMENT =
+            "AND NOT EXISTS (" +
+            "    SELECT 1 FROM AsAssignment aa JOIN aa.asRequest ar " +
+            "    WHERE aa.engineer = u " +
+            "    AND aa.status <> 'REJECTED' " +
+            "    AND ar.scheduledDate = :workDate " +
+            "    AND ar.scheduledTime = :workTimeStr" +
+            ") ";
+
     /**
      * AUTO 배정 - Fallback 0: 스케줄 + 브랜드 + 카테고리 + 서비스 지역 (4가지 조건 모두)
      * LMS 교육 이수 완료 기사만 대상 (isLmsCompleted = true)
+     * 슬롯(09~11/11~13/14~16/16~18) 중 하나라도 이미 배정이 있다고 해서 그 날 전체를 막지 않도록,
+     * 근무표 status 대신 같은 시각에 활성 배정이 있는지를 직접 확인한다.
      */
     @Query("SELECT DISTINCT ep FROM EngineerProfile ep " +
            "JOIN ep.user u " +
@@ -35,16 +48,16 @@ public interface EngineerProfileRepository extends JpaRepository<EngineerProfile
            "JOIN EngineerServiceRegion esr ON esr.engineer = u " +
            "WHERE es.workDate = :workDate " +
            "AND slot.startTime <= :workTime AND slot.endTime > :workTime " +
-           "AND es.status = :availableStatus " +
            "AND ep.isLmsCompleted = true " +
            "AND eb.brandName = :brand " +
            "AND ep.category.categoryId = :categoryId " +
            "AND esr.region.id = :regionId " +
+           NO_CONFLICTING_ASSIGNMENT +
            "ORDER BY ep.profileId ASC")
     List<EngineerProfile> findByAllConditions(
             @Param("workDate") LocalDate workDate,
             @Param("workTime") LocalTime workTime,
-            @Param("availableStatus") ScheduleStatus availableStatus,
+            @Param("workTimeStr") String workTimeStr,
             @Param("brand") String brand,
             @Param("categoryId") Integer categoryId,
             @Param("regionId") Integer regionId
@@ -61,15 +74,15 @@ public interface EngineerProfileRepository extends JpaRepository<EngineerProfile
            "JOIN EngineerServiceRegion esr ON esr.engineer = u " +
            "WHERE es.workDate = :workDate " +
            "AND slot.startTime <= :workTime AND slot.endTime > :workTime " +
-           "AND es.status = :availableStatus " +
            "AND ep.isLmsCompleted = true " +
            "AND ep.category.categoryId = :categoryId " +
            "AND esr.region.id = :regionId " +
+           NO_CONFLICTING_ASSIGNMENT +
            "ORDER BY ep.profileId ASC")
     List<EngineerProfile> findWithoutBrand(
             @Param("workDate") LocalDate workDate,
             @Param("workTime") LocalTime workTime,
-            @Param("availableStatus") ScheduleStatus availableStatus,
+            @Param("workTimeStr") String workTimeStr,
             @Param("categoryId") Integer categoryId,
             @Param("regionId") Integer regionId
     );
@@ -84,14 +97,14 @@ public interface EngineerProfileRepository extends JpaRepository<EngineerProfile
            "JOIN es.timeSlots slot " +
            "WHERE es.workDate = :workDate " +
            "AND slot.startTime <= :workTime AND slot.endTime > :workTime " +
-           "AND es.status = :availableStatus " +
            "AND ep.isLmsCompleted = true " +
            "AND ep.category.categoryId = :categoryId " +
+           NO_CONFLICTING_ASSIGNMENT +
            "ORDER BY ep.profileId ASC")
     List<EngineerProfile> findWithoutBrandAndRegion(
             @Param("workDate") LocalDate workDate,
             @Param("workTime") LocalTime workTime,
-            @Param("availableStatus") ScheduleStatus availableStatus,
+            @Param("workTimeStr") String workTimeStr,
             @Param("categoryId") Integer categoryId
     );
 
@@ -105,13 +118,13 @@ public interface EngineerProfileRepository extends JpaRepository<EngineerProfile
            "JOIN es.timeSlots slot " +
            "WHERE es.workDate = :workDate " +
            "AND slot.startTime <= :workTime AND slot.endTime > :workTime " +
-           "AND es.status = :availableStatus " +
            "AND ep.isLmsCompleted = true " +
+           NO_CONFLICTING_ASSIGNMENT +
            "ORDER BY ep.profileId ASC")
     List<EngineerProfile> findByScheduleOnly(
             @Param("workDate") LocalDate workDate,
             @Param("workTime") LocalTime workTime,
-            @Param("availableStatus") ScheduleStatus availableStatus
+            @Param("workTimeStr") String workTimeStr
     );
 
     // ─── 재배차 전용: 이미 배차된 기사 제외 버전 ───────────────────────────────
@@ -130,17 +143,17 @@ public interface EngineerProfileRepository extends JpaRepository<EngineerProfile
            "JOIN EngineerServiceRegion esr ON esr.engineer = u " +
            "WHERE es.workDate = :workDate " +
            "AND slot.startTime <= :workTime AND slot.endTime > :workTime " +
-           "AND es.status = :availableStatus " +
            "AND ep.isLmsCompleted = true " +
            "AND eb.brandName = :brand " +
            "AND ep.category.categoryId = :categoryId " +
            "AND esr.region.id = :regionId " +
            "AND u.id NOT IN :excludeIds " +
+           NO_CONFLICTING_ASSIGNMENT +
            "ORDER BY ep.profileId ASC")
     List<EngineerProfile> findByAllConditionsExcluding(
             @Param("workDate") LocalDate workDate,
             @Param("workTime") LocalTime workTime,
-            @Param("availableStatus") ScheduleStatus availableStatus,
+            @Param("workTimeStr") String workTimeStr,
             @Param("brand") String brand,
             @Param("categoryId") Integer categoryId,
             @Param("regionId") Integer regionId,
@@ -158,16 +171,16 @@ public interface EngineerProfileRepository extends JpaRepository<EngineerProfile
            "JOIN EngineerServiceRegion esr ON esr.engineer = u " +
            "WHERE es.workDate = :workDate " +
            "AND slot.startTime <= :workTime AND slot.endTime > :workTime " +
-           "AND es.status = :availableStatus " +
            "AND ep.isLmsCompleted = true " +
            "AND ep.category.categoryId = :categoryId " +
            "AND esr.region.id = :regionId " +
            "AND u.id NOT IN :excludeIds " +
+           NO_CONFLICTING_ASSIGNMENT +
            "ORDER BY ep.profileId ASC")
     List<EngineerProfile> findWithoutBrandExcluding(
             @Param("workDate") LocalDate workDate,
             @Param("workTime") LocalTime workTime,
-            @Param("availableStatus") ScheduleStatus availableStatus,
+            @Param("workTimeStr") String workTimeStr,
             @Param("categoryId") Integer categoryId,
             @Param("regionId") Integer regionId,
             @Param("excludeIds") Set<Long> excludeIds
@@ -183,15 +196,15 @@ public interface EngineerProfileRepository extends JpaRepository<EngineerProfile
            "JOIN es.timeSlots slot " +
            "WHERE es.workDate = :workDate " +
            "AND slot.startTime <= :workTime AND slot.endTime > :workTime " +
-           "AND es.status = :availableStatus " +
            "AND ep.isLmsCompleted = true " +
            "AND ep.category.categoryId = :categoryId " +
            "AND u.id NOT IN :excludeIds " +
+           NO_CONFLICTING_ASSIGNMENT +
            "ORDER BY ep.profileId ASC")
     List<EngineerProfile> findWithoutBrandAndRegionExcluding(
             @Param("workDate") LocalDate workDate,
             @Param("workTime") LocalTime workTime,
-            @Param("availableStatus") ScheduleStatus availableStatus,
+            @Param("workTimeStr") String workTimeStr,
             @Param("categoryId") Integer categoryId,
             @Param("excludeIds") Set<Long> excludeIds
     );
@@ -206,14 +219,14 @@ public interface EngineerProfileRepository extends JpaRepository<EngineerProfile
            "JOIN es.timeSlots slot " +
            "WHERE es.workDate = :workDate " +
            "AND slot.startTime <= :workTime AND slot.endTime > :workTime " +
-           "AND es.status = :availableStatus " +
            "AND ep.isLmsCompleted = true " +
            "AND u.id NOT IN :excludeIds " +
+           NO_CONFLICTING_ASSIGNMENT +
            "ORDER BY ep.profileId ASC")
     List<EngineerProfile> findByScheduleOnlyExcluding(
             @Param("workDate") LocalDate workDate,
             @Param("workTime") LocalTime workTime,
-            @Param("availableStatus") ScheduleStatus availableStatus,
+            @Param("workTimeStr") String workTimeStr,
             @Param("excludeIds") Set<Long> excludeIds
     );
 

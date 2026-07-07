@@ -10,7 +10,6 @@ import com.careflow.auth.security.CustomUserDetails;
 import com.careflow.common.enums.AssignType;
 import com.careflow.common.enums.Role;
 import com.careflow.engineer.domain.entity.EngineerProfile;
-import com.careflow.common.enums.ScheduleStatus;
 import com.careflow.engineer.repository.EngineerProfileRepository;
 import com.careflow.notification.entity.Notification;
 import com.careflow.notification.repository.NotificationRepository;
@@ -91,30 +90,31 @@ public class AssignmentReassignService {
         String  brand       = appliance.getBrand();
         Integer regionId    = asRequest.getVisitRegion().getId();
         LocalTime workTime  = parseScheduledTime(asRequest.getScheduledTime());
+        String workTimeStr  = asRequest.getScheduledTime();
 
         // 2. Fallback 탐색 — 이전 배차 기사 제외 버전 메서드 사용
         List<EngineerProfile> candidates = engineerProfileRepository.findByAllConditionsExcluding(
-                asRequest.getScheduledDate(), workTime, ScheduleStatus.AVAILABLE,
+                asRequest.getScheduledDate(), workTime, workTimeStr,
                 brand, categoryId, regionId, excludeEngineerIds);
         String matchReason = MatchReason.FALLBACK_0;
 
         if (candidates.isEmpty()) {
             candidates = engineerProfileRepository.findWithoutBrandExcluding(
-                    asRequest.getScheduledDate(), workTime, ScheduleStatus.AVAILABLE,
+                    asRequest.getScheduledDate(), workTime, workTimeStr,
                     categoryId, regionId, excludeEngineerIds);
             matchReason = MatchReason.FALLBACK_1;
         }
 
         if (candidates.isEmpty()) {
             candidates = engineerProfileRepository.findWithoutBrandAndRegionExcluding(
-                    asRequest.getScheduledDate(), workTime, ScheduleStatus.AVAILABLE,
+                    asRequest.getScheduledDate(), workTime, workTimeStr,
                     categoryId, excludeEngineerIds);
             matchReason = MatchReason.FALLBACK_2;
         }
 
         if (candidates.isEmpty()) {
             candidates = engineerProfileRepository.findByScheduleOnlyExcluding(
-                    asRequest.getScheduledDate(), workTime, ScheduleStatus.AVAILABLE,
+                    asRequest.getScheduledDate(), workTime, workTimeStr,
                     excludeEngineerIds);
             matchReason = MatchReason.FALLBACK_3;
         }
