@@ -115,4 +115,16 @@ public interface LmsConfirmationRepository extends JpaRepository<LmsConfirmation
             @Param("contentId") Long contentId,
             @Param("year") int year
     );
+
+    @Query("""
+    SELECT c FROM LmsConfirmation c
+    JOIN FETCH c.content
+    WHERE c.user.id = :userId
+      AND c.isActive = :isActive
+    ORDER BY c.completionYear DESC, c.confirmedAt DESC
+    """)
+    List<LmsConfirmation> findAllByUserIdAndIsActiveWithContent(
+            @Param("userId") Long userId,
+            @Param("isActive") boolean isActive
+    );
 }
