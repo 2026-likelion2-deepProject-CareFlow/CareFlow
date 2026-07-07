@@ -6,8 +6,6 @@ import com.careflow.auth.dto.LoginRequest;
 import com.careflow.auth.dto.PasswordChangeRequest;
 import com.careflow.auth.dto.SignUpRequest;
 import com.careflow.auth.dto.TokenResponse;
-import com.careflow.auth.entity.TrustedDevice;
-import com.careflow.auth.repository.TrustedDeviceRepository;
 import com.careflow.auth.security.JwtProvider;
 import com.careflow.common.enums.AgencyStatus;
 import com.careflow.common.enums.Role;
@@ -48,7 +46,6 @@ public class AuthService {
 
     private final AgenciesRepository agenciesRepository;
     private final RegionRepository regionRepository;
-    private final TrustedDeviceRepository trustedDeviceRepository;
     private final NotificationRepository notificationRepository;
 
     @Transactional
@@ -140,7 +137,7 @@ public class AuthService {
     }
 
     @Transactional
-    public TokenResponse login(LoginRequest request, String userAgent, String deviceToken) {
+    public TokenResponse login(LoginRequest request) {
         User user = userRepository.findByEmail(request.getEmail())
                 .orElseThrow(() -> new IllegalArgumentException("존재하지 않는 사용자입니다."));
 
@@ -165,40 +162,23 @@ public class AuthService {
         }
 
         TokenResponse tokenResponse = issueTokenResponse(user);
-        registerTrustedDeviceAndNotify(user, userAgent, deviceToken);
+        sendLoginAlertIfEnabled(user);
         return tokenResponse;
     }
 
     /**
-     * 로그인 성공 후 부가 처리 — 신뢰 기기 자동 등록/갱신 + 로그인 알림(설정이 켜져 있는 경우)
-     * 둘 다 로그인 자체의 성공 여부에 영향을 주지 않도록 예외를 삼키고 로그만 남긴다.
-     *
-     * 기기 식별은 프론트가 발급해 보관하는 deviceToken(X-Device-Id 헤더, localStorage UUID)을
-     * 우선 사용한다 — User-Agent만으로 식별하면 브라우저 업데이트마다 다른 기기로 오인식되는 문제가 있었음.
-     * 구버전 프론트 등으로 deviceToken이 없는 요청은 User-Agent 해시로 대체 식별한다(하위 호환).
+     * 로그인 성공 후 부가 처리 — 로그인 알림(설정이 켜져 있는 경우)
+     * 로그인 자체의 성공 여부에 영향을 주지 않도록 예외를 삼키고 로그만 남긴다.
      */
-    private void registerTrustedDeviceAndNotify(User user, String userAgent, String deviceToken) {
+    private void sendLoginAlertIfEnabled(User user) {
         try {
-            boolean hasUserAgent = userAgent != null && !userAgent.isBlank();
-            boolean hasDeviceToken = deviceToken != null && !deviceToken.isBlank();
-
-            if (hasUserAgent || hasDeviceToken) {
-                String resolvedToken = hasDeviceToken ? deviceToken : "ua:" + userAgent.hashCode();
-                String displayName = hasUserAgent ? userAgent : "알 수 없는 기기";
-
-                trustedDeviceRepository.findByUser_IdAndDeviceToken(user.getId(), resolvedToken)
-                        .ifPresentOrElse(
-                                device -> device.touch(hasUserAgent ? userAgent : null),
-                                () -> trustedDeviceRepository.save(TrustedDevice.create(user, displayName, resolvedToken)));
-            }
-
             if (user.isLoginAlertEnabled()) {
                 Notification notification = Notification.createAsStatusNotification(
                         user, "새 로그인 감지", "새로운 기기 또는 위치에서 로그인이 감지되었습니다. 본인이 아니라면 즉시 비밀번호를 변경해주세요.");
                 notificationRepository.save(notification);
             }
         } catch (Exception e) {
-            log.error("로그인 부가 처리(신뢰 기기/로그인 알림) 중 오류 발생 (userId: {})", user.getId(), e);
+            log.error("로그인 부가 처리(로그인 알림) 중 오류 발생 (userId: {})", user.getId(), e);
         }
     }
 

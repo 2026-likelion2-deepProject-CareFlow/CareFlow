@@ -25,11 +25,8 @@ public class AuthController {
     }
 
     @PostMapping("/login")
-    public ResponseEntity<TokenResponse> login(
-            @Valid @RequestBody LoginRequest request,
-            @RequestHeader(value = "User-Agent", required = false) String userAgent,
-            @RequestHeader(value = "X-Device-Id", required = false) String deviceToken) {
-        return ResponseEntity.ok(authService.login(request, userAgent, deviceToken));
+    public ResponseEntity<TokenResponse> login(@Valid @RequestBody LoginRequest request) {
+        return ResponseEntity.ok(authService.login(request));
     }
 
     @PostMapping("/refresh")

@@ -3,12 +3,9 @@ package com.careflow.agency.service;
 import com.careflow.account_requests.repository.AccountRequestsRepository;
 import com.careflow.agency.dto.request.AgencyWithdrawRequest;
 import com.careflow.agency.dto.response.AgencySecuritySettingsResponse;
-import com.careflow.agency.dto.response.TrustedDeviceResponse;
 import com.careflow.agency.entity.Agencies;
 import com.careflow.agency.repository.AgenciesRepository;
 import com.careflow.agency_bank_account.repository.AgencyBankAccountRepository;
-import com.careflow.auth.entity.TrustedDevice;
-import com.careflow.auth.repository.TrustedDeviceRepository;
 import com.careflow.common.enums.Role;
 import com.careflow.region.repository.RegionRepository;
 import com.careflow.user.entity.User;
@@ -27,7 +24,6 @@ import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
 
-import java.util.List;
 import java.util.NoSuchElementException;
 import java.util.Optional;
 
@@ -53,7 +49,6 @@ class AgenciesServiceTest {
     @Mock private AgencyBankAccountRepository agencyBankAccountRepository;
     @Mock private PasswordEncoder passwordEncoder;
     @Mock private StringRedisTemplate redisTemplate;
-    @Mock private TrustedDeviceRepository trustedDeviceRepository;
 
     private static final Long USER_ID = 1L;
 
@@ -132,17 +127,15 @@ class AgenciesServiceTest {
     class SecuritySettings {
 
         @Test
-        @DisplayName("TC-1: 조회 성공 — 상태값 + 신뢰기기 개수 반환")
+        @DisplayName("TC-1: 조회 성공 — 상태값 반환")
         void success_getSecuritySettings() {
             User user = buildUser("encoded-pw");
             given(userRepository.findById(USER_ID)).willReturn(Optional.of(user));
-            given(trustedDeviceRepository.countByUser_Id(USER_ID)).willReturn(3L);
 
             AgencySecuritySettingsResponse response = agenciesService.getSecuritySettings(USER_ID);
 
             assertThat(response.twoFactorEnabled()).isFalse();
             assertThat(response.loginAlertEnabled()).isFalse();
-            assertThat(response.trustedDeviceCount()).isEqualTo(3L);
         }
 
         @Test
@@ -173,64 +166,6 @@ class AgenciesServiceTest {
             given(userRepository.findById(999L)).willReturn(Optional.empty());
 
             assertThatThrownBy(() -> agenciesService.getSecuritySettings(999L))
-                    .isInstanceOf(NoSuchElementException.class);
-        }
-    }
-
-    @Nested
-    @DisplayName("getTrustedDevices / deleteTrustedDevice")
-    class TrustedDevices {
-
-        @Test
-        @DisplayName("TC-1: 목록 조회 성공")
-        void success_getTrustedDevices() {
-            User user = buildUser("encoded-pw");
-            TrustedDevice device = TrustedDevice.create(user, "Mozilla/5.0 Chrome/126", "test-device-token");
-            ReflectionTestUtils.setField(device, "id", 10L);
-            given(trustedDeviceRepository.findByUser_IdOrderByLastUsedAtDesc(USER_ID))
-                    .willReturn(List.of(device));
-
-            List<TrustedDeviceResponse> result = agenciesService.getTrustedDevices(USER_ID);
-
-            assertThat(result).hasSize(1);
-            assertThat(result.get(0).deviceId()).isEqualTo(10L);
-            assertThat(result.get(0).deviceName()).isEqualTo("Mozilla/5.0 Chrome/126");
-        }
-
-        @Test
-        @DisplayName("TC-2: 본인 기기 삭제 성공")
-        void success_deleteOwnDevice() throws IllegalAccessException {
-            User user = buildUser("encoded-pw");
-            TrustedDevice device = TrustedDevice.create(user, "Mozilla/5.0 Chrome/126", "test-device-token");
-            ReflectionTestUtils.setField(device, "id", 10L);
-            given(trustedDeviceRepository.findById(10L)).willReturn(Optional.of(device));
-
-            agenciesService.deleteTrustedDevice(USER_ID, 10L);
-
-            verify(trustedDeviceRepository).delete(device);
-        }
-
-        @Test
-        @DisplayName("TC-3: 타인 소유 기기 삭제 시도 — IllegalAccessException")
-        void fail_otherUsersDevice() {
-            User owner = buildUser("encoded-pw");
-            ReflectionTestUtils.setField(owner, "id", 999L);
-            TrustedDevice device = TrustedDevice.create(owner, "Mozilla/5.0 Chrome/126", "test-device-token");
-            ReflectionTestUtils.setField(device, "id", 10L);
-            given(trustedDeviceRepository.findById(10L)).willReturn(Optional.of(device));
-
-            assertThatThrownBy(() -> agenciesService.deleteTrustedDevice(USER_ID, 10L))
-                    .isInstanceOf(IllegalAccessException.class);
-
-            verify(trustedDeviceRepository, never()).delete(device);
-        }
-
-        @Test
-        @DisplayName("TC-4: 존재하지 않는 기기 삭제 시도 — NoSuchElementException")
-        void fail_deviceNotFound() {
-            given(trustedDeviceRepository.findById(999L)).willReturn(Optional.empty());
-
-            assertThatThrownBy(() -> agenciesService.deleteTrustedDevice(USER_ID, 999L))
                     .isInstanceOf(NoSuchElementException.class);
         }
     }
