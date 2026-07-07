@@ -246,9 +246,13 @@ public class LmsService {
     public List<LmsConfirmationResponseDto> getEngineerConfirmations(Long engineerUserId, Integer year) {
         List<LmsConfirmation> confirmations;
         if (year != null) {
-            confirmations = lmsConfirmationRepository.findByUserIdAndYear(engineerUserId, year);
+            // [수정] is_active=true 조건 추가 — 재이수 강제로 논리 삭제된 이력 제외
+            confirmations = lmsConfirmationRepository
+                    .findByUserIdAndYearAndIsActive(engineerUserId, year, true);
         } else {
-            confirmations = lmsConfirmationRepository.findAllByUserIdWithContent(engineerUserId);
+            // 전체 조회 시에도 is_active=true만 반환
+            confirmations = lmsConfirmationRepository
+                    .findAllByUserIdAndIsActiveWithContent(engineerUserId, true);
         }
         return confirmations.stream()
                 .map(LmsConfirmationResponseDto::from)
