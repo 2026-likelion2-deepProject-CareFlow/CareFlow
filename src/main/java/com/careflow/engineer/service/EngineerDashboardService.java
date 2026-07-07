@@ -105,9 +105,14 @@ public class EngineerDashboardService {
                 expectedCount++;
                 if ("ACCEPTED".equals(assignStatus) && !currentIsActive) {
                     List<AsStatusLog> logs = asStatusLogRepository.findByAsRequest_IdOrderByCreatedAtAsc(a.getAsRequest().getId());
-                    String latest = (logs != null && !logs.isEmpty())
-                            ? logs.get(logs.size() - 1).getToStatus()
-                            : "WAITING";
+                    // created_at 초 단위 동점 시 get(size-1) 이 비결정적이므로 log_id 로 tie-break (표시·검증과 동일 기준)
+                    String latest = (logs == null) ? "WAITING"
+                            : logs.stream()
+                                  .max(java.util.Comparator
+                                          .comparing(AsStatusLog::getCreatedAt, java.util.Comparator.nullsFirst(java.util.Comparator.naturalOrder()))
+                                          .thenComparing(AsStatusLog::getId, java.util.Comparator.nullsFirst(java.util.Comparator.naturalOrder())))
+                                  .map(AsStatusLog::getToStatus)
+                                  .orElse("WAITING");
                     boolean active = !"WAITING".equals(latest) && !"COMPLETED".equals(latest); // 출발/도착/작업중
                     if (currentRequestId == null || active) {
                         currentRequestId = a.getAsRequest().getId();
@@ -197,7 +202,12 @@ public class EngineerDashboardService {
                 }
             }
         }
-        double customerSatisfaction = reviewCount > 0 ? ((double) goodReviews / reviewCount) * 100 : 0.0;
+        // 고객 만족도(4점 이상 리뷰 비율, %) — 정수로 반올림해 표기.
+        // 비율 지표라 소수점(예: 66.6666...%)은 가짜 정밀도라서 정수 %로 통일한다.
+        // (이 값은 실적/정산 카드·기사 대시보드·CSV 리포트가 공통으로 사용)
+        double customerSatisfaction = reviewCount > 0
+                ? Math.round((double) goodReviews / reviewCount * 100)
+                : 0.0;
 
         // 3-1. 일별 트렌드
         Map<String, Long> dailyMap = completedAssignments.stream()

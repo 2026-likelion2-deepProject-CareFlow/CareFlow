@@ -66,11 +66,14 @@ public class EngineerAssignmentService {
                 .collect(Collectors.groupingBy(
                         log -> log.getAsRequest().getId(),
                         Collectors.collectingAndThen(
-                                Collectors.maxBy((l1, l2) -> {
-                                    if (l1.getCreatedAt() == null) return -1;
-                                    if (l2.getCreatedAt() == null) return 1;
-                                    return l1.getCreatedAt().compareTo(l2.getCreatedAt());
-                                }),
+                                // created_at 이 초 단위(DATETIME)라 같은 1초 내 로그는 시각이 동일할 수 있다.
+                                // 그때 최신 판별이 흔들리지 않도록 log_id 를 동점 기준으로 함께 비교한다.
+                                // (검증 로직 AsRequestService.updateEngineerTaskStatus 와 반드시 동일 기준)
+                                Collectors.maxBy(
+                                        java.util.Comparator
+                                                .comparing(AsStatusLog::getCreatedAt, java.util.Comparator.nullsFirst(java.util.Comparator.naturalOrder()))
+                                                .thenComparing(AsStatusLog::getId, java.util.Comparator.nullsFirst(java.util.Comparator.naturalOrder()))
+                                ),
                                 opt -> opt.map(AsStatusLog::getToStatus).orElse("WAITING")
                         )
                 ));

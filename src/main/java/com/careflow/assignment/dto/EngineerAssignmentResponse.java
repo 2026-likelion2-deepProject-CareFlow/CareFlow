@@ -28,7 +28,8 @@ public class EngineerAssignmentResponse {
     private String address;
 
     private String symptomDesc;
-    private String scheduledDate;
+    private String scheduledDate;     // 표시용: "2026.07.08 (수)"
+    private String scheduledDateIso;  // 정렬/필터용: ISO "2026-07-08" (LocalDate.toString())
     private String scheduledTime;
 
     private Integer estimatedAvgCost;
@@ -47,11 +48,16 @@ public class EngineerAssignmentResponse {
         }
 
         // 2. 날짜 포맷팅
+        // - scheduledDate: 화면 표시용 "yyyy.MM.dd (요일)"
+        // - scheduledDateIso: 프론트 정렬/날짜필터용 ISO "yyyy-MM-dd"
+        //   (LocalDate.toString() 이 ISO-8601(yyyy-MM-dd) 을 반환. 표시 포맷 파싱 의존 제거)
         String formattedScheduledDate = "일정 미정";
+        String scheduledDateIso = null;
         if (req != null && req.getScheduledDate() != null) {
             String[] days = {"", "월", "화", "수", "목", "금", "토", "일"};
             String dayOfWeek = days[req.getScheduledDate().getDayOfWeek().getValue()];
             formattedScheduledDate = req.getScheduledDate().format(DateTimeFormatter.ofPattern("yyyy.MM.dd")) + " (" + dayOfWeek + ")";
+            scheduledDateIso = req.getScheduledDate().toString();
         }
 
         // 3. 주소 조립
@@ -82,6 +88,7 @@ public class EngineerAssignmentResponse {
                 .address(fullAddress)
                 .symptomDesc(req != null && req.getSymptomDesc() != null ? req.getSymptomDesc() : "증상 미기재")
                 .scheduledDate(formattedScheduledDate)
+                .scheduledDateIso(scheduledDateIso)
                 .scheduledTime(req != null && req.getScheduledTime() != null ? req.getScheduledTime() : "시간 미정")
                 .estimatedAvgCost(avgCost != null ? avgCost : 0)
                 .build();
