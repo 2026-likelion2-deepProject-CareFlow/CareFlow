@@ -202,4 +202,17 @@ public class NotificationService {
         // 벌크 연산 쿼리 호출로 성능 최적화
         notificationRepository.markAllAsReadByUserId(userId);
     }
+
+    /**
+     * [기사용 API] 선택한 여러 알림 일괄 읽음 처리
+     */
+    @org.springframework.transaction.annotation.Transactional
+    public void markSelectedAsRead(Long userId, List<Long> notificationIds) {
+        // 처리 대상이 없으면 no-op (빈 IN 절로 인한 오류 방지)
+        if (notificationIds == null || notificationIds.isEmpty()) {
+            return;
+        }
+        // 본인(user_id) 소유 알림만 갱신되므로 타인 소유 id는 자동 제외된다 (BOLA 방어)
+        notificationRepository.markAsReadByUserIdAndIds(userId, notificationIds);
+    }
 }

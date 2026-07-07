@@ -1,11 +1,14 @@
 package com.careflow.assignment.service;
 
+import com.careflow.as_request.entity.AsRequest;
 import com.careflow.assignment.dto.AssignmentChangeEngineerRequest;
 import com.careflow.assignment.dto.AssignmentChangeEngineerResponse;
 import com.careflow.assignment.entity.AsAssignment;
 import com.careflow.assignment.repository.AsAssignmentRepository;
 import com.careflow.auth.security.CustomUserDetails;
 import com.careflow.common.enums.AssignType;
+import com.careflow.notification.entity.Notification;
+import com.careflow.notification.repository.NotificationRepository;
 import com.careflow.user.entity.User;
 import com.careflow.user.repository.UserRepository;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +23,7 @@ public class AssignmentChangeEngineerService {
 
     private final AsAssignmentRepository asAssignmentRepository;
     private final UserRepository userRepository;
+    private final NotificationRepository notificationRepository;
 
     @Transactional
     public AssignmentChangeEngineerResponse changeEngineer(
@@ -66,6 +70,19 @@ public class AssignmentChangeEngineerService {
                 AssignType.MANUAL
         );
         AsAssignment saved = asAssignmentRepository.save(newAssignment);
+
+        // [신규 (2)(3)] 새로 배정된 기사에게 "새 작업 배정" 알림 저장 (직접 저장 방식).
+        AsRequest asRequest = existing.getAsRequest();
+        String applianceInfo = asRequest.getAppliance().getBrand() + " " + asRequest.getAppliance().getModelName();
+        String assignBody = String.format(
+                "[%s] %s 고객님 작업이 배정되었습니다. 방문 예정: %s %s. 작업 관리에서 수락 여부를 확인해 주세요.",
+                applianceInfo,
+                asRequest.getCustomer().getName(),
+                asRequest.getScheduledDate(),
+                asRequest.getScheduledTime());
+        Notification assignNotification = Notification.createAsStatusNotification(
+                newEngineer, "새 작업이 배정되었습니다", assignBody);
+        notificationRepository.save(assignNotification);
 
         return new AssignmentChangeEngineerResponse(
                 saved.getId(),

@@ -87,6 +87,7 @@ class AsRequestServiceTest {
         customer = mock(User.class);
         given(customer.getId()).willReturn(1L);
         given(customer.getRole()).willReturn(Role.CUSTOMER);
+        given(customer.getName()).willReturn("홍길동");
 
         engineer = mock(User.class);
         given(engineer.getId()).willReturn(5L);
@@ -99,6 +100,7 @@ class AsRequestServiceTest {
         appliance = mock(Appliance.class);
         given(appliance.getId()).willReturn(1L);
         given(appliance.getBrand()).willReturn("삼성");
+        given(appliance.getModelName()).willReturn("비스포크 냉장고");
         given(appliance.getCategory()).willReturn(category);
 
         region = mock(Regions.class);
@@ -116,6 +118,10 @@ class AsRequestServiceTest {
         savedAsRequest = mock(AsRequest.class);
         given(savedAsRequest.getId()).willReturn(10L);
         given(savedAsRequest.getCustomer()).willReturn(customer);
+        // [신규 (2)(3)] createAssignment 에서 배정 기사 알림 문구 생성 시 참조하는 필드 스텁
+        given(savedAsRequest.getAppliance()).willReturn(appliance);
+        given(savedAsRequest.getScheduledDate()).willReturn(java.time.LocalDate.of(2026, 7, 1));
+        given(savedAsRequest.getScheduledTime()).willReturn("10:00");
 
         savedAssignment = mock(AsAssignment.class);
         given(savedAssignment.getId()).willReturn(20L);
@@ -345,12 +351,21 @@ class AsRequestServiceTest {
             // AUTO 쿼리 미호출 검증
             verify(engineerProfileRepository, never()).findByAllConditions(any(), any(), any(), any(), any(), any());
 
-            // A/S 접수 성공 알림이 고객에게 저장되는지 검증
+            // 알림 저장 검증 — (1) 고객 A/S 접수 완료, (2) 배정 기사 "새 작업 배정" 총 2건
             org.mockito.ArgumentCaptor<Notification> notificationCaptor =
                     org.mockito.ArgumentCaptor.forClass(Notification.class);
-            verify(notificationRepository).save(notificationCaptor.capture());
-            assertThat(notificationCaptor.getValue().getUser()).isEqualTo(customer);
-            assertThat(notificationCaptor.getValue().getTitle()).isEqualTo("A/S 접수 완료 안내");
+            verify(notificationRepository, times(2)).save(notificationCaptor.capture());
+            java.util.List<Notification> savedNotifications = notificationCaptor.getAllValues();
+            // 고객 접수 완료 알림
+            assertThat(savedNotifications).anySatisfy(n -> {
+                assertThat(n.getUser()).isEqualTo(customer);
+                assertThat(n.getTitle()).isEqualTo("A/S 접수 완료 안내");
+            });
+            // 배정 기사 새 작업 배정 알림
+            assertThat(savedNotifications).anySatisfy(n -> {
+                assertThat(n.getUser()).isEqualTo(engineer);
+                assertThat(n.getTitle()).isEqualTo("새 작업이 배정되었습니다");
+            });
         }
 
         @Test

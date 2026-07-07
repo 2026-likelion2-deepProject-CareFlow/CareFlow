@@ -1,6 +1,7 @@
 package com.careflow.notification.controller;
 
 import com.careflow.auth.security.CustomUserDetails;
+import com.careflow.notification.dto.NotificationReadRequest;
 import com.careflow.notification.dto.NotificationResponse;
 import com.careflow.notification.service.NotificationService;
 import lombok.RequiredArgsConstructor;
@@ -58,6 +59,20 @@ public class EngineerNotificationController {
             @PathVariable Long notificationId) {
 
         notificationService.markAsRead(userDetails.getUserId(), notificationId);
+        return ResponseEntity.noContent().build();
+    }
+
+    /**
+     * 기사 본인이 선택한 여러 알림 일괄 읽음 처리
+     * PATCH /api/engineer/notifications/read
+     * body: { "notificationIds": [1, 2, 3] }
+     */
+    @PatchMapping("/read")
+    public ResponseEntity<Void> markSelectedAsRead(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @RequestBody NotificationReadRequest request) {
+
+        notificationService.markSelectedAsRead(userDetails.getUserId(), request.notificationIds());
         return ResponseEntity.noContent().build();
     }
 
