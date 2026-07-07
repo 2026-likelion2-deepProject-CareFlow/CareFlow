@@ -55,7 +55,7 @@ public class EngineerAssignmentResponse {
         }
 
         // 3. 주소 조립
-        String regionName = (cust != null && cust.getRegionId() != null) ? cust.getRegionId().getName() + " " : "";
+        String regionName = (req != null && req.getVisitRegion() != null) ? req.getVisitRegion().getName() + " " : "";
         String detailAddress = (req != null && req.getVisitAddressDetail() != null) ? req.getVisitAddressDetail() : "";
         String fullAddress = (regionName + detailAddress).trim();
 

@@ -139,6 +139,19 @@ public class AssignmentReassignService {
                 asRequest, engineer, engineer.getAgency(), AssignType.AUTO);
         AsAssignment saved = asAssignmentRepository.save(newAssignment);
 
+        // [신규 (2)(3)] 재배차된 새 담당 기사에게 "새 작업 배정" 알림 저장.
+        // 고객 재신청 알림(processManualFailureNotification)과 동일한 직접 저장 방식.
+        String applianceInfo = appliance.getBrand() + " " + appliance.getModelName();
+        String assignBody = String.format(
+                "[%s] %s 고객님 작업이 배정되었습니다. 방문 예정: %s %s. 작업 관리에서 수락 여부를 확인해 주세요.",
+                applianceInfo,
+                asRequest.getCustomer().getName(),
+                asRequest.getScheduledDate(),
+                asRequest.getScheduledTime());
+        Notification assignNotification = Notification.createAsStatusNotification(
+                engineer, "새 작업이 배정되었습니다", assignBody);
+        notificationRepository.save(assignNotification);
+
         return AssignmentReassignResponse.reassigned(saved.getId(), matchReason);
     }
 

@@ -1,6 +1,7 @@
 package com.careflow.assignment.service;
 
 import com.careflow.agency.entity.Agencies;
+import com.careflow.appliance.entity.Appliance;
 import com.careflow.as_request.entity.AsRequest;
 import com.careflow.assignment.dto.AssignmentChangeEngineerRequest;
 import com.careflow.assignment.dto.AssignmentChangeEngineerResponse;
@@ -16,6 +17,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
+import com.careflow.notification.repository.NotificationRepository;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
@@ -39,6 +41,7 @@ class AssignmentChangeEngineerServiceTest {
 
     @Mock private AsAssignmentRepository asAssignmentRepository;
     @Mock private UserRepository userRepository;
+    @Mock private NotificationRepository notificationRepository;
 
     private static final Long ASSIGNMENT_ID  = 1L;
     private static final Long AGENCY_ID      = 10L;
@@ -54,6 +57,8 @@ class AssignmentChangeEngineerServiceTest {
     private Agencies agency;
     private AsRequest asRequest;
     private User newEngineer;
+    private Appliance appliance;
+    private User customer;
     private AssignmentChangeEngineerRequest changeRequest;
 
     @BeforeEach
@@ -65,6 +70,8 @@ class AssignmentChangeEngineerServiceTest {
         existing     = mock(AsAssignment.class);
         newAssignment = mock(AsAssignment.class);
         newEngineer  = mock(User.class);
+        appliance    = mock(Appliance.class);
+        customer     = mock(User.class);
 
         changeRequest = new AssignmentChangeEngineerRequest(ASSIGNMENT_ID, NEW_ENGINEER_ID);
 
@@ -74,6 +81,14 @@ class AssignmentChangeEngineerServiceTest {
 
         given(agency.getId()).willReturn(AGENCY_ID);
         given(asRequest.getId()).willReturn(REQUEST_ID);
+        // [신규 (2)(3)] changeEngineer 에서 새 기사 배정 알림 문구 생성 시 참조하는 필드 스텁
+        given(appliance.getBrand()).willReturn("삼성");
+        given(appliance.getModelName()).willReturn("비스포크 냉장고");
+        given(customer.getName()).willReturn("홍길동");
+        given(asRequest.getAppliance()).willReturn(appliance);
+        given(asRequest.getCustomer()).willReturn(customer);
+        given(asRequest.getScheduledDate()).willReturn(java.time.LocalDate.of(2026, 7, 1));
+        given(asRequest.getScheduledTime()).willReturn("10:00");
 
         given(existing.getId()).willReturn(ASSIGNMENT_ID);
         given(existing.getAgency()).willReturn(agency);
