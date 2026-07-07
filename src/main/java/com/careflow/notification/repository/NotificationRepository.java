@@ -76,6 +76,14 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
     @Query("UPDATE Notification n SET n.isRead = true WHERE n.user.id = :userId AND n.isRead = false")
     int markAllAsReadByUserId(@Param("userId") Long userId);
 
+    // [기사용 API] 선택한 여러 알림을 일괄 읽음 처리.
+    // WHERE 절에 user_id 조건을 함께 걸어, 타인 소유 알림 id가 섞여 와도 무시된다 (BOLA 방어).
+    @Modifying
+    @Transactional
+    @Query("UPDATE Notification n SET n.isRead = true " +
+           "WHERE n.user.id = :userId AND n.id IN :ids AND n.isRead = false")
+    int markAsReadByUserIdAndIds(@Param("userId") Long userId, @Param("ids") List<Long> ids);
+
     // [고객용 API] 알림 목록 페이징 + type 필터 + "안읽음만 보기" 필터 동시 지원
     // 최근 알림 순 정렬 — 스케줄러가 여러 건을 같은 초에 한꺼번에 생성할 수 있어 createdAt이 같을 때는
     // id DESC(생성 순서)로 2차 정렬해 항상 결정적인 "최신순"을 보장한다.
