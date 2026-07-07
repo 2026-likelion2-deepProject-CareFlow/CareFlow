@@ -156,4 +156,74 @@ class EngineerDashboardServiceTest {
         assertThat(response.getMonthlyComparison().getPrevMonthNetAmount()).isEqualTo(50000);
         assertThat(response.getMonthlyComparison().getNetAmountDiff()).isEqualTo(35000);
     }
+
+    @Test
+    @DisplayName("성공: 최근 실적 5건 조회 — repository에 size=5 페이지 요청을 전달하고 결과를 그대로 매핑한다.")
+    void getRecentPerformance_Success() {
+        // Given
+        Long engineerId = 1L;
+        com.careflow.as_request.entity.AsRequest req = com.careflow.as_request.entity.AsRequest.builder()
+                .customer(User.builder().name("김고객").build())
+                .build();
+        ReflectionTestUtils.setField(req, "id", 10L);
+        ReflectionTestUtils.setField(req, "createdAt", java.time.LocalDateTime.of(2026, 1, 1, 0, 0));
+        ReflectionTestUtils.setField(req, "scheduledDate", java.time.LocalDate.of(2026, 1, 5));
+
+        com.careflow.assignment.entity.AsAssignment assignment =
+                com.careflow.assignment.entity.AsAssignment.builder().asRequest(req).build();
+
+        org.springframework.data.domain.Page<com.careflow.assignment.entity.AsAssignment> page =
+                new org.springframework.data.domain.PageImpl<>(java.util.List.of(assignment));
+
+        given(asAssignmentRepository.findCompletedAssignmentsByEngineerId(
+                org.mockito.ArgumentMatchers.eq(engineerId),
+                org.mockito.ArgumentMatchers.argThat(p -> p.getPageSize() == 5 && p.getPageNumber() == 0)))
+                .willReturn(page);
+
+        // When
+        java.util.List<com.careflow.settlement.dto.EngineerSettlementSummaryResponse.PerformanceItem> result =
+                engineerDashboardService.getRecentPerformance(engineerId);
+
+        // Then
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).getCustomerName()).isEqualTo("김고객");
+        assertThat(result.get(0).getWorkDate()).isEqualTo("01.05");
+    }
+
+    @Test
+    @DisplayName("성공: 실적 전체 목록 조회 — 요청한 page/size 그대로 repository에 전달하고 Page 형태로 반환한다.")
+    void getAllPerformance_Success() {
+        // Given
+        Long engineerId = 1L;
+        com.careflow.as_request.entity.AsRequest req = com.careflow.as_request.entity.AsRequest.builder()
+                .customer(User.builder().name("박고객").build())
+                .build();
+        ReflectionTestUtils.setField(req, "id", 20L);
+        ReflectionTestUtils.setField(req, "createdAt", java.time.LocalDateTime.of(2026, 2, 1, 0, 0));
+        ReflectionTestUtils.setField(req, "scheduledDate", java.time.LocalDate.of(2026, 2, 10));
+
+        com.careflow.assignment.entity.AsAssignment assignment =
+                com.careflow.assignment.entity.AsAssignment.builder().asRequest(req).build();
+
+        org.springframework.data.domain.Page<com.careflow.assignment.entity.AsAssignment> page =
+                new org.springframework.data.domain.PageImpl<>(
+                        java.util.List.of(assignment),
+                        org.springframework.data.domain.PageRequest.of(1, 15),
+                        31);
+
+        given(asAssignmentRepository.findCompletedAssignmentsByEngineerId(
+                org.mockito.ArgumentMatchers.eq(engineerId),
+                org.mockito.ArgumentMatchers.argThat(p -> p.getPageSize() == 15 && p.getPageNumber() == 1)))
+                .willReturn(page);
+
+        // When
+        org.springframework.data.domain.Page<com.careflow.settlement.dto.EngineerSettlementSummaryResponse.PerformanceItem> result =
+                engineerDashboardService.getAllPerformance(engineerId, 1, 15);
+
+        // Then
+        assertThat(result.getContent()).hasSize(1);
+        assertThat(result.getContent().get(0).getCustomerName()).isEqualTo("박고객");
+        assertThat(result.getTotalElements()).isEqualTo(31);
+        assertThat(result.getTotalPages()).isEqualTo(3);
+    }
 }

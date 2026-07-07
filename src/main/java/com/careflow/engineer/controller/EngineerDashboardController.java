@@ -7,6 +7,7 @@ import com.careflow.engineer.service.EngineerSettlementReportCsvGenerator;
 import com.careflow.settlement.dto.EngineerSettlementSummaryResponse;
 import com.careflow.engineer.service.EngineerDashboardService;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.format.annotation.DateTimeFormat;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.MediaType;
@@ -19,6 +20,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDate;
+import java.util.List;
 
 @RestController
 @RequestMapping("/api/engineer")
@@ -52,7 +54,25 @@ public class EngineerDashboardController {
         return ResponseEntity.ok(response);
     }
 
-    // 3. 실적/정산 리포트 다운로드 (GET /api/engineer/settlements/report/download)
+    // 3. 최근 실적 5건 (GET /api/engineer/settlements/performance/recent) — "최근 5개 실적 목록" 섹션
+    @GetMapping("/settlements/performance/recent")
+    public ResponseEntity<List<EngineerSettlementSummaryResponse.PerformanceItem>> getRecentPerformance(
+            @AuthenticationPrincipal CustomUserDetails userDetails) {
+
+        return ResponseEntity.ok(engineerDashboardService.getRecentPerformance(userDetails.getUserId()));
+    }
+
+    // 4. 실적 전체 목록 (GET /api/engineer/settlements/performance) — "전체 보기" 모달, 15건씩 페이징
+    @GetMapping("/settlements/performance")
+    public ResponseEntity<Page<EngineerSettlementSummaryResponse.PerformanceItem>> getAllPerformance(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @RequestParam(defaultValue = "0") int page,
+            @RequestParam(defaultValue = "15") int size) {
+
+        return ResponseEntity.ok(engineerDashboardService.getAllPerformance(userDetails.getUserId(), page, size));
+    }
+
+    // 5. 실적/정산 리포트 다운로드 (GET /api/engineer/settlements/report/download)
     //    화면(2번 summary)과 동일한 데이터·필터를 그대로 CSV(UTF-8 BOM)로 내려준다.
     @GetMapping("/settlements/report/download")
     public ResponseEntity<byte[]> downloadSettlementReport(

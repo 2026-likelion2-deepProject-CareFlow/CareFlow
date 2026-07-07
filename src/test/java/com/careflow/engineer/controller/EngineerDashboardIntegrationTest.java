@@ -140,4 +140,29 @@ class EngineerDashboardIntegrationTest {
                 .andExpect(jsonPath("$.brandDistributions[0].name").value("삼성")) // 브랜드 그룹핑 확인
                 .andExpect(jsonPath("$.statusDistributions[0].name").value("정상 완료")); // 진단 결과 그룹핑 확인
     }
+
+    @Test
+    @DisplayName("성공: 최근 실적 5건 조회 — 필터 없이 완료된 실적이 최신순으로 반환된다.")
+    void getRecentPerformance_Integration_Success() throws Exception {
+        mockMvc.perform(get("/api/engineer/settlements/performance/recent")
+                        .header("Authorization", "Bearer " + engineerToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.length()").value(1))
+                .andExpect(jsonPath("$[0].customerName").value("김고객"))
+                .andExpect(jsonPath("$[0].grossAmount").value(50000));
+    }
+
+    @Test
+    @DisplayName("성공: 실적 전체 목록 조회 — 15건씩 페이징된 Page 형태로 반환된다.")
+    void getAllPerformance_Integration_Success() throws Exception {
+        mockMvc.perform(get("/api/engineer/settlements/performance")
+                        .header("Authorization", "Bearer " + engineerToken)
+                        .param("page", "0")
+                        .param("size", "15"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].customerName").value("김고객"))
+                .andExpect(jsonPath("$.totalElements").value(1))
+                .andExpect(jsonPath("$.totalPages").value(1));
+    }
 }

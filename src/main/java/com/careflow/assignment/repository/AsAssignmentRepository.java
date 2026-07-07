@@ -244,6 +244,23 @@ public interface AsAssignmentRepository extends JpaRepository<AsAssignment, Long
             @Param("brand") String brand,
             @Param("status") DiagnosisResult status);
 
+    // [실적 목록용] 기간·브랜드·상태 필터 없이, 완료(COMPLETED)된 배정 전체를 최신 작업일 순으로 페이징 조회
+    // "최근 실적 5개"(size=5)와 "실적 전체 목록 모달"(size=15) 양쪽에서 재사용
+    @Query(value = "SELECT a FROM AsAssignment a " +
+            "JOIN FETCH a.asRequest r " +
+            "JOIN FETCH r.customer c " +
+            "JOIN FETCH r.appliance app " +
+            "LEFT JOIN FETCH r.workReport w " +
+            "LEFT JOIN FETCH r.review rv " +
+            "WHERE a.engineer.id = :engineerId " +
+            "AND a.status = 'COMPLETED' " +
+            "ORDER BY r.scheduledDate DESC",
+            countQuery = "SELECT COUNT(a) FROM AsAssignment a JOIN a.asRequest r " +
+                    "WHERE a.engineer.id = :engineerId AND a.status = 'COMPLETED'")
+    Page<AsAssignment> findCompletedAssignmentsByEngineerId(
+            @Param("engineerId") Long engineerId,
+            Pageable pageable);
+
     // [기사용] 본인이 담당한 적 있는 고객(User) 목록 조회 (중복 제거)
     @org.springframework.data.jpa.repository.Query(
             value = "SELECT DISTINCT c FROM AsAssignment a " +

@@ -16,6 +16,7 @@ import com.careflow.settlement.repository.SettlementRepository;
 import com.careflow.review.repository.ReviewRepository;
 import com.careflow.common.enums.AsStatus;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -239,26 +240,8 @@ public class EngineerDashboardService {
         // 3-4. 실적 리스트
         List<EngineerSettlementSummaryResponse.PerformanceItem> performanceList = completedAssignments.stream()
                 .filter(a -> a.getAsRequest() != null)
-                .map(a -> {
-                    String reqDateStr = a.getAsRequest().getCreatedAt() != null ? a.getAsRequest().getCreatedAt().format(DateTimeFormatter.ofPattern("yyyyMMdd")) : "00000000";
-                    String reqId = String.format("AS-%s-%04d", reqDateStr, a.getAsRequest().getId());
-
-                    String workDate = a.getAsRequest().getScheduledDate() != null ? a.getAsRequest().getScheduledDate().format(DateTimeFormatter.ofPattern("MM.dd")) : "";
-                    String customerName = a.getAsRequest().getCustomer() != null ? a.getAsRequest().getCustomer().getName() : "미상";
-                    String applianceBrand = a.getAsRequest().getAppliance() != null ? a.getAsRequest().getAppliance().getBrand() : "";
-                    String model = a.getAsRequest().getAppliance() != null ? a.getAsRequest().getAppliance().getModelName() : "";
-
-                    return EngineerSettlementSummaryResponse.PerformanceItem.builder()
-                            .requestId(reqId)
-                            .workDate(workDate)
-                            .customerName(customerName)
-                            .productName((applianceBrand + " " + model).trim())
-                            .brand(applianceBrand)
-                            .grossAmount(a.getAsRequest().getWorkReport() != null ? a.getAsRequest().getWorkReport().getFinalAmount() : 0)
-                            .diagnosisResult(a.getAsRequest().getWorkReport() != null && a.getAsRequest().getWorkReport().getDiagnosisResult() != null ? a.getAsRequest().getWorkReport().getDiagnosisResult().name() : "NORMAL")
-                            .rating(a.getAsRequest().getReview() != null && a.getAsRequest().getReview().getRating() != null ? a.getAsRequest().getReview().getRating() : 0.0)
-                            .build();
-                }).toList();
+                .map(this::toPerformanceItem)
+                .toList();
 
         // 4. 정산 요약 및 계좌 (v21 명세 반영)
         LocalDateTime settlementFrom = start.atStartOfDay();
@@ -345,6 +328,45 @@ public class EngineerDashboardService {
                 .performanceList(performanceList)
                 .settlementSummary(settlementSummary)
                 .monthlyComparison(monthlyComparison)
+                .build();
+    }
+
+    // 3. 최근 실적 5건 (필터 없음, 작업일 최신순) — "실적/정산" 화면의 "최근 5개 실적 목록" 섹션에서 사용
+    public List<EngineerSettlementSummaryResponse.PerformanceItem> getRecentPerformance(Long engineerId) {
+        Page<AsAssignment> recent = asAssignmentRepository.findCompletedAssignmentsByEngineerId(
+                engineerId, PageRequest.of(0, 5));
+        return recent.getContent().stream()
+                .filter(a -> a.getAsRequest() != null)
+                .map(this::toPerformanceItem)
+                .toList();
+    }
+
+    // 4. 실적 전체 목록 (필터 없음, 작업일 최신순, 페이징) — "전체 보기" 모달에서 사용
+    public Page<EngineerSettlementSummaryResponse.PerformanceItem> getAllPerformance(Long engineerId, int page, int size) {
+        Page<AsAssignment> result = asAssignmentRepository.findCompletedAssignmentsByEngineerId(
+                engineerId, PageRequest.of(page, size));
+        return result.map(this::toPerformanceItem);
+    }
+
+    // 완료된 배정(AsAssignment) → 실적 목록 아이템 매핑 — getSettlementSummary/getRecentPerformance/getAllPerformance 공용
+    private EngineerSettlementSummaryResponse.PerformanceItem toPerformanceItem(AsAssignment a) {
+        String reqDateStr = a.getAsRequest().getCreatedAt() != null ? a.getAsRequest().getCreatedAt().format(DateTimeFormatter.ofPattern("yyyyMMdd")) : "00000000";
+        String reqId = String.format("AS-%s-%04d", reqDateStr, a.getAsRequest().getId());
+
+        String workDate = a.getAsRequest().getScheduledDate() != null ? a.getAsRequest().getScheduledDate().format(DateTimeFormatter.ofPattern("MM.dd")) : "";
+        String customerName = a.getAsRequest().getCustomer() != null ? a.getAsRequest().getCustomer().getName() : "미상";
+        String applianceBrand = a.getAsRequest().getAppliance() != null ? a.getAsRequest().getAppliance().getBrand() : "";
+        String model = a.getAsRequest().getAppliance() != null ? a.getAsRequest().getAppliance().getModelName() : "";
+
+        return EngineerSettlementSummaryResponse.PerformanceItem.builder()
+                .requestId(reqId)
+                .workDate(workDate)
+                .customerName(customerName)
+                .productName((applianceBrand + " " + model).trim())
+                .brand(applianceBrand)
+                .grossAmount(a.getAsRequest().getWorkReport() != null ? a.getAsRequest().getWorkReport().getFinalAmount() : 0)
+                .diagnosisResult(a.getAsRequest().getWorkReport() != null && a.getAsRequest().getWorkReport().getDiagnosisResult() != null ? a.getAsRequest().getWorkReport().getDiagnosisResult().name() : "NORMAL")
+                .rating(a.getAsRequest().getReview() != null && a.getAsRequest().getReview().getRating() != null ? a.getAsRequest().getReview().getRating() : 0.0)
                 .build();
     }
 }
