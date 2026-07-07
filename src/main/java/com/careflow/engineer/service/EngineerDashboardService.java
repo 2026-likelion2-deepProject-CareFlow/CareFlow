@@ -197,7 +197,12 @@ public class EngineerDashboardService {
                 }
             }
         }
-        double customerSatisfaction = reviewCount > 0 ? ((double) goodReviews / reviewCount) * 100 : 0.0;
+        // 고객 만족도(4점 이상 리뷰 비율, %) — 정수로 반올림해 표기.
+        // 비율 지표라 소수점(예: 66.6666...%)은 가짜 정밀도라서 정수 %로 통일한다.
+        // (이 값은 실적/정산 카드·기사 대시보드·CSV 리포트가 공통으로 사용)
+        double customerSatisfaction = reviewCount > 0
+                ? Math.round((double) goodReviews / reviewCount * 100)
+                : 0.0;
 
         // 3-1. 일별 트렌드
         Map<String, Long> dailyMap = completedAssignments.stream()
