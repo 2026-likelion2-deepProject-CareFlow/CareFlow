@@ -73,6 +73,62 @@ public class EngineerScheduleService {
         return ScheduleResponse.of(savedSchedule);
     }
 
+    /**
+     * 근무표 수정 — workDate 기준 upsert (원자적).
+     * - 해당 날짜 근무표가 없으면 새로 생성(create 와 동일)
+     * - 있으면 기존 시간 슬롯을 전부 교체(clear 후 재등록), 상태는 AVAILABLE 유지
+     * - BOOKED(이미 A/S 배정) 날짜는 수정 불가
+     * (휴무로 되돌리는 것은 기존 DELETE 엔드포인트 사용)
+     */
+    @Transactional
+    public ScheduleResponse upsertSchedule(Long userId, ScheduleRequest request) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new IllegalArgumentException("유저 정보가 존재하지 않습니다."));
+
+        if (user.getRole() != Role.ENGINEER) {
+            throw new IllegalArgumentException("기사 권한만 수정 가능합니다.");
+        }
+
+        EngineerProfile profile = engineerProfileRepository.findByUser_Id(userId)
+                .orElseThrow(() -> new IllegalArgumentException("프로필 정보가 존재하지 않습니다."));
+
+        if (!profile.isCompleted()) {
+            throw new IllegalArgumentException("전문 분야 카테고리 등 프로필 필수 정보를 먼저 완성해주세요.");
+        }
+
+        List<ParsedSlot> parsedSlots = validAndParseTimeSlots(request.getTimeSlots());
+
+        EngineerSchedule schedule = engineerScheduleRepository
+                .findByUser_IdAndWorkDate(userId, request.getWorkDate())
+                .orElse(null);
+
+        // 없으면 신규 생성
+        if (schedule == null) {
+            EngineerSchedule newSchedule = EngineerSchedule.builder()
+                    .user(user)
+                    .workDate(request.getWorkDate())
+                    .status(ScheduleStatus.AVAILABLE)
+                    .build();
+            for (ParsedSlot slot : parsedSlots) {
+                newSchedule.addTimeSlot(EngineerScheduleSlot.builder()
+                        .startTime(slot.start()).endTime(slot.end()).build());
+            }
+            return ScheduleResponse.of(engineerScheduleRepository.save(newSchedule));
+        }
+
+        // 있으면 교체 — 단, 이미 배정(BOOKED)된 근무표는 수정 불가
+        if (schedule.getStatus() == ScheduleStatus.BOOKED) {
+            throw new IllegalStateException("이미 A/S가 배정된 근무표는 수정할 수 없습니다. 대행사에 문의해주세요.");
+        }
+        schedule.clearTimeSlots();
+        for (ParsedSlot slot : parsedSlots) {
+            schedule.addTimeSlot(EngineerScheduleSlot.builder()
+                    .startTime(slot.start()).endTime(slot.end()).build());
+        }
+        schedule.changeScheduleStatus(ScheduleStatus.AVAILABLE);
+        return ScheduleResponse.of(schedule); // 더티 체킹으로 UPDATE
+    }
+
     private List<ParsedSlot> validAndParseTimeSlots(List<ScheduleRequest.TimeSlotDto> timeSlots) {
         if (timeSlots == null || timeSlots.isEmpty()) {
             throw new IllegalArgumentException("최소 1개 이상의 근무 가능 시간을 입력해주세요.");

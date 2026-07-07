@@ -41,6 +41,15 @@ public class EngineerScheduleController {
         return ResponseEntity.ok(responses);
     }
 
+    @PutMapping   // 근무표 수정 (workDate 기준 upsert — 슬롯 교체 또는 신규 생성)
+    public ResponseEntity<ScheduleResponse> upsertSchedule(
+            @AuthenticationPrincipal CustomUserDetails userDetails,
+            @RequestBody @Valid ScheduleRequest request) {
+
+        ScheduleResponse response = scheduleService.upsertSchedule(userDetails.getUserId(), request);
+        return ResponseEntity.ok(response);
+    }
+
     @DeleteMapping("/{scheduleId}")
     public ResponseEntity<String> deleteSchedule(   // 스케줄 삭제 및 OFF 상태 처리
             @AuthenticationPrincipal CustomUserDetails userDetails,
