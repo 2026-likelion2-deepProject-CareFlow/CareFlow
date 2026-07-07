@@ -195,6 +195,18 @@ class AgencyNotificationControllerIntegrationTest {
         }
 
         @Test
+        @DisplayName("성공: 로그인한 본인 계정으로 발송된 알림(예: 로그인 알림)도 목록에 포함된다")
+        void 본인계정알림_목록에포함() throws Exception {
+            saveNotification(agencyManager, false);
+
+            mockMvc.perform(get("/api/agency/notifications")
+                            .header("Authorization", "Bearer " + agencyTokenWithAgencyId))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.content.length()").value(1))
+                    .andExpect(jsonPath("$.stats.totalCount").value(1));
+        }
+
+        @Test
         @DisplayName("성공: unreadCount는 is_read=false 건수만 DB 값과 일치한다")
         void unreadCount_DB값과일치() throws Exception {
             saveNotification(engineer, false);
@@ -381,6 +393,19 @@ class AgencyNotificationControllerIntegrationTest {
         void 소속고객알림_읽음처리_204() throws Exception {
             linkCustomerToAgency(customer, agency);
             Notification n = saveNotification(customer, false);
+
+            mockMvc.perform(patch("/api/agency/notifications/" + n.getId() + "/read")
+                            .header("Authorization", "Bearer " + agencyTokenWithAgencyId))
+                    .andExpect(status().isNoContent());
+
+            Notification updated = notificationRepository.findById(n.getId()).orElseThrow();
+            assertThat(updated.isRead()).isTrue();
+        }
+
+        @Test
+        @DisplayName("성공: 본인 계정 알림(예: 로그인 알림) 읽음 처리 → 204, DB에 is_read=true 반영")
+        void 본인계정알림_읽음처리_204() throws Exception {
+            Notification n = saveNotification(agencyManager, false);
 
             mockMvc.perform(patch("/api/agency/notifications/" + n.getId() + "/read")
                             .header("Authorization", "Bearer " + agencyTokenWithAgencyId))

@@ -47,8 +47,8 @@ public class AgencyNotificationService {
 
         Long agencyId = userDetails.getAgencyId();
 
-        // 알림 수신 대상 user_id 범위 산정 — 대행사 소속 수리기사 + 그 대행사로부터 A/S를 받은 고객
-        List<Long> recipientIds = resolveRecipientIds(agencyId);
+        // 알림 수신 대상 user_id 범위 산정 — 대행사 소속 수리기사 + 그 대행사로부터 A/S를 받은 고객 + 로그인한 본인 계정
+        List<Long> recipientIds = resolveRecipientIds(agencyId, userDetails.getUserId());
 
         if (recipientIds.isEmpty()) {
             return new AgencyNotificationResponse(
@@ -99,8 +99,8 @@ public class AgencyNotificationService {
         Notification notification = notificationRepository.findById(notificationId)
                 .orElseThrow(() -> new NoSuchElementException("존재하지 않는 알림입니다."));
 
-        // 소속 검증 — 이 대행사의 알림 수신 대상 범위(소속 기사 + 그 기사에게 A/S를 받은 고객)에 속해야 함
-        List<Long> recipientIds = resolveRecipientIds(userDetails.getAgencyId());
+        // 소속 검증 — 이 대행사의 알림 수신 대상 범위(소속 기사 + 그 기사에게 A/S를 받은 고객 + 본인 계정)에 속해야 함
+        List<Long> recipientIds = resolveRecipientIds(userDetails.getAgencyId(), userDetails.getUserId());
         if (!recipientIds.contains(notification.getUser().getId())) {
             throw new IllegalAccessException("본인 대행사 소속 알림만 읽음 처리할 수 있습니다.");
         }
@@ -122,7 +122,7 @@ public class AgencyNotificationService {
             throw new IllegalAccessException("대행사 관리자만 접근할 수 있습니다.");
         }
 
-        List<Long> recipientIds = resolveRecipientIds(userDetails.getAgencyId());
+        List<Long> recipientIds = resolveRecipientIds(userDetails.getAgencyId(), userDetails.getUserId());
         if (recipientIds.isEmpty()) {
             return;
         }
@@ -130,11 +130,13 @@ public class AgencyNotificationService {
         notificationRepository.markAllAsReadByUserIds(recipientIds);
     }
 
-    // 알림 수신 대상 user_id 범위 산정 — 대행사 소속 수리기사 + 그 대행사로부터 A/S를 받은 고객
-    private List<Long> resolveRecipientIds(Long agencyId) {
+    // 알림 수신 대상 user_id 범위 산정 — 대행사 소속 수리기사 + 그 대행사로부터 A/S를 받은 고객 + 로그인한 본인 계정
+    // (본인 계정 포함 — 로그인 알림 등 대행사 관리자 본인에게 직접 발송되는 알림도 이 알림센터에서 조회되어야 함)
+    private List<Long> resolveRecipientIds(Long agencyId, Long userId) {
         List<Long> recipientIds = new ArrayList<>();
         recipientIds.addAll(userRepository.findIdsByAgency_IdAndRole(agencyId, Role.ENGINEER));
         recipientIds.addAll(asRequestRepository.findDistinctCustomerIdsByAgencyId(agencyId));
+        recipientIds.add(userId);
         return recipientIds;
     }
 }

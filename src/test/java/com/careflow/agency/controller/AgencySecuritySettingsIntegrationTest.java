@@ -93,6 +93,14 @@ class AgencySecuritySettingsIntegrationTest {
                 .andExpect(status().isOk());
 
         assertThat(notificationRepository.count()).isEqualTo(1);
+
+        // 저장된 알림은 본인(로그인한 대행사 관리자 계정)의 알림센터 목록에서도 실제로 조회되어야 한다
+        mockMvc.perform(get("/api/agency/notifications")
+                        .header("Authorization", "Bearer " + token))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.content.length()").value(1))
+                .andExpect(jsonPath("$.content[0].title").value("새 로그인 감지"))
+                .andExpect(jsonPath("$.stats.totalCount").value(1));
     }
 
     @Test

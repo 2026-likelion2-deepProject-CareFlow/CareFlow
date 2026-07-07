@@ -46,6 +46,7 @@ class AgencyNotificationServiceTest {
     private static final Long AGENCY_ID = 10L;
     private static final Long ENGINEER_ID = 20L;
     private static final Long CUSTOMER_ID = 30L;
+    private static final Long AGENCY_USER_ID = 40L; // 로그인한 대행사 관리자 본인의 user_id
 
     private CustomUserDetails agencyUser;
     private CustomUserDetails customerUser;
@@ -59,6 +60,7 @@ class AgencyNotificationServiceTest {
 
         given(agencyUser.getRole()).willReturn("AGENCY");
         given(agencyUser.getAgencyId()).willReturn(AGENCY_ID);
+        given(agencyUser.getUserId()).willReturn(AGENCY_USER_ID);
         given(customerUser.getRole()).willReturn("CUSTOMER");
     }
 
@@ -88,8 +90,8 @@ class AgencyNotificationServiceTest {
     class Success {
 
         @Test
-        @DisplayName("기사·고객 알림 모두 합쳐서 반환")
-        void 정상조회_기사와고객알림_합쳐서반환() throws Exception {
+        @DisplayName("기사·고객·본인 알림 모두 합쳐서 반환")
+        void 정상조회_기사와고객과본인알림_합쳐서반환() throws Exception {
             given(userRepository.findIdsByAgency_IdAndRole(AGENCY_ID, Role.ENGINEER))
                     .willReturn(List.of(ENGINEER_ID));
             given(asRequestRepository.findDistinctCustomerIdsByAgencyId(AGENCY_ID))
@@ -99,7 +101,7 @@ class AgencyNotificationServiceTest {
             Notification n2 = buildNotification("LMS", true, LocalDateTime.now().minusDays(1));
 
             given(notificationRepository.findByUser_IdInAndTypeOrderByCreatedAtDesc(
-                    List.of(ENGINEER_ID, CUSTOMER_ID), null, pageable))
+                    List.of(ENGINEER_ID, CUSTOMER_ID, AGENCY_USER_ID), null, pageable))
                     .willReturn(new PageImpl<>(List.of(n1, n2), pageable, 2));
             given(notificationRepository.countByUser_IdIn(anyList())).willReturn(2L);
             given(notificationRepository.countByUser_IdInAndIsReadFalse(anyList())).willReturn(1L);
@@ -113,20 +115,26 @@ class AgencyNotificationServiceTest {
         }
 
         @Test
-        @DisplayName("수신 대상 없음 → repository 호출 없이 빈 결과 반환")
-        void 수신대상없음_빈결과반환() throws Exception {
+        @DisplayName("소속 기사·고객이 없어도 본인 계정(로그인 알림 등) 알림은 조회된다")
+        void 소속기사고객없음_본인계정알림은_정상조회() throws Exception {
             given(userRepository.findIdsByAgency_IdAndRole(AGENCY_ID, Role.ENGINEER))
                     .willReturn(List.of());
             given(asRequestRepository.findDistinctCustomerIdsByAgencyId(AGENCY_ID))
                     .willReturn(List.of());
 
+            Notification loginAlert = buildNotification("AS_STATUS", false, LocalDateTime.now());
+
+            given(notificationRepository.findByUser_IdInAndTypeOrderByCreatedAtDesc(
+                    List.of(AGENCY_USER_ID), null, pageable))
+                    .willReturn(new PageImpl<>(List.of(loginAlert), pageable, 1));
+            given(notificationRepository.countByUser_IdIn(List.of(AGENCY_USER_ID))).willReturn(1L);
+            given(notificationRepository.countByUser_IdInAndIsReadFalse(List.of(AGENCY_USER_ID))).willReturn(1L);
+            given(notificationRepository.countByUser_IdInAndCreatedAtBetween(eq(List.of(AGENCY_USER_ID)), any(), any())).willReturn(1L);
+
             AgencyNotificationResponse response = agencyNotificationService.getNotifications(agencyUser, pageable, null);
 
-            assertThat(response.content()).isEmpty();
-            assertThat(response.stats().totalCount()).isZero();
-            assertThat(response.stats().unreadCount()).isZero();
-            assertThat(response.stats().todayCount()).isZero();
-            verifyNoInteractions(notificationRepository);
+            assertThat(response.content()).hasSize(1);
+            assertThat(response.stats().totalCount()).isEqualTo(1L);
         }
 
         @Test
@@ -140,7 +148,7 @@ class AgencyNotificationServiceTest {
             given(notificationRepository.findByUser_IdInAndTypeOrderByCreatedAtDesc(anyList(), isNull(), any()))
                     .willReturn(new PageImpl<>(List.of(), pageable, 0));
             given(notificationRepository.countByUser_IdIn(anyList())).willReturn(0L);
-            given(notificationRepository.countByUser_IdInAndIsReadFalse(List.of(ENGINEER_ID))).willReturn(2L);
+            given(notificationRepository.countByUser_IdInAndIsReadFalse(List.of(ENGINEER_ID, AGENCY_USER_ID))).willReturn(2L);
             given(notificationRepository.countByUser_IdInAndCreatedAtBetween(anyList(), any(), any())).willReturn(0L);
 
             AgencyNotificationResponse response = agencyNotificationService.getNotifications(agencyUser, pageable, null);
@@ -200,7 +208,7 @@ class AgencyNotificationServiceTest {
 
             Notification lmsNotification = buildNotification("LMS", false, LocalDateTime.now());
             given(notificationRepository.findByUser_IdInAndTypeOrderByCreatedAtDesc(
-                    List.of(ENGINEER_ID), "LMS", pageable))
+                    List.of(ENGINEER_ID, AGENCY_USER_ID), "LMS", pageable))
                     .willReturn(new PageImpl<>(List.of(lmsNotification), pageable, 1));
             given(notificationRepository.countByUser_IdIn(anyList())).willReturn(5L);
             given(notificationRepository.countByUser_IdInAndIsReadFalse(anyList())).willReturn(0L);
@@ -210,7 +218,7 @@ class AgencyNotificationServiceTest {
 
             assertThat(response.content()).hasSize(1);
             assertThat(response.content().get(0).type()).isEqualTo("LMS");
-            verify(notificationRepository).findByUser_IdInAndTypeOrderByCreatedAtDesc(List.of(ENGINEER_ID), "LMS", pageable);
+            verify(notificationRepository).findByUser_IdInAndTypeOrderByCreatedAtDesc(List.of(ENGINEER_ID, AGENCY_USER_ID), "LMS", pageable);
         }
 
         @Test
@@ -229,7 +237,7 @@ class AgencyNotificationServiceTest {
 
             agencyNotificationService.getNotifications(agencyUser, pageable, null);
 
-            verify(notificationRepository).findByUser_IdInAndTypeOrderByCreatedAtDesc(List.of(ENGINEER_ID), null, pageable);
+            verify(notificationRepository).findByUser_IdInAndTypeOrderByCreatedAtDesc(List.of(ENGINEER_ID, AGENCY_USER_ID), null, pageable);
         }
 
         @Test
@@ -242,7 +250,7 @@ class AgencyNotificationServiceTest {
 
             given(notificationRepository.findByUser_IdInAndTypeOrderByCreatedAtDesc(anyList(), eq("LMS"), any()))
                     .willReturn(new PageImpl<>(List.of(), pageable, 1));
-            given(notificationRepository.countByUser_IdIn(List.of(ENGINEER_ID))).willReturn(5L);
+            given(notificationRepository.countByUser_IdIn(List.of(ENGINEER_ID, AGENCY_USER_ID))).willReturn(5L);
             given(notificationRepository.countByUser_IdInAndIsReadFalse(anyList())).willReturn(0L);
             given(notificationRepository.countByUser_IdInAndCreatedAtBetween(anyList(), any(), any())).willReturn(0L);
 
@@ -312,6 +320,22 @@ class AgencyNotificationServiceTest {
         }
 
         @Test
+        @DisplayName("성공: 본인 계정 알림(예: 로그인 알림) 읽음 처리")
+        void 정상_본인계정알림_읽음처리() throws Exception {
+            given(userRepository.findIdsByAgency_IdAndRole(AGENCY_ID, Role.ENGINEER))
+                    .willReturn(List.of());
+            given(asRequestRepository.findDistinctCustomerIdsByAgencyId(AGENCY_ID))
+                    .willReturn(List.of());
+
+            Notification notification = buildNotificationOf(AGENCY_USER_ID);
+            given(notificationRepository.findById(1L)).willReturn(java.util.Optional.of(notification));
+
+            agencyNotificationService.markAsRead(agencyUser, 1L);
+
+            verify(notification).markAsRead();
+        }
+
+        @Test
         @DisplayName("성공: 이미 읽음 상태여도 재호출 시 정상 처리(멱등)")
         void 이미읽음상태_재호출해도_정상처리() throws Exception {
             given(userRepository.findIdsByAgency_IdAndRole(AGENCY_ID, Role.ENGINEER))
@@ -367,31 +391,33 @@ class AgencyNotificationServiceTest {
     class MarkAllAsRead {
 
         @Test
-        @DisplayName("성공: 수신 대상 전체를 벌크 읽음 처리한다")
+        @DisplayName("성공: 수신 대상 전체(기사·고객·본인)를 벌크 읽음 처리한다")
         void 정상_수신대상전체_벌크읽음처리() throws Exception {
             given(userRepository.findIdsByAgency_IdAndRole(AGENCY_ID, Role.ENGINEER))
                     .willReturn(List.of(ENGINEER_ID));
             given(asRequestRepository.findDistinctCustomerIdsByAgencyId(AGENCY_ID))
                     .willReturn(List.of(CUSTOMER_ID));
-            given(notificationRepository.markAllAsReadByUserIds(List.of(ENGINEER_ID, CUSTOMER_ID)))
+            given(notificationRepository.markAllAsReadByUserIds(List.of(ENGINEER_ID, CUSTOMER_ID, AGENCY_USER_ID)))
                     .willReturn(3);
 
             agencyNotificationService.markAllAsRead(agencyUser);
 
-            verify(notificationRepository).markAllAsReadByUserIds(List.of(ENGINEER_ID, CUSTOMER_ID));
+            verify(notificationRepository).markAllAsReadByUserIds(List.of(ENGINEER_ID, CUSTOMER_ID, AGENCY_USER_ID));
         }
 
         @Test
-        @DisplayName("성공: 수신 대상이 없으면 쿼리 호출 없이 정상 종료한다")
-        void 수신대상없음_쿼리호출없이_정상종료() throws Exception {
+        @DisplayName("성공: 소속 기사·고객이 없어도 본인 계정 기준으로 벌크 읽음 처리를 호출한다")
+        void 소속기사고객없음_본인계정기준_벌크읽음처리() throws Exception {
             given(userRepository.findIdsByAgency_IdAndRole(AGENCY_ID, Role.ENGINEER))
                     .willReturn(List.of());
             given(asRequestRepository.findDistinctCustomerIdsByAgencyId(AGENCY_ID))
                     .willReturn(List.of());
+            given(notificationRepository.markAllAsReadByUserIds(List.of(AGENCY_USER_ID)))
+                    .willReturn(1);
 
             assertThatCode(() -> agencyNotificationService.markAllAsRead(agencyUser))
                     .doesNotThrowAnyException();
-            verify(notificationRepository, never()).markAllAsReadByUserIds(anyList());
+            verify(notificationRepository).markAllAsReadByUserIds(List.of(AGENCY_USER_ID));
         }
 
         @Test

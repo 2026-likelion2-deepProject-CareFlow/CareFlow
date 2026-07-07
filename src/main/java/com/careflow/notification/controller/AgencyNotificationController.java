@@ -25,7 +25,8 @@ public class AgencyNotificationController {
     /**
      * [GET] /api/agency/notifications
      * 현재 로그인한 대행사 관리자 소속 알림센터 목록 조회.
-     * - 대행사 소속 수리기사, 또는 그 수리기사에게 A/S를 받은 고객에게 발송된 알림을 페이징 조회한다.
+     * - 대행사 소속 수리기사, 그 수리기사에게 A/S를 받은 고객, 그리고 로그인한 본인 계정에게
+     *   발송된 알림(예: 로그인 알림)을 페이징 조회한다.
      * - type 파라미터(AS_STATUS/CONSUMABLE/WARRANTY/LMS)로 목록만 필터링, stats는 항상 전체 범위 기준
      * - role != AGENCY → 401 Unauthorized
      * - type 값이 허용된 ENUM이 아니면 → 400 Bad Request
