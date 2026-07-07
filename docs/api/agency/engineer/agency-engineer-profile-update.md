@@ -71,6 +71,7 @@ PATCH /api/agencies/me/engineers/{engineerUserId}/profile
   "totalReviews": 32,
   "expertBrands": ["삼성", "LG"],
   "serviceRegionIds": [101, 102, 103],
+  "serviceRegionNames": ["강남구", "서초구", "송파구"],
   "createdAt": "2025-01-10T09:00:00",
   "updatedAt": "2026-06-26T10:00:00"
 }

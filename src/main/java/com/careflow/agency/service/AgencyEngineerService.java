@@ -122,11 +122,15 @@ public class AgencyEngineerService {
                 .map(EngineerExpertBrand::getBrandName)
                 .toList();
 
-        List<Integer> regionIds = serviceRegionRepository.findByEngineer_Id(engineerUserId).stream()
+        List<EngineerServiceRegion> serviceRegions = serviceRegionRepository.findByEngineer_Id(engineerUserId);
+        List<Integer> regionIds = serviceRegions.stream()
                 .map(r -> r.getRegion().getId())
                 .toList();
+        List<String> regionNames = serviceRegions.stream()
+                .map(r -> r.getRegion().getName())
+                .toList();
 
-        return AgencyEngineerDetailResponse.from(profile, expertBrands, regionIds);
+        return AgencyEngineerDetailResponse.from(profile, expertBrands, regionIds, regionNames);
     }
 
     /**
@@ -195,8 +199,11 @@ public class AgencyEngineerService {
         if (request.getServiceRegionIds() != null) {
             resultRegionIds = saveServiceRegions(engineerUser, request.getServiceRegionIds());
         }
+        List<String> resultRegionNames = regionRepository.findAllById(resultRegionIds).stream()
+                .map(Regions::getName)
+                .toList();
 
-        return AgencyEngineerDetailResponse.from(profile, resultBrands, resultRegionIds);
+        return AgencyEngineerDetailResponse.from(profile, resultBrands, resultRegionIds, resultRegionNames);
     }
 
     // 연차별 기술 등급 자동 산정 (1~5년=초급, 6~10년=중급, 11년↑=고급) — EngineerProfileService.calculateSkillLevel과 동일 규칙

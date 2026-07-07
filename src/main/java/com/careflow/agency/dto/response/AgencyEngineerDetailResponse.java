@@ -31,13 +31,15 @@ public class AgencyEngineerDetailResponse {
     private boolean isLmsCompleted;
     private List<String> expertBrands;
     private List<Integer> serviceRegionIds;
+    private List<String> serviceRegionNames;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 
     public static AgencyEngineerDetailResponse from(
             EngineerProfile profile,
             List<String> expertBrands,
-            List<Integer> serviceRegionIds) {
+            List<Integer> serviceRegionIds,
+            List<String> serviceRegionNames) {
 
         return AgencyEngineerDetailResponse.builder()
                 .engineerUserId(profile.getUser().getId())
@@ -55,6 +57,7 @@ public class AgencyEngineerDetailResponse {
                 .isLmsCompleted(profile.isLmsCompleted())
                 .expertBrands(expertBrands)
                 .serviceRegionIds(serviceRegionIds)
+                .serviceRegionNames(serviceRegionNames)
                 .createdAt(profile.getCreatedAt())
                 .updatedAt(profile.getUpdatedAt())
                 .build();

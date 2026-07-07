@@ -60,6 +60,7 @@ Authorization: Bearer {access_token}
   "isLmsCompleted": true,
   "expertBrands": ["삼성", "LG"],
   "serviceRegionIds": [101, 102],
+  "serviceRegionNames": ["강남구", "서초구"],
   "createdAt": "2025-01-10T09:00:00",
   "updatedAt": "2026-06-01T14:30:00"
 }
@@ -83,7 +84,8 @@ Authorization: Bearer {access_token}
 | `totalReviews` | Integer | 총 리뷰 수 |
 | `isLmsCompleted` | Boolean | 당해 연도 LMS 이수 여부 |
 | `expertBrands` | List\<String\> | 전문 브랜드 목록 |
-| `serviceRegionIds` | List\<Integer\> | 활동 지역 ID 목록 |
+| `serviceRegionIds` | List\<Integer\> | 활동 지역 ID 목록 (수정 폼 등 ID 참조용) |
+| `serviceRegionNames` | List\<String\> | 활동 지역 이름 목록 (화면 표시용) |
 | `createdAt` | LocalDateTime | 프로필 생성일시 |
 | `updatedAt` | LocalDateTime | 프로필 최종 수정일시 |
 
