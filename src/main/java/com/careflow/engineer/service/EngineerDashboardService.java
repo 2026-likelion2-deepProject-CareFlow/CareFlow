@@ -105,9 +105,14 @@ public class EngineerDashboardService {
                 expectedCount++;
                 if ("ACCEPTED".equals(assignStatus) && !currentIsActive) {
                     List<AsStatusLog> logs = asStatusLogRepository.findByAsRequest_IdOrderByCreatedAtAsc(a.getAsRequest().getId());
-                    String latest = (logs != null && !logs.isEmpty())
-                            ? logs.get(logs.size() - 1).getToStatus()
-                            : "WAITING";
+                    // created_at 초 단위 동점 시 get(size-1) 이 비결정적이므로 log_id 로 tie-break (표시·검증과 동일 기준)
+                    String latest = (logs == null) ? "WAITING"
+                            : logs.stream()
+                                  .max(java.util.Comparator
+                                          .comparing(AsStatusLog::getCreatedAt, java.util.Comparator.nullsFirst(java.util.Comparator.naturalOrder()))
+                                          .thenComparing(AsStatusLog::getId, java.util.Comparator.nullsFirst(java.util.Comparator.naturalOrder())))
+                                  .map(AsStatusLog::getToStatus)
+                                  .orElse("WAITING");
                     boolean active = !"WAITING".equals(latest) && !"COMPLETED".equals(latest); // 출발/도착/작업중
                     if (currentRequestId == null || active) {
                         currentRequestId = a.getAsRequest().getId();

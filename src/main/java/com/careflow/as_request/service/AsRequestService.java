@@ -396,7 +396,16 @@ public class AsRequestService {
         // 세부 진행상태(ENGINEER_DEPARTED/ENGINEER_ARRIVED)는 as_requests.status ENUM 에 존재하지 않으므로,
         // 순서 검증은 반드시 로그(to_status)를 유일한 기준으로 삼는다.
         List<AsStatusLog> logs = asStatusLogRepository.findByAsRequest_IdOrderByCreatedAtAsc(requestId);
-        String lastLogStatus = logs.isEmpty() ? "WAITING" : logs.get(logs.size() - 1).getToStatus();
+        // created_at 컬럼이 DATETIME(초 단위)이라 같은 1초 안에 생성된 로그들은 created_at 이 동일해진다.
+        // 이 경우 "리스트의 마지막(get(size-1))"은 DB 정렬이 비결정적이라 최신이 아닐 수 있으므로,
+        // 단조 증가하는 log_id 를 동점 기준(tie-break)으로 삼아 "가장 최신 로그"를 결정적으로 선택한다.
+        // (표시용 EngineerAssignmentService 의 최신 상태 계산과 동일한 기준을 사용해야 두 화면·검증이 일치)
+        String lastLogStatus = logs.stream()
+                .max(java.util.Comparator
+                        .comparing(AsStatusLog::getCreatedAt, java.util.Comparator.nullsFirst(java.util.Comparator.naturalOrder()))
+                        .thenComparing(AsStatusLog::getId, java.util.Comparator.nullsFirst(java.util.Comparator.naturalOrder())))
+                .map(AsStatusLog::getToStatus)
+                .orElse("WAITING");
 
         // 2. 세부 진행상태 순서 검증 (로그 기준)
         validateProgressOrder(lastLogStatus, newStatus);
