@@ -7,7 +7,6 @@ import com.careflow.agency.dto.request.SecurityToggleRequest;
 import com.careflow.agency.dto.response.AgencyFeeRateResponse;
 import com.careflow.agency.dto.response.AgencyProfileResponse;
 import com.careflow.agency.dto.response.AgencySecuritySettingsResponse;
-import com.careflow.agency.dto.response.TrustedDeviceResponse;
 import com.careflow.agency.service.AgenciesService;
 import com.careflow.as_request.service.AgencyAsRequestService;
 import com.careflow.as_status_log.service.AgencyAsStatusLogService;
@@ -499,13 +498,12 @@ class AgencySettingsControllerTest {
         @DisplayName("GET /api/agency/me/security — 성공 200 OK")
         void getSecuritySettings_success_200() throws Exception {
             given(agenciesService.getSecuritySettings(1L))
-                    .willReturn(new AgencySecuritySettingsResponse(true, false, 2L));
+                    .willReturn(new AgencySecuritySettingsResponse(true, false));
 
             mockMvc.perform(get("/api/agency/me/security").with(user(agencyUser())))
                     .andExpect(status().isOk())
                     .andExpect(jsonPath("$.twoFactorEnabled").value(true))
-                    .andExpect(jsonPath("$.loginAlertEnabled").value(false))
-                    .andExpect(jsonPath("$.trustedDeviceCount").value(2));
+                    .andExpect(jsonPath("$.loginAlertEnabled").value(false));
         }
 
         @Test
@@ -547,61 +545,6 @@ class AgencySettingsControllerTest {
                             .contentType(MediaType.APPLICATION_JSON)
                             .content(objectMapper.writeValueAsString(new SecurityToggleRequest(true))))
                     .andExpect(status().isNoContent());
-        }
-    }
-
-    // ─────────────────────────────────────────────
-    //  GET/DELETE /api/agency/me/trusted-devices
-    // ─────────────────────────────────────────────
-
-    @Nested
-    @DisplayName("신뢰 기기 목록 조회/삭제")
-    class TrustedDevices {
-
-        @Test
-        @DisplayName("GET /api/agency/me/trusted-devices — 성공 200 OK")
-        void getTrustedDevices_success_200() throws Exception {
-            given(agenciesService.getTrustedDevices(1L)).willReturn(java.util.List.of(
-                    new TrustedDeviceResponse(1L, "Mozilla/5.0 Chrome/126",
-                            java.time.LocalDateTime.of(2026, 7, 6, 10, 0),
-                            java.time.LocalDateTime.of(2026, 6, 1, 9, 0))));
-
-            mockMvc.perform(get("/api/agency/me/trusted-devices").with(user(agencyUser())))
-                    .andExpect(status().isOk())
-                    .andExpect(jsonPath("$[0].deviceId").value(1))
-                    .andExpect(jsonPath("$[0].deviceName").value("Mozilla/5.0 Chrome/126"));
-        }
-
-        @Test
-        @DisplayName("DELETE .../trusted-devices/{id} — 성공 204")
-        void deleteTrustedDevice_success_204() throws Exception {
-            willDoNothing().given(agenciesService).deleteTrustedDevice(eq(1L), eq(10L));
-
-            mockMvc.perform(delete("/api/agency/me/trusted-devices/{deviceId}", 10L)
-                            .with(user(agencyUser())))
-                    .andExpect(status().isNoContent());
-        }
-
-        @Test
-        @DisplayName("DELETE .../trusted-devices/{id} — 타인 기기 401")
-        void deleteTrustedDevice_notOwner_401() throws Exception {
-            willThrow(new IllegalAccessException("본인 소유의 기기만 삭제할 수 있습니다."))
-                    .given(agenciesService).deleteTrustedDevice(eq(1L), eq(10L));
-
-            mockMvc.perform(delete("/api/agency/me/trusted-devices/{deviceId}", 10L)
-                            .with(user(agencyUser())))
-                    .andExpect(status().isUnauthorized());
-        }
-
-        @Test
-        @DisplayName("DELETE .../trusted-devices/{id} — 존재하지 않는 기기 404")
-        void deleteTrustedDevice_notFound_404() throws Exception {
-            willThrow(new NoSuchElementException("해당 기기 정보를 찾을 수 없습니다."))
-                    .given(agenciesService).deleteTrustedDevice(eq(1L), eq(999L));
-
-            mockMvc.perform(delete("/api/agency/me/trusted-devices/{deviceId}", 999L)
-                            .with(user(agencyUser())))
-                    .andExpect(status().isNotFound());
         }
     }
 

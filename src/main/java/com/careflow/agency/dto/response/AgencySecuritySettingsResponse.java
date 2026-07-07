@@ -5,7 +5,6 @@ package com.careflow.agency.dto.response;
  */
 public record AgencySecuritySettingsResponse(
         boolean twoFactorEnabled,
-        boolean loginAlertEnabled,
-        long trustedDeviceCount
+        boolean loginAlertEnabled
 ) {
 }

@@ -6,7 +6,6 @@ import com.careflow.agency.dto.request.SecurityToggleRequest;
 import com.careflow.agency.dto.response.AgencyDataImportResponse;
 import com.careflow.agency.dto.response.AgencyProfileResponse;
 import com.careflow.agency.dto.response.AgencySecuritySettingsResponse;
-import com.careflow.agency.dto.response.TrustedDeviceResponse;
 import com.careflow.agency.service.AgenciesService;
 import com.careflow.agency.service.AgencyDataTransferService;
 import com.careflow.as_request.dto.AgencyAsRequestDetailResponse;
@@ -85,7 +84,7 @@ public class AgencyController {
         return ResponseEntity.noContent().build();
     }
 
-    // 로그인 보안 설정 조회 (2단계 인증/로그인 알림 상태 + 신뢰 기기 개수)
+    // 로그인 보안 설정 조회 (2단계 인증/로그인 알림 상태)
     @GetMapping("/me/security")
     public ResponseEntity<AgencySecuritySettingsResponse> getSecuritySettings(
             @AuthenticationPrincipal CustomUserDetails userDetails) {
@@ -110,24 +109,6 @@ public class AgencyController {
             @Valid @RequestBody SecurityToggleRequest request) {
 
         agenciesService.toggleLoginAlert(userDetails.getUserId(), request.enabled());
-        return ResponseEntity.noContent().build();
-    }
-
-    // 신뢰 기기 목록 조회
-    @GetMapping("/me/trusted-devices")
-    public ResponseEntity<List<TrustedDeviceResponse>> getTrustedDevices(
-            @AuthenticationPrincipal CustomUserDetails userDetails) {
-
-        return ResponseEntity.ok(agenciesService.getTrustedDevices(userDetails.getUserId()));
-    }
-
-    // 신뢰 기기 삭제(신뢰 해제)
-    @DeleteMapping("/me/trusted-devices/{deviceId}")
-    public ResponseEntity<Void> deleteTrustedDevice(
-            @PathVariable Long deviceId,
-            @AuthenticationPrincipal CustomUserDetails userDetails) throws IllegalAccessException {
-
-        agenciesService.deleteTrustedDevice(userDetails.getUserId(), deviceId);
         return ResponseEntity.noContent().build();
     }
 

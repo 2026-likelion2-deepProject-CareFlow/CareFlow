@@ -1,6 +1,44 @@
 -- ============================================================
--- CareFlow DDL v14
--- DB명세서 v28 기준 / 모든 FK를 CREATE TABLE 내부 CONSTRAINT로 정의
+-- CareFlow DDL v15
+-- DB명세서 v29 기준 / 모든 FK를 CREATE TABLE 내부 CONSTRAINT로 정의
+--
+-- ※ v15 변경 사항 (DB명세서 v29 반영 — 로그인 보안 기능: 로그인 알림 / 2단계 인증 스텁)
+--
+--   [users 컬럼 2개 추가]
+--   - `two_factor_enabled` TINYINT(1) NOT NULL DEFAULT 0
+--     · 2단계 인증(OTP 등) 사용 여부 플래그. boolean(0/1), ENUM 아님.
+--     · ⚠ 현재 스코프는 "설정 저장"까지만 구현됨 — 실제 OTP 발급/검증 등 2차 인증 절차
+--       (SMS/OTP 발급 인프라, 로그인 시 2차 인증 challenge 등)와는 아직 연결되어 있지 않음.
+--       즉 이 플래그를 true로 켜도 로그인 흐름 자체는 아직 변하지 않는다 (별도 인프라 구축 후
+--       후속 버전에서 실제 검증 로직과 연결 예정, 이번 스코프 밖).
+--     · 기존 계정은 전부 DEFAULT 0으로 채워지므로 하위 호환 영향 없음.
+--   - `login_alert_enabled` TINYINT(1) NOT NULL DEFAULT 0
+--     · 로그인 알림 사용 여부 플래그. boolean(0/1), ENUM 아님. 실제로 동작함(아래 워크플로우 참조).
+--     · 기존 계정은 전부 DEFAULT 0으로 채워지므로 하위 호환 영향 없음.
+--
+--   [notifications.type ENUM에 'SECURITY' 추가 — 설계 보완]
+--   - ⚠ 아키텍처 검토 시 발견된 갭: login_alert_enabled 워크플로우는 "새 로그인 감지 -
+--     본인이 아니라면 즉시 비밀번호를 변경해주세요" 알림을 notifications 테이블에 저장해야
+--     하는데, 기존 ENUM('AS_STATUS','CONSUMABLE','WARRANTY','LMS')에는 이 알림을 표현할
+--     유형이 없었음. 로그인/보안 관련 알림을 폭넓게 담을 수 있도록 'SECURITY' 유형을 신규
+--     추가함 (추후 2단계 인증 관련 알림 등도 이 유형으로 확장 가능하도록 이름을 넓게 설정).
+--   - 발송 채널(channel)은 기존 정책과 동일하게 기본값 'SSE' 사용 (실시간 알림 우선).
+--
+--   [로그인 알림 동작 흐름 요약]
+--   1. 설정 페이지 토글 ON → PATCH /api/agency/me/security/login-alert → users.login_alert_enabled 저장
+--   2. 이후 POST /api/auth/login 로그인 성공 시, 토큰 발급 직후 AuthService.sendLoginAlertIfEnabled() 호출
+--      → login_alert_enabled=true이면 SECURITY 알림 즉시 저장
+--   3. 이 부가 처리(알림 저장)는 try-catch로 감싸져 있어 실패해도 로그인 자체(토큰 발급)에는
+--      영향 없음 — 로그만 남기고 넘어감
+--   - ⚠ PM 검토 참고: 위 API 경로(/api/agency/me/security/...)는 현재 대행사 계정 화면
+--     기준으로 구현되어 있으나, users 컬럼 자체는 역할 구분 없이 전 계정 공통이므로
+--     추후 CUSTOMER/ENGINEER/ADMIN 화면에도 동일 기능을 노출할지는 별도 논의 필요
+--     (이번 스코프에서는 DB 구조 및 대행사향 흐름만 확정, DDL 구조는 역할 무관하게 동작함).
+--
+--   [ddl-auto: none 환경 안내]
+--   - 본 파일(CREATE TABLE 구문)은 신규(fresh) 환경 기준 최종 스키마임.
+--   - 이미 구동 중인 로컬 MySQL 환경은 파일 하단 "v15 마이그레이션 스크립트" 섹션의
+--     ALTER TABLE / CREATE TABLE 구문을 직접 실행해야 함 (자동 반영 안 됨).
 --
 -- ※ v14 변경 사항 (DB명세서 v28 반영 — 수수료율 표현 방식 재정정)
 --
@@ -220,6 +258,7 @@ CREATE TABLE `agencies` (
 
 -- ============================================================
 -- 4. users
+-- [v15] two_factor_enabled, login_alert_enabled 컬럼 신규 추가
 -- ============================================================
 CREATE TABLE `users` (
     `user_id`        BIGINT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT '사용자 고유 ID',
@@ -233,11 +272,11 @@ CREATE TABLE `users` (
     `address_detail` VARCHAR(100)    NULL     DEFAULT NULL               COMMENT '상세 주소 (동·호수 등). CUSTOMER·ENGINEER 입력. AGENCY·ADMIN은 NULL.',
     `status`         ENUM('ACTIVE','INACTIVE','SUSPENDED') NOT NULL DEFAULT 'ACTIVE' COMMENT '계정 상태',
     `last_login_at`  DATETIME        NULL     DEFAULT NULL               COMMENT '최근 로그인 일시',
+    `two_factor_enabled`  TINYINT(1) NOT NULL DEFAULT 0                  COMMENT '[v15 신규] 2단계 인증 사용 여부 (0/1). ⚠ 현재는 "설정 저장"까지만 구현 — 실제 OTP 발급/검증 절차와는 미연결 (별도 인프라 필요, 이번 스코프 밖)',
+    `login_alert_enabled` TINYINT(1) NOT NULL DEFAULT 0                  COMMENT '[v15 신규] 로그인 알림 사용 여부 (0/1). true면 로그인 성공마다 SECURITY 알림 발송 (실제 동작함)',
     `created_at`     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT '가입일',
     `updated_at`     DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '수정일',
     `deleted_at`     DATETIME        NULL     DEFAULT NULL               COMMENT '논리 삭제일',
-    `two_factor_enabled`  BOOLEAN   NOT NULL DEFAULT FALSE              COMMENT '2단계 인증 사용 여부',
-    `login_alert_enabled` BOOLEAN   NOT NULL DEFAULT FALSE              COMMENT '로그인 알림 사용 여부',
 
     CONSTRAINT FK_agencies_TO_users
         FOREIGN KEY (`agency_id`) REFERENCES `agencies` (`agency_id`),
@@ -916,11 +955,13 @@ CREATE TABLE `bank_accounts` (
 -- [v13] QUIZ_REMINDER 완전 폐기 — ENUM 값 제거. 과거 v24/v12(v26) 이력은 파일 상단
 -- 헤더 변경이력에서만 참고하고, 이 테이블 정의에는 어떠한 흔적도 남기지 않는다.
 -- ⚠ 향후 버전에서 QUIZ_REMINDER를 다시 추가하지 말 것 (기능 자체가 폐기됨).
+-- [v15] type ENUM에 'SECURITY' 신규 추가 — 로그인 알림(신규 로그인 감지) 등 보안 알림
+--   (login_alert_enabled=true 계정의 로그인 성공 시 AuthService.sendLoginAlertIfEnabled()가 저장)
 -- ============================================================
 CREATE TABLE `notifications` (
     `notification_id` BIGINT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT '알림 ID',
     `user_id`         BIGINT UNSIGNED NOT NULL                            COMMENT '수신 대상 user_id',
-    `type`            ENUM('AS_STATUS','CONSUMABLE','WARRANTY','LMS') NOT NULL COMMENT '알림 유형',
+    `type`            ENUM('AS_STATUS','CONSUMABLE','WARRANTY','LMS','SECURITY') NOT NULL COMMENT '알림 유형 ([v15] SECURITY 추가 — 로그인 알림 등 보안 알림)',
     `title`           VARCHAR(200)    NOT NULL                            COMMENT '알림 제목',
     `body`            TEXT            NOT NULL                            COMMENT '알림 내용',
     `channel`         ENUM('SSE','PUSH','SMS','KAKAO') NOT NULL DEFAULT 'SSE' COMMENT '발송 채널',
@@ -1066,22 +1107,9 @@ ALTER TABLE `agencies`
     ADD CONSTRAINT FK_users_TO_agencies_approved_by
         FOREIGN KEY (`approved_by`) REFERENCES `users` (`user_id`);
 
--- ============================================================
--- trusted_devices — 로그인 시 자동 등록되는 신뢰 기기
--- device_token: 프론트가 localStorage에 발급/보관하는 UUID(X-Device-Id 헤더로 전달) — 실제 매칭 키
--- device_name: User-Agent 기반 표시용 라벨 — 같은 device_token으로 재로그인 시 최신 값으로 갱신됨
--- ============================================================
-CREATE TABLE `trusted_devices` (
-    `device_id`    BIGINT UNSIGNED NOT NULL PRIMARY KEY AUTO_INCREMENT COMMENT '기기 고유 ID',
-    `user_id`      BIGINT UNSIGNED NOT NULL                            COMMENT '소유 사용자 ID',
-    `device_name`  VARCHAR(255)    NOT NULL                            COMMENT 'User-Agent 기반 표시용 기기 이름(최신값으로 갱신됨)',
-    `device_token` VARCHAR(64)     NOT NULL DEFAULT ''                 COMMENT '클라이언트 발급 기기 식별 토큰(UUID). 미전달 시 User-Agent 기반 대체값 사용',
-    `last_used_at` DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '최근 사용 일시',
-    `created_at`   DATETIME        NOT NULL DEFAULT CURRENT_TIMESTAMP  COMMENT '최초 등록일',
 
-    CONSTRAINT FK_users_TO_trusted_devices
-        FOREIGN KEY (`user_id`) REFERENCES `users` (`user_id`),
-
-    UNIQUE uk_trusted_device_user_token (user_id, device_token),
-    INDEX  idx_trusted_devices_user (user_id)
-);
+-- notifications.type ENUM에 'SECURITY' 추가
+--    ⚠ MODIFY COLUMN으로 ENUM을 교체하는 것이므로 운영 DB 적용 전 반드시 백업 및
+--       점검 시간대에 실행할 것 (MySQL은 ENUM 값 추가도 테이블 재구성을 수반할 수 있음).
+ALTER TABLE `notifications`
+    MODIFY COLUMN `type` ENUM('AS_STATUS','CONSUMABLE','WARRANTY','LMS','SECURITY') NOT NULL COMMENT '알림 유형 ([v15] SECURITY 추가 — 로그인 알림 등 보안 알림)';

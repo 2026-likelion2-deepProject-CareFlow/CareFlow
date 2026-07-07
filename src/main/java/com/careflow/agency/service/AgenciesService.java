@@ -9,13 +9,10 @@ import com.careflow.agency.dto.request.AgencyWithdrawRequest;
 import com.careflow.agency.dto.response.AgencyFeeRateResponse;
 import com.careflow.agency.dto.response.AgencyProfileResponse;
 import com.careflow.agency.dto.response.AgencySecuritySettingsResponse;
-import com.careflow.agency.dto.response.TrustedDeviceResponse;
 import com.careflow.agency.entity.Agencies;
 import com.careflow.agency.repository.AgenciesRepository;
 import com.careflow.agency_bank_account.entity.AgencyBankAccount;
 import com.careflow.agency_bank_account.repository.AgencyBankAccountRepository;
-import com.careflow.auth.entity.TrustedDevice;
-import com.careflow.auth.repository.TrustedDeviceRepository;
 import com.careflow.common.enums.AccountRequestsRole;
 import com.careflow.common.enums.AgencyStatus;
 import com.careflow.region.entity.Regions;
@@ -28,7 +25,6 @@ import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
 import java.util.NoSuchElementException;
 
 @Service
@@ -43,7 +39,6 @@ public class AgenciesService {
     private final RegionRepository regionRepository;
     private final AgencyBankAccountRepository agencyBankAccountRepository;
     private final StringRedisTemplate redisTemplate;
-    private final TrustedDeviceRepository trustedDeviceRepository;
 
     private final PasswordEncoder passwordEncoder;
 
@@ -230,16 +225,15 @@ public class AgenciesService {
     }
 
     /**
-     * 로그인 보안 설정 조회 (2단계 인증 / 로그인 알림 상태 + 신뢰 기기 개수)
+     * 로그인 보안 설정 조회 (2단계 인증 / 로그인 알림 상태)
      */
     @Transactional(readOnly = true)
     public AgencySecuritySettingsResponse getSecuritySettings(Long userId) {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new NoSuchElementException("해당 사용자를 찾을 수 없습니다."));
 
-        long trustedDeviceCount = trustedDeviceRepository.countByUser_Id(userId);
         return new AgencySecuritySettingsResponse(
-                user.isTwoFactorEnabled(), user.isLoginAlertEnabled(), trustedDeviceCount);
+                user.isTwoFactorEnabled(), user.isLoginAlertEnabled());
     }
 
     @Transactional
@@ -254,30 +248,5 @@ public class AgenciesService {
         User user = userRepository.findById(userId)
                 .orElseThrow(() -> new NoSuchElementException("해당 사용자를 찾을 수 없습니다."));
         user.updateLoginAlertEnabled(enabled);
-    }
-
-    /**
-     * 신뢰 기기 목록 조회 (최근 사용 순)
-     */
-    @Transactional(readOnly = true)
-    public List<TrustedDeviceResponse> getTrustedDevices(Long userId) {
-        return trustedDeviceRepository.findByUser_IdOrderByLastUsedAtDesc(userId).stream()
-                .map(TrustedDeviceResponse::from)
-                .toList();
-    }
-
-    /**
-     * 신뢰 기기 삭제(신뢰 해제) — 본인 소유 기기가 아니면 접근 차단
-     */
-    @Transactional
-    public void deleteTrustedDevice(Long userId, Long deviceId) throws IllegalAccessException {
-        TrustedDevice device = trustedDeviceRepository.findById(deviceId)
-                .orElseThrow(() -> new NoSuchElementException("해당 기기 정보를 찾을 수 없습니다."));
-
-        if (!device.getUser().getId().equals(userId)) {
-            throw new IllegalAccessException("본인 소유의 기기만 삭제할 수 있습니다.");
-        }
-
-        trustedDeviceRepository.delete(device);
     }
 }
