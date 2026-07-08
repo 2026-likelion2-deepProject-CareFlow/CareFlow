@@ -268,6 +268,7 @@ class WorkReportServiceTest {
         given(asRequest.getCustomer()).willReturn(customer);
         given(asRequest.getAppliance()).willReturn(appliance);
         given(asRequest.getSymptom()).willReturn(symptom);
+        given(asRequest.getCreatedAt()).willReturn(LocalDateTime.of(2024, 6, 18, 10, 0));
 
         WorkReport report = mock(WorkReport.class);
         given(report.getReportId()).willReturn(reportId);
@@ -343,6 +344,7 @@ class WorkReportServiceTest {
             given(req.getCustomer()).willReturn(customer);
             given(req.getAppliance()).willReturn(app);
             given(req.getId()).willReturn(1L);
+            given(req.getStatus()).willReturn(AsStatus.COMPLETED);
             given(req.getCreatedAt()).willReturn(LocalDateTime.of(2024, 6, 18, 10, 0));
             given(req.getScheduledDate()).willReturn(LocalDate.of(2024, 6, 18));
             given(req.getScheduledTime()).willReturn("14:00");

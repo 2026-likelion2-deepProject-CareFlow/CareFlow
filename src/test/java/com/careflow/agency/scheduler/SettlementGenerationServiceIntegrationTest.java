@@ -8,9 +8,6 @@ import com.careflow.appliance.repository.ApplianceCategoryRepository;
 import com.careflow.appliance.repository.ApplianceRepository;
 import com.careflow.as_request.entity.AsRequest;
 import com.careflow.as_request.repository.AsRequestRepository;
-import com.careflow.assignment.entity.AsAssignment;
-import com.careflow.assignment.repository.AsAssignmentRepository;
-import com.careflow.common.enums.AssignType;
 import com.careflow.common.enums.Role;
 import com.careflow.payment.entity.Payment;
 import com.careflow.payment.repository.PaymentRepository;
@@ -32,23 +29,26 @@ import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.jdbc.Sql;
 
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.List;
-import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
 /**
  * SettlementGenerationService 통합 테스트 (H2 DB 연동)
  *
+ * [결제 즉시 정산 데이터 생성 아키텍처] 이후 Settlement 는 PaymentService.processPayment 시점에
+ * 이미 PENDING 상태로 생성되어 있다. 이 서비스(월별 배치)는 그렇게 이미 만들어진 Settlement 를
+ * settlementRepository.findUnaggregatedSettlements 로 조회해 platform_settlements/engineer_payouts 로
+ * 집계(바인딩)하는 역할만 한다. 따라서 이 테스트는 실제 결제 흐름을 재현하는 대신, PaymentService와
+ * 동일한 수수료 계산식으로 Settlement 를 직접 생성해두고 집계 로직만 검증한다.
+ *
  * - @SpringBootTest: 전체 애플리케이션 컨텍스트 로드
  * - @ActiveProfiles("local"): H2 인메모리 DB 사용
  * - settlement_cleanup.sql: 각 테스트 전 관련 테이블 전체 초기화 (platform_settlements 포함)
- *
- * generateForMonth() 실행 결과로 settlements 뿐 아니라 platform_settlements 가
- * 대행사·연·월 단위로 올바르게 집계·생성되는지, settlements.platform_settlement_id 가
- * 정확히 연결되는지를 실제 DB 레벨에서 검증한다.
  */
 @SpringBootTest
 @ActiveProfiles("local")
@@ -66,10 +66,11 @@ class SettlementGenerationServiceIntegrationTest {
     @Autowired private SymptomRepository symptomRepository;
     @Autowired private AsRequestRepository asRequestRepository;
     @Autowired private PaymentRepository paymentRepository;
-    @Autowired private AsAssignmentRepository asAssignmentRepository;
     @Autowired private SettlementRepository settlementRepository;
     @Autowired private PlatformSettlementRepository platformSettlementRepository;
     @Autowired private com.careflow.settlement.repository.EngineerPayoutRepository engineerPayoutRepository;
+
+    private static final BigDecimal PLATFORM_FEE_RATE = BigDecimal.valueOf(0.10);
 
     private Agencies agency;
     private User engineerUser;
@@ -77,8 +78,8 @@ class SettlementGenerationServiceIntegrationTest {
     private ApplianceCategory leafCategory;
     private Regions district;
 
-    // findSettlementTargets 는 payment.paidAt 을 기준으로 targetMonth 범위를 필터링하므로,
-    // 결제를 지금 이 시각(now)에 생성하고 targetMonth 도 이번 달로 맞춰 별도의 날짜 조작 없이 자연스럽게 매칭시킨다.
+    // findUnaggregatedSettlements 는 settlements.created_at 을 기준으로 targetMonth 범위를 필터링하므로,
+    // Settlement 를 지금 이 시각(now)에 생성하고 targetMonth 도 이번 달로 맞춰 별도의 날짜 조작 없이 자연스럽게 매칭시킨다.
     private YearMonth targetMonth;
 
     @BeforeEach
@@ -109,8 +110,12 @@ class SettlementGenerationServiceIntegrationTest {
 
     // ─── 픽스처 헬퍼 ──────────────────────────────────────────────
 
-    /** 결제 완료(SUCCESS) + 배정 완료(COMPLETED) 상태의 Payment 1건 생성 — 정산 생성 대상 */
-    private Payment createSettlementTargetPayment(Agencies targetAgency, User engineer, int amount) {
+    /**
+     * PaymentService.processPayment과 동일한 수수료 계산식(platformFee=gross*10%,
+     * agencyFee=gross*agencyFeeRate, engineerNet=gross-platformFee-agencyFee)으로
+     * PENDING 상태의 Settlement 1건을 직접 생성·저장한다 (결제 즉시 생성 아키텍처 재현).
+     */
+    private Settlement createSettlement(Agencies targetAgency, User engineer, int gross, double agencyFeeRate) {
         Appliance appliance = applianceRepository.save(Appliance.builder()
                 .user(customerUser).category(leafCategory)
                 .brand("삼성").modelName("냉장고모델").build());
@@ -124,60 +129,37 @@ class SettlementGenerationServiceIntegrationTest {
                 .customer(customerUser).appliance(appliance).symptom(symptom)
                 .visitRegion(district).visitAddressDetail("101호")
                 .scheduledDate(LocalDate.now()).scheduledTime("14:00").build();
-        // findSettlementTargets 쿼리가 r.agency 를 INNER JOIN FETCH 하므로 배정 대행사를 반드시 설정해야 함
         asRequest.processAssignment(targetAgency);
         asRequest = asRequestRepository.save(asRequest);
 
-        Payment payment = paymentRepository.save(Payment.create(asRequest, customerUser, amount));
+        Payment payment = paymentRepository.save(Payment.create(asRequest, customerUser, gross));
         payment.markSuccess();
         payment = paymentRepository.save(payment);
 
-        AsAssignment assignment = asAssignmentRepository.save(
-                AsAssignment.create(asRequest, engineer, targetAgency, AssignType.MANUAL));
-        asAssignmentRepository.updateStatus(assignment.getId(), "COMPLETED");
+        BigDecimal agencyRate = BigDecimal.valueOf(agencyFeeRate);
+        int platformFee = PLATFORM_FEE_RATE.multiply(BigDecimal.valueOf(gross))
+                .setScale(0, RoundingMode.HALF_UP).intValue();
+        int agencyFee = agencyRate.multiply(BigDecimal.valueOf(gross))
+                .setScale(0, RoundingMode.HALF_UP).intValue();
+        int engineerNet = gross - platformFee - agencyFee;
 
-        return payment;
-    }
-
-    /** 배정이 전혀 없는(정산 생성 불가) Payment 1건 생성 — 스킵 대상 */
-    private Payment createUnassignedPayment(int amount) {
-        Appliance appliance = applianceRepository.save(Appliance.builder()
-                .user(customerUser).category(leafCategory)
-                .brand("삼성").modelName("냉장고모델").build());
-
-        Symptom symptom = symptomRepository.save(Symptom.builder()
-                .category(leafCategory)
-                .symptomCode("COOL_FAIL_" + System.nanoTime())
-                .symptomName("냉방불량").build());
-
-        AsRequest asRequest = AsRequest.builder()
-                .customer(customerUser).appliance(appliance).symptom(symptom)
-                .visitRegion(district).visitAddressDetail("101호")
-                .scheduledDate(LocalDate.now()).scheduledTime("14:00").build();
-        // 배정 자체는 없지만, findSettlementTargets 쿼리의 INNER JOIN FETCH r.agency 통과를 위해 대행사만 설정
-        // (실제 배정 완료 없이 "결제는 됐지만 담당 기사가 없는" 케이스를 재현)
-        asRequest.processAssignment(agency);
-        asRequest = asRequestRepository.save(asRequest);
-
-        Payment payment = paymentRepository.save(Payment.create(asRequest, customerUser, amount));
-        payment.markSuccess();
-        return paymentRepository.save(payment);
+        Settlement settlement = Settlement.create(payment, asRequest, engineer, targetAgency,
+                gross, platformFee, PLATFORM_FEE_RATE, agencyFee, agencyRate, engineerNet);
+        return settlementRepository.save(settlement);
     }
 
     @Test
-    @DisplayName("성공: 동일 대행사 정산 2건 생성 — platform_settlement 1건에 합계·건수 집계, settlement에 FK 연결")
-    void success_generatesPlatformSettlement_aggregatedFromCreatedSettlements() {
+    @DisplayName("성공: 동일 대행사 정산 2건 존재 — platform_settlement 1건에 합계·건수 집계, settlement에 FK 연결")
+    void success_generatesPlatformSettlement_aggregatedFromExistingSettlements() {
         // Given
-        createSettlementTargetPayment(agency, engineerUser, 200000);
-        createSettlementTargetPayment(agency, engineerUser, 300000);
+        createSettlement(agency, engineerUser, 200000, 0.10);
+        createSettlement(agency, engineerUser, 300000, 0.10);
 
         // When
         SettlementGenerationService.Result result = settlementGenerationService.generateForMonth(targetMonth);
 
         // Then — 생성 결과 요약
         assertThat(result.created()).isEqualTo(2);
-        assertThat(result.skipped()).isZero();
-        assertThat(result.failed()).isZero();
         assertThat(result.platformSettlementsCreated()).isEqualTo(1);
 
         // platform_settlements 집계 검증
@@ -203,11 +185,11 @@ class SettlementGenerationServiceIntegrationTest {
     }
 
     @Test
-    @DisplayName("성공: 동일 대행사+기사 정산 2건 생성 — engineer_payout 1건에 합계·건수 집계, settlement에 FK 연결")
-    void success_generatesEngineerPayout_aggregatedFromCreatedSettlements() {
+    @DisplayName("성공: 동일 대행사+기사 정산 2건 존재 — engineer_payout 1건에 합계·건수 집계, settlement에 FK 연결")
+    void success_generatesEngineerPayout_aggregatedFromExistingSettlements() {
         // Given
-        createSettlementTargetPayment(agency, engineerUser, 200000);
-        createSettlementTargetPayment(agency, engineerUser, 300000);
+        createSettlement(agency, engineerUser, 200000, 0.10);
+        createSettlement(agency, engineerUser, 300000, 0.10);
 
         // When
         SettlementGenerationService.Result result = settlementGenerationService.generateForMonth(targetMonth);
@@ -239,7 +221,7 @@ class SettlementGenerationServiceIntegrationTest {
                         targetMonth.getYear(), targetMonth.getMonthValue(), 100000, 1);
         engineerPayoutRepository.save(existing);
 
-        createSettlementTargetPayment(agency, engineerUser, 200000);
+        createSettlement(agency, engineerUser, 200000, 0.10);
 
         SettlementGenerationService.Result result = settlementGenerationService.generateForMonth(targetMonth);
 
@@ -266,7 +248,7 @@ class SettlementGenerationServiceIntegrationTest {
         paid.markPaid();
         engineerPayoutRepository.save(paid);
 
-        createSettlementTargetPayment(agency, engineerUser, 200000);
+        createSettlement(agency, engineerUser, 200000, 0.10);
 
         SettlementGenerationService.Result result = settlementGenerationService.generateForMonth(targetMonth);
 
@@ -281,28 +263,24 @@ class SettlementGenerationServiceIntegrationTest {
         assertThat(unchanged.getCaseCount()).isEqualTo(1);
         assertThat(unchanged.getStatus()).isEqualTo("PAID");
 
-        Optional<Settlement> newSettlement = settlementRepository.findAll().stream()
+        Settlement newSettlement = settlementRepository.findAll().stream()
                 .filter(s -> s.getGrossAmount() == 200000)
-                .findFirst();
-        assertThat(newSettlement).isPresent();
-        assertThat(newSettlement.get().getEngineerPayout()).isNull();
+                .findFirst().orElseThrow();
+        assertThat(newSettlement.getEngineerPayout()).isNull();
     }
 
     @Test
-    @DisplayName("성공: 배정 없는 결제 건 — Settlement 스킵, platform_settlement도 생성되지 않음")
-    void success_skipsUnassignedPayment_noPlatformSettlementCreated() {
-        // Given
-        createUnassignedPayment(150000);
-
+    @DisplayName("성공: 집계 대상 정산이 하나도 없으면 아무것도 생성되지 않는다")
+    void success_noSettlements_nothingGenerated() {
         // When
         SettlementGenerationService.Result result = settlementGenerationService.generateForMonth(targetMonth);
 
         // Then
         assertThat(result.created()).isZero();
-        assertThat(result.skipped()).isEqualTo(1);
         assertThat(result.platformSettlementsCreated()).isZero();
-        assertThat(settlementRepository.findAll()).isEmpty();
+        assertThat(result.engineerPayoutsCreated()).isZero();
         assertThat(platformSettlementRepository.findAll()).isEmpty();
+        assertThat(engineerPayoutRepository.findAll()).isEmpty();
     }
 
     @Test
@@ -313,7 +291,7 @@ class SettlementGenerationServiceIntegrationTest {
                 agency, targetMonth.getYear(), targetMonth.getMonthValue(), 100000, 10000, 90000, 1);
         platformSettlementRepository.save(existing);
 
-        createSettlementTargetPayment(agency, engineerUser, 200000);
+        createSettlement(agency, engineerUser, 200000, 0.10);
 
         // When
         SettlementGenerationService.Result result = settlementGenerationService.generateForMonth(targetMonth);
@@ -345,12 +323,12 @@ class SettlementGenerationServiceIntegrationTest {
         paid.markPaid(null);
         platformSettlementRepository.save(paid);
 
-        createSettlementTargetPayment(agency, engineerUser, 200000);
+        createSettlement(agency, engineerUser, 200000, 0.10);
 
         // When
         SettlementGenerationService.Result result = settlementGenerationService.generateForMonth(targetMonth);
 
-        // Then — Settlement 자체는 생성되지만 이미 PAID인 집계는 절대 변경되지 않음
+        // Then — Settlement 자체는 존재하지만 이미 PAID인 집계는 절대 변경되지 않음
         assertThat(result.created()).isEqualTo(1);
         assertThat(result.platformSettlementsCreated()).isZero();
 
@@ -363,10 +341,9 @@ class SettlementGenerationServiceIntegrationTest {
         assertThat(unchanged.getStatus()).isEqualTo("PAID");
 
         // 새로 생성된 Settlement는 platform_settlement 미할당(NULL) 상태로 남아야 함
-        Optional<Settlement> newSettlement = settlementRepository.findAll().stream()
+        Settlement newSettlement = settlementRepository.findAll().stream()
                 .filter(s -> s.getGrossAmount() == 200000)
-                .findFirst();
-        assertThat(newSettlement).isPresent();
-        assertThat(newSettlement.get().getPlatformSettlement()).isNull();
+                .findFirst().orElseThrow();
+        assertThat(newSettlement.getPlatformSettlement()).isNull();
     }
 }

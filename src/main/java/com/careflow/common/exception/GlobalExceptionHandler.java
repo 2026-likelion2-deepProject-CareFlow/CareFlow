@@ -1,9 +1,11 @@
 package com.careflow.common.exception;
 
 import com.careflow.common.response.ErrorResponse;
+import org.springframework.core.NestedExceptionUtils;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.security.authorization.AuthorizationDeniedException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
@@ -33,6 +35,17 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleMissingParam(MissingServletRequestParameterException e) {
         return ResponseEntity.badRequest()
                 .body(ErrorResponse.of(e.getMessage()));
+    }
+
+    // JSON 바디 파싱 실패 시 400 반환.
+    // XssSanitizingStringDeserializer가 던진 IllegalArgumentException은 Jackson이 내부적으로
+    // JsonMappingException으로 감싸서 이 예외의 원인 체인 안에 들어오므로, 가장 근본 원인을 꺼내
+    // XSS 방어 메시지든 일반 파싱 오류든 일관된 형식으로 응답한다.
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public ResponseEntity<ErrorResponse> handleMessageNotReadable(HttpMessageNotReadableException e) {
+        Throwable cause = NestedExceptionUtils.getMostSpecificCause(e);
+        String message = (cause instanceof IllegalArgumentException) ? cause.getMessage() : "요청 본문을 읽을 수 없습니다.";
+        return ResponseEntity.badRequest().body(ErrorResponse.of(message));
     }
 
     @ExceptionHandler(NoSuchElementException.class)

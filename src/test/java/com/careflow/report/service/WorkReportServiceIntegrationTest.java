@@ -224,6 +224,15 @@ class WorkReportServiceIntegrationTest {
         return dto;
     }
 
+    // WorkReport.submittedAt은 @CreatedDate(updatable=false)라 엔티티 레벨 save()/더티체킹으로는
+    // 값을 바꿀 수 없다 — 벌크 UPDATE 쿼리로 DB 값을 직접 덮어써야 한다.
+    private void setSubmittedAt(Long reportId, java.time.LocalDateTime submittedAt) {
+        em.createQuery("UPDATE WorkReport w SET w.submittedAt = :submittedAt WHERE w.reportId = :reportId")
+                .setParameter("submittedAt", submittedAt)
+                .setParameter("reportId", reportId)
+                .executeUpdate();
+    }
+
     @Test
     @DisplayName("성공: 가전 수리 이력 상세 조회 (최신순 정렬 및 조인 쿼리 검증)")
     void getApplianceRepairHistory_Integration() throws Exception {
@@ -237,8 +246,11 @@ class WorkReportServiceIntegrationTest {
                 .finalAmount(50000)
                 .memo("첫 번째 수리")
                 .build();
-        ReflectionTestUtils.setField(report1, "submittedAt", LocalDate.now().minusDays(10).atStartOfDay());
-        workReportRepository.save(report1);
+        report1 = workReportRepository.save(report1);
+        // submittedAt은 @CreatedDate(updatable=false)라 save() 시 항상 "지금"으로 채워진다.
+        // ReflectionTestUtils로 저장 전에 미리 값을 바꿔둬도 JPA Auditing이 덮어써 무시되므로,
+        // 저장 후 벌크 UPDATE 쿼리로 직접 과거 시각을 심어야 한다.
+        setSubmittedAt(report1.getReportId(), LocalDate.now().minusDays(10).atStartOfDay());
 
         // 2번 보고서 (최신 데이터)
         // (주의: AsRequest는 Report와 1:1 관계이므로 새 AsRequest를 만들어야 합니다)
@@ -268,8 +280,13 @@ class WorkReportServiceIntegrationTest {
                 .finalAmount(150000)
                 .memo("두 번째 수리 (최신)")
                 .build();
-        ReflectionTestUtils.setField(report2, "submittedAt", LocalDate.now().atStartOfDay());
-        workReportRepository.save(report2);
+        report2 = workReportRepository.save(report2);
+        setSubmittedAt(report2.getReportId(), LocalDate.now().atStartOfDay());
+
+        // 벌크 UPDATE는 영속성 컨텍스트 1차 캐시를 거치지 않으므로, 이후 조회가 DB의 최신 값을
+        // 읽도록 영속성 컨텍스트를 비운다.
+        em.flush();
+        em.clear();
 
         // When: 고객 본인이 자기 가전의 수리 이력을 조회
         Long customerId = testAsRequest.getCustomer().getId();

@@ -2,17 +2,13 @@ package com.careflow.agency.scheduler;
 
 import com.careflow.agency.entity.Agencies;
 import com.careflow.as_request.entity.AsRequest;
-import com.careflow.assignment.entity.AsAssignment;
-import com.careflow.assignment.repository.AsAssignmentRepository;
-import com.careflow.common.enums.AssignType;
 import com.careflow.payment.entity.Payment;
-import com.careflow.payment.repository.PaymentRepository;
 import com.careflow.settlement.entity.PlatformSettlement;
 import com.careflow.settlement.entity.Settlement;
+import com.careflow.settlement.repository.EngineerPayoutRepository;
 import com.careflow.settlement.repository.PlatformSettlementRepository;
 import com.careflow.settlement.repository.SettlementRepository;
 import com.careflow.user.entity.User;
-import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
@@ -23,9 +19,9 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.mockito.junit.jupiter.MockitoSettings;
 import org.mockito.quality.Strictness;
-import org.springframework.test.util.ReflectionTestUtils;
 
-import java.time.LocalDateTime;
+import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.YearMonth;
 import java.util.List;
 import java.util.Optional;
@@ -38,8 +34,9 @@ import static org.mockito.Mockito.*;
 /**
  * SettlementGenerationService 단위 테스트
  *
- * - 정산(Settlement) 건별 생성 로직은 기존 동작 그대로이며,
- *   신규 추가된 platform_settlements 집계(generatePlatformSettlements) 로직 검증에 집중한다.
+ * [결제 즉시 정산 데이터 생성 아키텍처] 이후 Settlement 는 PaymentService.processPayment 시점에
+ * 이미 생성되어 있으므로, 이 서비스(월별 배치)는 settlementRepository.findUnaggregatedSettlements 로
+ * 조회된 기존 Settlement 목록을 platform_settlements/engineer_payouts 로 집계하는 역할만 검증한다.
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -49,37 +46,18 @@ class SettlementGenerationServiceTest {
     @InjectMocks
     private SettlementGenerationService settlementGenerationService;
 
-    @Mock private PaymentRepository paymentRepository;
     @Mock private SettlementRepository settlementRepository;
-    @Mock private AsAssignmentRepository asAssignmentRepository;
     @Mock private PlatformSettlementRepository platformSettlementRepository;
-    @Mock private com.careflow.settlement.repository.EngineerPayoutRepository engineerPayoutRepository;
+    @Mock private EngineerPayoutRepository engineerPayoutRepository;
 
     private static final YearMonth TARGET_MONTH = YearMonth.of(2026, 6);
+    private static final BigDecimal PLATFORM_FEE_RATE = BigDecimal.valueOf(0.10);
 
-    private Agencies mockAgency(Long id, String name, double feeRate) {
+    private Agencies mockAgency(Long id, String name) {
         Agencies agency = mock(Agencies.class);
         given(agency.getId()).willReturn(id);
         given(agency.getAgencyName()).willReturn(name);
-        given(agency.getAgencyFeeRate()).willReturn(feeRate);
         return agency;
-    }
-
-    private Payment mockPayment(Long id, Long requestId, int amount) {
-        Payment payment = mock(Payment.class);
-        AsRequest asRequest = mock(AsRequest.class);
-        given(asRequest.getId()).willReturn(requestId);
-        given(payment.getId()).willReturn(id);
-        given(payment.getAsRequest()).willReturn(asRequest);
-        given(payment.getAmount()).willReturn(amount);
-        return payment;
-    }
-
-    private AsAssignment completedAssignment(Agencies agency, User engineer, LocalDateTime assignedAt) {
-        AsAssignment assignment = AsAssignment.create(mock(AsRequest.class), engineer, agency, AssignType.MANUAL);
-        ReflectionTestUtils.setField(assignment, "status", "COMPLETED");
-        ReflectionTestUtils.setField(assignment, "assignedAt", assignedAt);
-        return assignment;
     }
 
     private User mockEngineer(Long id, String name) {
@@ -89,10 +67,28 @@ class SettlementGenerationServiceTest {
         return engineer;
     }
 
-    // save() 호출 시 인자로 받은 Settlement 를 그대로 반환하도록 스텁 (createSettlement 흐름 재현용)
-    private void stubSettlementSaveReturnsArgument() {
-        given(settlementRepository.save(any(Settlement.class)))
-                .willAnswer(invocation -> invocation.getArgument(0));
+    // PaymentService.processPayment 과 동일한 수수료 계산식으로 Settlement 픽스처를 만든다
+    // (platformFee=gross*10%, agencyFee=gross*agencyFeeRate, engineerNet=gross-platformFee-agencyFee)
+    private Settlement settlementFor(Agencies agency, User engineer, int gross, double agencyFeeRate) {
+        BigDecimal agencyRate = BigDecimal.valueOf(agencyFeeRate);
+        int platformFee = PLATFORM_FEE_RATE.multiply(BigDecimal.valueOf(gross))
+                .setScale(0, RoundingMode.HALF_UP).intValue();
+        int agencyFee = agencyRate.multiply(BigDecimal.valueOf(gross))
+                .setScale(0, RoundingMode.HALF_UP).intValue();
+        int engineerNet = gross - platformFee - agencyFee;
+
+        return Settlement.create(mock(Payment.class), mock(AsRequest.class), engineer, agency,
+                gross, platformFee, PLATFORM_FEE_RATE, agencyFee, agencyRate, engineerNet);
+    }
+
+    private void stubNoExistingPlatformSettlement() {
+        given(platformSettlementRepository.findByAgency_IdAndSettlementYearAndSettlementMonth(anyLong(), eq(2026), eq(6)))
+                .willReturn(Optional.empty());
+    }
+
+    private void stubNoExistingEngineerPayout() {
+        given(engineerPayoutRepository.findByAgency_IdAndEngineer_IdAndPayoutYearAndPayoutMonth(anyLong(), anyLong(), eq(2026), eq(6)))
+                .willReturn(Optional.empty());
     }
 
     @Nested
@@ -100,35 +96,25 @@ class SettlementGenerationServiceTest {
     class GeneratePlatformSettlements {
 
         @Test
-        @DisplayName("성공: 동일 대행사 결제 2건 → platform_settlement 1건에 합계·건수 집계")
+        @DisplayName("성공: 동일 대행사 정산 2건 → platform_settlement 1건에 합계·건수 집계")
         void success_sameAgency_aggregatedIntoOnePlatformSettlement() {
             // Given
-            Agencies agency = mockAgency(1L, "케어플로우 서울대행사", 10.0);
+            Agencies agency = mockAgency(1L, "케어플로우 서울대행사");
             User engineer = mockEngineer(10L, "홍길동");
 
-            Payment payment1 = mockPayment(100L, 1000L, 200000);
-            Payment payment2 = mockPayment(101L, 1001L, 300000);
+            Settlement settlement1 = settlementFor(agency, engineer, 200000, 0.10);
+            Settlement settlement2 = settlementFor(agency, engineer, 300000, 0.10);
 
-            given(paymentRepository.findSettlementTargets(any(), any()))
-                    .willReturn(List.of(payment1, payment2));
-
-            given(asAssignmentRepository.findByAsRequest_Id(1000L))
-                    .willReturn(List.of(completedAssignment(agency, engineer, LocalDateTime.now())));
-            given(asAssignmentRepository.findByAsRequest_Id(1001L))
-                    .willReturn(List.of(completedAssignment(agency, engineer, LocalDateTime.now())));
-
-            stubSettlementSaveReturnsArgument();
-
-            given(platformSettlementRepository.findByAgency_IdAndSettlementYearAndSettlementMonth(1L, 2026, 6))
-                    .willReturn(Optional.empty());
+            given(settlementRepository.findUnaggregatedSettlements(any(), any()))
+                    .willReturn(List.of(settlement1, settlement2));
+            stubNoExistingPlatformSettlement();
+            stubNoExistingEngineerPayout();
 
             // When
             SettlementGenerationService.Result result = settlementGenerationService.generateForMonth(TARGET_MONTH);
 
             // Then
             assertThat(result.created()).isEqualTo(2);
-            assertThat(result.skipped()).isZero();
-            assertThat(result.failed()).isZero();
             assertThat(result.platformSettlementsCreated()).isEqualTo(1);
 
             ArgumentCaptor<PlatformSettlement> captor = ArgumentCaptor.forClass(PlatformSettlement.class);
@@ -141,33 +127,25 @@ class SettlementGenerationServiceTest {
             assertThat(saved.getSettlementCount()).isEqualTo(2);
             assertThat(saved.getSettlementYear()).isEqualTo(2026);
             assertThat(saved.getSettlementMonth()).isEqualTo(6);
-            // payoutAmountSum = gross - platformFee (agencyFee + engineerNetAmount) = 500000 - 50000
+            // payoutAmountSum = gross - platformFee = 500000 - 50000
             assertThat(saved.getPayoutAmountSum()).isEqualTo(450000);
         }
 
         @Test
-        @DisplayName("성공: 서로 다른 대행사 결제 각 1건 → platform_settlement 각각 1건씩 생성")
+        @DisplayName("성공: 서로 다른 대행사 정산 각 1건 → platform_settlement 각각 1건씩 생성")
         void success_differentAgencies_createSeparatePlatformSettlements() {
             // Given
-            Agencies agencyA = mockAgency(1L, "A대행사", 10.0);
-            Agencies agencyB = mockAgency(2L, "B대행사", 8.0);
+            Agencies agencyA = mockAgency(1L, "A대행사");
+            Agencies agencyB = mockAgency(2L, "B대행사");
             User engineer = mockEngineer(10L, "홍길동");
 
-            Payment payment1 = mockPayment(100L, 1000L, 200000);
-            Payment payment2 = mockPayment(101L, 1001L, 100000);
+            Settlement settlement1 = settlementFor(agencyA, engineer, 200000, 0.10);
+            Settlement settlement2 = settlementFor(agencyB, engineer, 100000, 0.08);
 
-            given(paymentRepository.findSettlementTargets(any(), any()))
-                    .willReturn(List.of(payment1, payment2));
-
-            given(asAssignmentRepository.findByAsRequest_Id(1000L))
-                    .willReturn(List.of(completedAssignment(agencyA, engineer, LocalDateTime.now())));
-            given(asAssignmentRepository.findByAsRequest_Id(1001L))
-                    .willReturn(List.of(completedAssignment(agencyB, engineer, LocalDateTime.now())));
-
-            stubSettlementSaveReturnsArgument();
-
-            given(platformSettlementRepository.findByAgency_IdAndSettlementYearAndSettlementMonth(anyLong(), eq(2026), eq(6)))
-                    .willReturn(Optional.empty());
+            given(settlementRepository.findUnaggregatedSettlements(any(), any()))
+                    .willReturn(List.of(settlement1, settlement2));
+            stubNoExistingPlatformSettlement();
+            stubNoExistingEngineerPayout();
 
             // When
             SettlementGenerationService.Result result = settlementGenerationService.generateForMonth(TARGET_MONTH);
@@ -179,10 +157,10 @@ class SettlementGenerationServiceTest {
         }
 
         @Test
-        @DisplayName("성공: 정산 대상 결제 0건 — platform_settlement 생성 없음")
+        @DisplayName("성공: 집계 대상 정산 0건 — platform_settlement 생성 없음")
         void success_noTargets_noPlatformSettlementCreated() {
             // Given
-            given(paymentRepository.findSettlementTargets(any(), any())).willReturn(List.of());
+            given(settlementRepository.findUnaggregatedSettlements(any(), any())).willReturn(List.of());
 
             // When
             SettlementGenerationService.Result result = settlementGenerationService.generateForMonth(TARGET_MONTH);
@@ -197,14 +175,13 @@ class SettlementGenerationServiceTest {
         @DisplayName("성공: 기존 PENDING platform_settlement 존재 시 신규 생성 대신 기존 합계에 누적")
         void success_existingPendingPlatformSettlement_accumulatesInsteadOfCreating() {
             // Given
-            Agencies agency = mockAgency(1L, "케어플로우 서울대행사", 10.0);
+            Agencies agency = mockAgency(1L, "케어플로우 서울대행사");
             User engineer = mockEngineer(10L, "홍길동");
 
-            Payment payment = mockPayment(100L, 1000L, 200000);
-            given(paymentRepository.findSettlementTargets(any(), any())).willReturn(List.of(payment));
-            given(asAssignmentRepository.findByAsRequest_Id(1000L))
-                    .willReturn(List.of(completedAssignment(agency, engineer, LocalDateTime.now())));
-            stubSettlementSaveReturnsArgument();
+            Settlement settlement = settlementFor(agency, engineer, 200000, 0.10);
+            given(settlementRepository.findUnaggregatedSettlements(any(), any()))
+                    .willReturn(List.of(settlement));
+            stubNoExistingEngineerPayout();
 
             PlatformSettlement existing = PlatformSettlement.create(agency, 2026, 6, 100000, 10000, 90000, 1);
             given(platformSettlementRepository.findByAgency_IdAndSettlementYearAndSettlementMonth(1L, 2026, 6))
@@ -229,14 +206,13 @@ class SettlementGenerationServiceTest {
         @DisplayName("성공: 기존 platform_settlement이 이미 PAID면 누적하지 않고 스킵")
         void success_existingPaidPlatformSettlement_skipsWithoutMutating() {
             // Given
-            Agencies agency = mockAgency(1L, "케어플로우 서울대행사", 10.0);
+            Agencies agency = mockAgency(1L, "케어플로우 서울대행사");
             User engineer = mockEngineer(10L, "홍길동");
 
-            Payment payment = mockPayment(100L, 1000L, 200000);
-            given(paymentRepository.findSettlementTargets(any(), any())).willReturn(List.of(payment));
-            given(asAssignmentRepository.findByAsRequest_Id(1000L))
-                    .willReturn(List.of(completedAssignment(agency, engineer, LocalDateTime.now())));
-            stubSettlementSaveReturnsArgument();
+            Settlement settlement = settlementFor(agency, engineer, 200000, 0.10);
+            given(settlementRepository.findUnaggregatedSettlements(any(), any()))
+                    .willReturn(List.of(settlement));
+            stubNoExistingEngineerPayout();
 
             PlatformSettlement paidSettlement = PlatformSettlement.create(agency, 2026, 6, 100000, 10000, 90000, 1);
             paidSettlement.markPaid(null);
@@ -259,26 +235,18 @@ class SettlementGenerationServiceTest {
     class GenerateEngineerPayouts {
 
         @Test
-        @DisplayName("성공: 동일 대행사+기사 결제 2건 → engineer_payout 1건에 합계·건수 집계")
+        @DisplayName("성공: 동일 대행사+기사 정산 2건 → engineer_payout 1건에 합계·건수 집계")
         void success_sameAgencyAndEngineer_aggregatedIntoOneEngineerPayout() {
-            Agencies agency = mockAgency(1L, "케어플로우 서울대행사", 0.1);
+            Agencies agency = mockAgency(1L, "케어플로우 서울대행사");
             User engineer = mockEngineer(10L, "홍길동");
 
-            Payment payment1 = mockPayment(100L, 1000L, 200000);
-            Payment payment2 = mockPayment(101L, 1001L, 300000);
+            Settlement settlement1 = settlementFor(agency, engineer, 200000, 0.10);
+            Settlement settlement2 = settlementFor(agency, engineer, 300000, 0.10);
 
-            given(paymentRepository.findSettlementTargets(any(), any()))
-                    .willReturn(List.of(payment1, payment2));
-            given(asAssignmentRepository.findByAsRequest_Id(1000L))
-                    .willReturn(List.of(completedAssignment(agency, engineer, LocalDateTime.now())));
-            given(asAssignmentRepository.findByAsRequest_Id(1001L))
-                    .willReturn(List.of(completedAssignment(agency, engineer, LocalDateTime.now())));
-            stubSettlementSaveReturnsArgument();
-
-            given(platformSettlementRepository.findByAgency_IdAndSettlementYearAndSettlementMonth(1L, 2026, 6))
-                    .willReturn(Optional.empty());
-            given(engineerPayoutRepository.findByAgency_IdAndEngineer_IdAndPayoutYearAndPayoutMonth(1L, 10L, 2026, 6))
-                    .willReturn(Optional.empty());
+            given(settlementRepository.findUnaggregatedSettlements(any(), any()))
+                    .willReturn(List.of(settlement1, settlement2));
+            stubNoExistingPlatformSettlement();
+            stubNoExistingEngineerPayout();
 
             SettlementGenerationService.Result result = settlementGenerationService.generateForMonth(TARGET_MONTH);
 
@@ -289,8 +257,7 @@ class SettlementGenerationServiceTest {
             verify(engineerPayoutRepository).save(captor.capture());
             com.careflow.settlement.entity.EngineerPayout saved = captor.getValue();
 
-            // agencyFeeRate=0.1(mock, 10%), platformFee=10%(고정) → net = gross - 10%(fee) - 10%(agencyFee) = gross*0.8
-            // net: 200000*0.8 + 300000*0.8 = 160000 + 240000 = 400000
+            // agencyFeeRate=10%, platformFee=10%(고정) → net = gross*0.8: 200000*0.8+300000*0.8=400000
             assertThat(saved.getNetAmountSum()).isEqualTo(400000);
             assertThat(saved.getCaseCount()).isEqualTo(2);
             assertThat(saved.getPayoutYear()).isEqualTo(2026);
@@ -298,27 +265,19 @@ class SettlementGenerationServiceTest {
         }
 
         @Test
-        @DisplayName("성공: 같은 대행사 소속 서로 다른 기사 결제 각 1건 → engineer_payout 각각 생성")
+        @DisplayName("성공: 같은 대행사 소속 서로 다른 기사 정산 각 1건 → engineer_payout 각각 생성")
         void success_differentEngineers_createSeparateEngineerPayouts() {
-            Agencies agency = mockAgency(1L, "케어플로우 서울대행사", 0.1);
+            Agencies agency = mockAgency(1L, "케어플로우 서울대행사");
             User engineerA = mockEngineer(10L, "홍길동");
             User engineerB = mockEngineer(20L, "김철수");
 
-            Payment payment1 = mockPayment(100L, 1000L, 200000);
-            Payment payment2 = mockPayment(101L, 1001L, 100000);
+            Settlement settlement1 = settlementFor(agency, engineerA, 200000, 0.10);
+            Settlement settlement2 = settlementFor(agency, engineerB, 100000, 0.10);
 
-            given(paymentRepository.findSettlementTargets(any(), any()))
-                    .willReturn(List.of(payment1, payment2));
-            given(asAssignmentRepository.findByAsRequest_Id(1000L))
-                    .willReturn(List.of(completedAssignment(agency, engineerA, LocalDateTime.now())));
-            given(asAssignmentRepository.findByAsRequest_Id(1001L))
-                    .willReturn(List.of(completedAssignment(agency, engineerB, LocalDateTime.now())));
-            stubSettlementSaveReturnsArgument();
-
-            given(platformSettlementRepository.findByAgency_IdAndSettlementYearAndSettlementMonth(anyLong(), eq(2026), eq(6)))
-                    .willReturn(Optional.empty());
-            given(engineerPayoutRepository.findByAgency_IdAndEngineer_IdAndPayoutYearAndPayoutMonth(anyLong(), anyLong(), eq(2026), eq(6)))
-                    .willReturn(Optional.empty());
+            given(settlementRepository.findUnaggregatedSettlements(any(), any()))
+                    .willReturn(List.of(settlement1, settlement2));
+            stubNoExistingPlatformSettlement();
+            stubNoExistingEngineerPayout();
 
             SettlementGenerationService.Result result = settlementGenerationService.generateForMonth(TARGET_MONTH);
 
@@ -329,17 +288,13 @@ class SettlementGenerationServiceTest {
         @Test
         @DisplayName("성공: 기존 PENDING engineer_payout 존재 시 신규 생성 대신 기존 합계에 누적")
         void success_existingPendingEngineerPayout_accumulatesInsteadOfCreating() {
-            Agencies agency = mockAgency(1L, "케어플로우 서울대행사", 0.1);
+            Agencies agency = mockAgency(1L, "케어플로우 서울대행사");
             User engineer = mockEngineer(10L, "홍길동");
 
-            Payment payment = mockPayment(100L, 1000L, 200000);
-            given(paymentRepository.findSettlementTargets(any(), any())).willReturn(List.of(payment));
-            given(asAssignmentRepository.findByAsRequest_Id(1000L))
-                    .willReturn(List.of(completedAssignment(agency, engineer, LocalDateTime.now())));
-            stubSettlementSaveReturnsArgument();
-
-            given(platformSettlementRepository.findByAgency_IdAndSettlementYearAndSettlementMonth(1L, 2026, 6))
-                    .willReturn(Optional.empty());
+            Settlement settlement = settlementFor(agency, engineer, 200000, 0.10);
+            given(settlementRepository.findUnaggregatedSettlements(any(), any()))
+                    .willReturn(List.of(settlement));
+            stubNoExistingPlatformSettlement();
 
             com.careflow.settlement.entity.EngineerPayout existing =
                     com.careflow.settlement.entity.EngineerPayout.create(agency, engineer, 2026, 6, 100000, 1);
@@ -359,17 +314,13 @@ class SettlementGenerationServiceTest {
         @Test
         @DisplayName("성공: 기존 engineer_payout이 이미 PAID면 누적하지 않고 스킵")
         void success_existingPaidEngineerPayout_skipsWithoutMutating() {
-            Agencies agency = mockAgency(1L, "케어플로우 서울대행사", 0.1);
+            Agencies agency = mockAgency(1L, "케어플로우 서울대행사");
             User engineer = mockEngineer(10L, "홍길동");
 
-            Payment payment = mockPayment(100L, 1000L, 200000);
-            given(paymentRepository.findSettlementTargets(any(), any())).willReturn(List.of(payment));
-            given(asAssignmentRepository.findByAsRequest_Id(1000L))
-                    .willReturn(List.of(completedAssignment(agency, engineer, LocalDateTime.now())));
-            stubSettlementSaveReturnsArgument();
-
-            given(platformSettlementRepository.findByAgency_IdAndSettlementYearAndSettlementMonth(1L, 2026, 6))
-                    .willReturn(Optional.empty());
+            Settlement settlement = settlementFor(agency, engineer, 200000, 0.10);
+            given(settlementRepository.findUnaggregatedSettlements(any(), any()))
+                    .willReturn(List.of(settlement));
+            stubNoExistingPlatformSettlement();
 
             com.careflow.settlement.entity.EngineerPayout paid =
                     com.careflow.settlement.entity.EngineerPayout.create(agency, engineer, 2026, 6, 100000, 1);

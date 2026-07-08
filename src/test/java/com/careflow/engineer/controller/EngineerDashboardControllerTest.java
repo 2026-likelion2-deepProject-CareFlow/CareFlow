@@ -9,6 +9,7 @@ import com.careflow.common.config.SecurityConfig;
 import com.careflow.engineer.dto.EngineerDashboardResponse;
 import com.careflow.settlement.dto.EngineerSettlementSummaryResponse;
 import com.careflow.engineer.service.EngineerDashboardService;
+import com.careflow.engineer.service.EngineerSettlementReportCsvGenerator;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -44,6 +45,7 @@ class EngineerDashboardControllerTest {
     @Autowired private ObjectMapper objectMapper;
 
     @MockitoBean private EngineerDashboardService engineerDashboardService;
+    @MockitoBean private EngineerSettlementReportCsvGenerator settlementReportCsvGenerator;
     @MockitoBean private JwtProvider jwtProvider;
     @MockitoBean private StringRedisTemplate stringRedisTemplate;
     @MockitoBean private JpaMetamodelMappingContext jpaMetamodelMappingContext;

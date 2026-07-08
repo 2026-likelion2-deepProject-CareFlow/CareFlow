@@ -48,6 +48,9 @@ dependencies {
 
 	// Mail
 	implementation 'org.springframework.boot:spring-boot-starter-mail'
+
+	// XSS 방어 — 요청 문자열에 HTML/스크립트 태그가 섞여 있는지 실제 HTML 파서로 검사
+	implementation 'org.jsoup:jsoup:1.18.1'
 }
 
 // .env 파일(DB_USERNAME, DB_PASSWORD, REDIS_PASSWORD 등)을 JavaExec 계열 태스크의
