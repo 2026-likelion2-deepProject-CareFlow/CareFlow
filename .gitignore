@@ -39,3 +39,6 @@ out/
 
 ### enviornment ###
 .env
+
+### docs ###
+/docs/retrospective/qna-prep.md
